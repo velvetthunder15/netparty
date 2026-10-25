@@ -1,7 +1,10 @@
-# NetParty — watch Netflix together
+# NetParty — watch Netflix and JioHotstar together
 
-A Chrome extension + tiny sync server. Everyone in the party needs their own
-Netflix account and the extension.
+A Chrome extension + tiny sync server. Everyone in the party needs the extension and
+their own account on the service (Netflix or JioHotstar).
+
+Supported: **Netflix** (`netflix.com/watch/...`) and **JioHotstar**
+(`hotstar.com/in/.../watch`, movies, shows and episodes).
 
 Features
 - Playback sync: play, pause, seek, and episode changes follow the party
@@ -18,7 +21,7 @@ Features
 2. **Install** in Chrome: open `chrome://extensions`, turn on **Developer mode**,
    click **Load unpacked**, and pick the `extension` folder.
 3. **Pin** NetParty from the puzzle-piece menu.
-4. **Host**: open any title on netflix.com, press play, click NetParty → **Start a party**.
+4. **Host**: open any title on Netflix or JioHotstar, press play, click NetParty → **Start a party**.
    The invite link is copied to your clipboard.
 5. **Invite**: send the link. Friends install the extension the same way and open the link.
    They land on the same title, in sync.
@@ -40,16 +43,17 @@ No server setup needed: the extension uses the hosted server by default.
 | Leave | Icon → **Leave party** |
 
 Tips
-- Everyone needs their own Netflix account on a plan that streams that title in their region.
+- Everyone needs their own account on a plan that streams that title in their region.
+- JioHotstar: ads on ad-supported plans play separately for each person; after an ad, press play/pause once to resync.
 - Use headphones on voice to avoid echo.
 - If someone drifts, pressing play/pause once resyncs everyone.
 - On strict college or mobile networks voice may not connect; see TURN below.
 
 ## Troubleshooting
 
-- **Nothing happens on Netflix**: reload the Netflix tab after installing or updating the extension.
+- **Nothing happens**: reload the Netflix or JioHotstar tab after installing or updating the extension.
 - **"Party not found"**: the host's party ended or the code is wrong; ask for a fresh link.
-- **No mic prompt / no audio**: click the lock icon in the address bar → allow Microphone for netflix.com, then rejoin voice.
+- **No mic prompt / no audio**: click the lock icon in the address bar → allow Microphone for the site, then rejoin voice.
 - **Netflix error after a seek**: reload the tab; the party rejoins automatically.
 
 ## 1. The server
@@ -97,8 +101,9 @@ may fail to connect; add a TURN server with env vars:
 
 - `extension/background.js` – holds the WebSocket per tab (outside Netflix's CSP)
 - `extension/content.js` – party logic, clock sync, playback sync, chat, voice, overlay
-- `extension/page.js` – runs in Netflix's page to drive its internal player API
-  (setting `video.currentTime` directly triggers Netflix error M7375)
+- `extension/page.js` – runs in the site's page: drives Netflix's internal player API
+  (setting `video.currentTime` directly triggers Netflix error M7375) and the plain
+  HTML5 `<video>` on JioHotstar
 - `server/core.js` – rooms, state relay, chat, WebRTC signaling (shared)
 - `server/server.js` – Node transport; `server/worker/` – Cloudflare transport
 
@@ -111,6 +116,8 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
 - Episode changes reload followers' tabs; voice reconnects automatically after.
 - Voice is a mesh: great up to ~6 people in voice, heavier beyond that.
 - Netflix's internal player API is undocumented and can change.
+- JioHotstar support is untested on a live account so far; live sports/TV streams are not synced (no shared timeline).
+- Everyone in a party watches on the same service; a Netflix party can't include JioHotstar viewers.
 
 ## Credits
 

@@ -1,6 +1,7 @@
-// Runs in Netflix's own page context so it can reach Netflix's player API.
-// Setting <video>.currentTime directly makes Netflix throw error M7375,
-// so seeking goes through netflix.appContext's videoPlayer instead.
+// Runs in the streaming site's own page context.
+// Netflix: setting <video>.currentTime directly throws error M7375, so seeking
+// goes through netflix.appContext's videoPlayer. JioHotstar (and anything else)
+// uses the plain HTML5 <video> element.
 (() => {
   if (window.__netpartyBridge) return;
   window.__netpartyBridge = true;
@@ -8,6 +9,7 @@
   const TAG = "netparty";
 
   function nfPlayer() {
+    if (!window.netflix) return null;
     try {
       const vp = window.netflix.appContext.state.playerApp.getAPI().videoPlayer;
       const ids = vp.getAllPlayerSessionIds();
@@ -18,7 +20,16 @@
     }
   }
 
-  const video = () => document.querySelector("video");
+  // main player <video>: the largest one on screen (skips previews and small ad slots)
+  const video = () => {
+    const vids = [...document.querySelectorAll("video")];
+    if (vids.length < 2) return vids[0] || null;
+    const area = (v) => {
+      const r = v.getBoundingClientRect();
+      return r.width * r.height;
+    };
+    return vids.sort((a, b) => area(b) - area(a))[0];
+  };
 
   function status() {
     const p = nfPlayer();

@@ -1,4 +1,4 @@
-// NetParty content script (Netflix). Owns: the party connection, clock sync,
+// NetParty content script (Netflix + JioHotstar). Owns: the party connection, clock sync,
 // playback sync, text chat, voice chat (WebRTC mesh) and the in-page overlay.
 (() => {
   if (window.__netpartyLoaded) return;
@@ -16,7 +16,31 @@
     const s = [...arr].sort((a, b) => a - b);
     return s.length ? s[Math.floor(s.length / 2)] : 0;
   };
-  const videoIdFromUrl = () => (location.pathname.match(/^\/watch\/(\d+)/) || [])[1] || null;
+  // ---- platforms. A party's videoId is the Netflix title id ("81234567") or
+  // "hs:" + the JioHotstar watch path ("hs:/in/shows/<show>/<id>/<ep>/<id>/watch").
+  const IS_HOTSTAR = /(^|\.)(jio)?hotstar\.com$/.test(location.hostname);
+  const SITE_NAME = IS_HOTSTAR ? "JioHotstar" : "Netflix";
+  const videoIdFromUrl = () => {
+    if (!IS_HOTSTAR) return (location.pathname.match(/^\/watch\/(\d+)/) || [])[1] || null;
+    const path = location.pathname.replace(/\/+$/, "");
+    return /\/\d{5,}\/watch$/.test(path) ? "hs:" + path : null;
+  };
+  // compare by content id so slug or language-prefix differences don't matter
+  const videoKey = (v) => (v && v.startsWith("hs:") ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1] : v);
+  const sameVideo = (a, b) => videoKey(a) === videoKey(b);
+  const watchUrl = (videoId, roomId) =>
+    (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) +
+    `?npParty=${roomId}`;
+  // the main player <video>: skip tiny previews/ads by preferring the largest one on screen
+  const mainVideo = () => {
+    const vids = [...document.querySelectorAll("video")];
+    if (vids.length < 2) return vids[0] || null;
+    const area = (v) => {
+      const r = v.getBoundingClientRect();
+      return r.width * r.height;
+    };
+    return vids.sort((a, b) => area(b) - area(a))[0];
+  };
   const fmt = (ms) => {
     const t = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
@@ -255,7 +279,7 @@
 
   async function createParty() {
     const vid = videoIdFromUrl();
-    if (!vid) throw new Error("Open a Netflix title first, then start the party.");
+    if (!vid) throw new Error(`Open a ${SITE_NAME} title and press play first, then start the party.`);
     await ensureConnected();
     const st = (await bridge.status()) || { position: 0, playing: false };
     const snap = await net.request("create", {
@@ -308,7 +332,7 @@
 
   const inviteLink = () =>
     party.roomId && party.state?.videoId
-      ? `https://www.netflix.com/watch/${party.state.videoId}?npParty=${party.roomId}`
+      ? watchUrl(party.state.videoId, party.roomId)
       : null;
 
   const canControl = () => !party.hostOnly || party.me === party.hostId;
@@ -317,10 +341,10 @@
   async function applyRemote(st, reason) {
     if (!st) return;
     const vid = videoIdFromUrl();
-    if (st.videoId && vid !== st.videoId) {
+    if (st.videoId && !sameVideo(vid, st.videoId)) {
       // different title/episode: follow the party
       sessionStorage.setItem("netpartyRoom", party.roomId);
-      location.href = `https://www.netflix.com/watch/${st.videoId}?npParty=${party.roomId}`;
+      location.href = watchUrl(st.videoId, party.roomId);
       return;
     }
     const cur = await bridge.status();
@@ -375,7 +399,7 @@
   // attach to the <video> element and follow Netflix's SPA navigation
   let lastVideoId = videoIdFromUrl();
   function watchPlayer() {
-    const v = document.querySelector("video");
+    const v = mainVideo();
     if (v && v !== videoEl) {
       videoEl = v;
       for (const evt of ["play", "pause", "seeked"]) v.addEventListener(evt, () => onLocalPlayerEvent(evt));
@@ -386,7 +410,7 @@
     if (vid !== lastVideoId) {
       lastVideoId = vid;
       // we moved to another episode ourselves: take the party with us
-      if (vid && party.roomId && party.state && party.state.videoId !== vid && canControl()) {
+      if (vid && party.roomId && party.state && !sameVideo(party.state.videoId, vid) && canControl()) {
         const state = { playing: true, position: 0, at: clock.serverNow(), videoId: vid, reason: "episode" };
         party.state = state;
         net.request("state", state).catch(() => {});
@@ -563,7 +587,7 @@
         try {
           localStream = await getMic();
         } catch (e) {
-          ui.system("Microphone blocked. Allow mic access for netflix.com in the address bar, then try again.");
+          ui.system(`Microphone blocked. Allow mic access for ${location.hostname} in the address bar, then try again.`);
           return;
         }
         active = true;

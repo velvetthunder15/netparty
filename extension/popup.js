@@ -6,7 +6,7 @@ async function toTab(msg) {
   try {
     return (await chrome.tabs.sendMessage(tabId, msg)) || {};
   } catch {
-    return { error: "Reload the Netflix tab and try again." };
+    return { error: "Reload the tab and try again." };
   }
 }
 
@@ -14,7 +14,7 @@ async function refresh() {
   $("error").textContent = "";
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
-  const onNetflix = !!tab?.url?.startsWith("https://www.netflix.com/");
+  const onNetflix = /^https:\/\/www\.(netflix|hotstar|jiohotstar)\.com\//.test(tab?.url || "");
   if (!onNetflix) {
     show("notNetflix", true);
     show("idle", false);

@@ -1,27 +1,62 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "1.0.0",
-  "description": "Watch Netflix in sync with friends, with group chat.",
+  "version": "1.1.0",
+  "description": "Watch Netflix and JioHotstar in sync with friends, with text and voice chat.",
   "minimum_chrome_version": "116",
   "action": {
     "default_popup": "popup.html",
     "default_title": "NetParty",
-    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
-  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
-  "background": { "service_worker": "background.js", "type": "module" },
-  "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://www.netflix.com/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.netflix.com/*",
+    "https://www.hotstar.com/*",
+    "https://www.jiohotstar.com/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://www.netflix.com/*"],
-      "js": ["content.js"],
-      "css": ["overlay.css"],
+      "matches": [
+        "https://www.netflix.com/*",
+        "https://www.hotstar.com/*",
+        "https://www.jiohotstar.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
-    { "resources": ["page.js"], "matches": ["https://www.netflix.com/*"] }
+    {
+      "resources": [
+        "page.js"
+      ],
+      "matches": [
+        "https://www.netflix.com/*",
+        "https://www.hotstar.com/*",
+        "https://www.jiohotstar.com/*"
+      ]
+    }
   ]
 }

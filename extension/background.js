@@ -1,4 +1,4 @@
-// Background service worker: a thin pipe between each Netflix tab and the
+// Background service worker: a thin pipe between each streaming tab and the
 // party server. Living here (not in the page) keeps the socket clear of
 // Netflix's page CSP. One WebSocket per connected tab port.
 // Chrome 116+ keeps the worker alive while a WebSocket is active.
