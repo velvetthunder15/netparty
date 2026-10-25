@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { width: 300px; margin: 0; padding: 14px; font: 13px system-ui, sans-serif; background: #141414; color: #eee; }
+      h1 { font-size: 18px; margin: 0 0 10px; color: #e50914; }
+      label { display: block; margin: 8px 0 3px; color: #aaa; font-size: 12px; }
+      input[type=text] { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #444; border-radius: 6px; background: #1f1f1f; color: #fff; }
+      button { width: 100%; margin-top: 8px; padding: 8px; border: 0; border-radius: 6px; background: #e50914; color: #fff; font-weight: 600; cursor: pointer; }
+      button.secondary { background: #2b2b2b; border: 1px solid #444; font-weight: 400; }
+      .hidden { display: none; }
+      .muted { color: #999; font-size: 12px; }
+      .err { color: #ff6b6b; font-size: 12px; margin-top: 6px; }
+      .link { word-break: break-all; background: #1f1f1f; padding: 6px; border-radius: 6px; font-size: 11px; margin-top: 6px; }
+      details { margin-top: 12px; }
+      summary { cursor: pointer; color: #aaa; }
+      .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>NetParty</h1>
+
+    <div id="notNetflix" class="hidden muted">Open a title on netflix.com, then click NetParty again.</div>
+
+    <div id="idle" class="hidden">
+      <button id="create">Start a party</button>
+      <label for="code">Or join with a party code</label>
+      <input id="code" type="text" placeholder="e.g. k3x9qa2m" />
+      <button id="join" class="secondary">Join</button>
+    </div>
+
+    <div id="inParty" class="hidden">
+      <div id="partyInfo" class="muted"></div>
+      <div id="invite" class="link"></div>
+      <button id="copy">Copy invite link</button>
+      <button id="chat" class="secondary">Open chat &amp; voice</button>
+      <div class="row hidden" id="hostRow">
+        <input type="checkbox" id="hostOnly" /><label for="hostOnly" style="margin:0">Only I control playback</label>
+      </div>
+      <button id="leave" class="secondary">Leave party</button>
+    </div>
+
+    <div id="error" class="err"></div>
+
+    <details>
+      <summary>Settings</summary>
+      <label for="name">Your name</label>
+      <input id="name" type="text" maxlength="24" />
+      <label for="server">Party server URL</label>
+      <input id="server" type="text" placeholder="wss://your-server.example.com" />
+      <button id="save" class="secondary">Save</button>
+    </details>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+name = "netparty"
+main = "index.js"
+compatibility_date = "2025-10-01"
+account_id = "a40d9c78c5c15c7b985ca6e259159056"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "PartyHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PartyHub"]
