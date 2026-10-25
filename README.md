@@ -70,3 +70,9 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
 - Episode changes reload followers' tabs; voice reconnects automatically after.
 - Voice is a mesh: great up to ~6 people in voice, heavier beyond that.
 - Netflix's internal player API is undocumented and can change.
+
+## Credits
+
+Teleparty's extension was studied for inspiration using
+[REA (rea-agents)](https://www.npmjs.com/package/rea-agents), a reverse-engineering CLI and MCP server.
+No Teleparty or REA code is included; NetParty is an original implementation.
