@@ -5,11 +5,11 @@
 
 const DEFAULT_SERVER = "wss://netparty.chiragrasane15.workers.dev";
 
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const { serverUrl, name } = await chrome.storage.sync.get(["serverUrl", "name"]);
   const patch = {};
-  // old builds defaulted to a local server; move them to the hosted one
-  if (!serverUrl || serverUrl === "ws://localhost:8787") patch.serverUrl = DEFAULT_SERVER;
+  // builds before 1.0.1 defaulted to a local server; move those (and only those) to the hosted one
+  if (!serverUrl || (reason === "update" && serverUrl === "ws://localhost:8787")) patch.serverUrl = DEFAULT_SERVER;
   if (!name) patch.name = "Guest " + Math.floor(100 + Math.random() * 900);
   if (Object.keys(patch).length) await chrome.storage.sync.set(patch);
 });

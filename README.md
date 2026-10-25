@@ -9,8 +9,10 @@ Supported: **Netflix** (`netflix.com/watch/...`) and **JioHotstar**
 Features
 - Playback sync: play, pause, seek, and episode changes follow the party
   (server-clock sync, 1 s seek threshold, drift correction every 3 s)
-- Invite links: `https://www.netflix.com/watch/<id>?npParty=<code>` auto-joins
-- Text chat overlay (works in fullscreen, doesn't trigger Netflix hotkeys)
+- Invite links: `https://netparty.chiragrasane15.workers.dev/j/<code>` opens an invite page that sends
+  friends to the right title (auto-joins) and lets them download the extension while the party is live
+- Chat panel with message bubbles, Send button and Enter to send, unread badge and message previews
+  (works in fullscreen; keys typed in chat never reach the site's hotkeys)
 - Voice chat: peer-to-peer WebRTC audio, mute, volume, speaking indicator
 - Host-only control lock, host hand-off when the host leaves, auto-reconnect
 
@@ -23,9 +25,10 @@ Features
 3. **Pin** NetParty from the puzzle-piece menu.
 4. **Host**: open any title on Netflix or JioHotstar, press play, click NetParty → **Start a party**.
    The invite link is copied to your clipboard.
-5. **Invite**: send the link. Friends install the extension the same way and open the link.
-   They land on the same title, in sync.
-6. **Talk**: click 💬 on the player for chat; click **Join voice** and allow the mic.
+5. **Invite**: send the link. It opens an invite page: friends without NetParty get a
+   download + 3-step install there, then press **Join on Netflix/JioHotstar** and land on the same title, in sync.
+6. **Talk**: the chat panel opens on the right; the round purple button reopens it.
+   Type and press Enter (or the send arrow). **Join voice chat** and allow the mic to talk.
 
 No server setup needed: the extension uses the hosted server by default.
 
@@ -34,12 +37,12 @@ No server setup needed: the extension uses the hosted server by default.
 | Action | How |
 | --- | --- |
 | Start a party | NetParty icon → **Start a party** (link copied) |
-| Join a party | Open the invite link, or icon → paste code → **Join** |
-| Copy invite again | Icon → **Copy invite link** |
-| Chat | 💬 button on the player; press Enter to send |
-| Voice | **🎙 Join voice** in the chat panel; **Mute** to mute yourself; slider sets voice volume |
-| Lock controls | Host: icon → **Only I control playback** |
-| Change your name | Icon → **Settings** |
+| Join a party | Open the invite link, or icon → paste the link or code → **Join** |
+| Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
+| Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
+| Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
+| Lock controls | Host: icon → **Only I can play, pause and skip** |
+| Change your name | Icon → **Your name** (before starting or joining) |
 | Leave | Icon → **Leave party** |
 
 Tips
@@ -86,26 +89,31 @@ may fail to connect; add a TURN server with env vars:
 
 1. Chrome → `chrome://extensions` → enable **Developer mode**
 2. **Load unpacked** → pick the `extension` folder
-3. Click the NetParty icon → **Settings** → set your name and the server URL
+3. Click the NetParty icon → **Advanced** to change the server URL
    (defaults to the hosted server; use `ws://localhost:8787` for a local one)
 
 ## 3. Use it
 
 1. Open any title on netflix.com and press play
 2. NetParty icon → **Start a party** (invite link is copied)
-3. Friends open the link; they land on the same title, synced
-4. 💬 button on the player → chat; **Join voice** for voice (allow the mic
-   prompt for netflix.com). Use headphones to avoid echo.
+3. Friends open the link → invite page → **Join**; they land on the same title, synced
+4. Chat panel on the right; **Join voice chat** for voice (allow the mic
+   prompt for the site). Use headphones to avoid echo.
 
 ## How it works
 
 - `extension/background.js` – holds the WebSocket per tab (outside Netflix's CSP)
-- `extension/content.js` – party logic, clock sync, playback sync, chat, voice, overlay
+- `extension/early.js` – runs at page start: keeps the invite code if the site rewrites the URL, and
+  routes keys typed in the panel away from the site's hotkeys
+- `extension/content.js` – party logic, clock sync, playback sync, chat, voice, overlay (shadow DOM)
 - `extension/page.js` – runs in the site's page: drives Netflix's internal player API
   (setting `video.currentTime` directly triggers Netflix error M7375) and the plain
   HTML5 `<video>` on JioHotstar
 - `server/core.js` – rooms, state relay, chat, WebRTC signaling (shared)
 - `server/server.js` – Node transport; `server/worker/` – Cloudflare transport
+- `GET /j/<code>` – invite page; `/j/<code>/netparty.zip` – extension download, only while that party is live
+  (Worker bundles it: run `npm run deploy` in `server/`; Node: set `EXTENSION_ZIP=/path/to.zip`)
+- `e2e/` – real-Chromium test: two browsers, fake Netflix/JioHotstar pages, invite → join → chat → sync
 
 Protocol frames: `{ type, reqId?, data }`; replies echo `reqId`.
 Shared state: `{ playing, position (ms), at (server ms), videoId }`.

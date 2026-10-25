@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Watch Netflix and JioHotstar in sync with friends, with text and voice chat.",
   "minimum_chrome_version": "116",
   "action": {
@@ -39,10 +39,18 @@
         "https://www.jiohotstar.com/*"
       ],
       "js": [
-        "content.js"
+        "early.js"
       ],
-      "css": [
-        "overlay.css"
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.netflix.com/*",
+        "https://www.hotstar.com/*",
+        "https://www.jiohotstar.com/*"
+      ],
+      "js": [
+        "content.js"
       ],
       "run_at": "document_idle"
     }
@@ -50,7 +58,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "page.js"
+        "page.js",
+        "overlay.css"
       ],
       "matches": [
         "https://www.netflix.com/*",

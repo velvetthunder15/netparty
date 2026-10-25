@@ -254,5 +254,52 @@ function sweep() {
   for (const [id, room] of rooms) if (room.emptySince && now - room.emptySince > ROOM_TTL_MS) rooms.delete(id);
 }
 
-return { connect, sweep, rooms };
+return { connect, sweep, rooms, getRoom: (code) => rooms.get(String(code || "").toLowerCase()) };
+}
+
+// ---------------------------------------------------------------- invite page
+// GET /j/<code> on the party server. Friends land here from an invite link: it sends
+// them to the right title (where the extension auto-joins), or tells them how to
+// install NetParty first. The extension download only works while the party is live.
+export function watchUrlFor(videoId, roomId) {
+  if (!videoId) return null;
+  const base = videoId.startsWith("hs:")
+    ? "https://www.hotstar.com" + videoId.slice(3)
+    : "https://www.netflix.com/watch/" + encodeURIComponent(videoId);
+  return `${base}?npParty=${encodeURIComponent(roomId)}`;
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+export function joinPage(room, code, { hasDownload = false } = {}) {
+  const live = !!room && room.members.size > 0;
+  const host = live ? [...room.members.values()].find((m) => m.id === room.hostId) : null;
+  const site = room?.state.videoId?.startsWith("hs:") ? "JioHotstar" : "Netflix";
+  const watch = live ? watchUrlFor(room.state.videoId, room.id) : null;
+  const body = !live
+    ? `<h1>This party has ended</h1><p>Ask your friend for a fresh invite link.</p>`
+    : `<h1>${esc(host?.name || "A friend")} invited you to a watch party</h1>
+<p class="sub">${room.members.size} watching on ${site} · party <code>${esc(room.id)}</code></p>
+<a class="btn" href="${esc(watch)}">Join on ${site}</a>
+<p class="note">You need your own ${site} account and the NetParty extension in Chrome (or Edge, Brave).</p>
+<details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>
+<ol>
+${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty</a> and unzip it.</li>` : `<li>Ask ${esc(host?.name || "your friend")} to send you the NetParty zip, then unzip it.</li>`}
+<li>Open <code>chrome://extensions</code> and switch on <b>Developer mode</b> (top right).</li>
+<li>Click <b>Load unpacked</b> and pick the unzipped folder (the one with <code>manifest.json</code> inside).</li>
+<li>Come back here and press <b>Join on ${site}</b>.</li>
+</ol></details>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NetParty invite</title><meta name="robots" content="noindex">
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#121216;color:#f3f3f6;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:460px;padding:32px 24px}
+.logo{font-weight:800;color:#a48bff;letter-spacing:.02em;margin-bottom:18px}
+h1{font-size:24px;line-height:1.25;margin:0 0 8px}.sub{color:#9d9da8;margin:0 0 22px}
+.btn{display:block;text-align:center;padding:14px;border-radius:12px;background:#7c5cff;color:#fff;font-weight:700;text-decoration:none}
+.btn:hover{background:#a48bff}.note{color:#9d9da8;font-size:14px}
+details{margin-top:18px;padding:14px 16px;border:1px solid #33333c;border-radius:12px;background:#1b1b22}
+summary{cursor:pointer;font-weight:600}ol{padding-left:20px;margin:10px 0 0}li{margin:6px 0}
+a{color:#a48bff}code{background:#26262e;padding:1px 6px;border-radius:6px;font-size:14px}
+</style></head><body><main><div class="logo">NetParty</div>${body}</main></body></html>`;
 }

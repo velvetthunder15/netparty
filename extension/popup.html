@@ -2,54 +2,67 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <style>
-      body { width: 300px; margin: 0; padding: 14px; font: 13px system-ui, sans-serif; background: #141414; color: #eee; }
-      h1 { font-size: 18px; margin: 0 0 10px; color: #e50914; }
-      label { display: block; margin: 8px 0 3px; color: #aaa; font-size: 12px; }
-      input[type=text] { width: 100%; box-sizing: border-box; padding: 7px; border: 1px solid #444; border-radius: 6px; background: #1f1f1f; color: #fff; }
-      button { width: 100%; margin-top: 8px; padding: 8px; border: 0; border-radius: 6px; background: #e50914; color: #fff; font-weight: 600; cursor: pointer; }
-      button.secondary { background: #2b2b2b; border: 1px solid #444; font-weight: 400; }
-      .hidden { display: none; }
-      .muted { color: #999; font-size: 12px; }
-      .err { color: #ff6b6b; font-size: 12px; margin-top: 6px; }
-      .link { word-break: break-all; background: #1f1f1f; padding: 6px; border-radius: 6px; font-size: 11px; margin-top: 6px; }
-      details { margin-top: 12px; }
-      summary { cursor: pointer; color: #aaa; }
-      .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
-    </style>
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <h1>NetParty</h1>
-
-    <div id="notNetflix" class="hidden muted">Open a title on Netflix or JioHotstar, then click NetParty again.</div>
-
-    <div id="idle" class="hidden">
-      <button id="create">Start a party</button>
-      <label for="code">Or join with a party code</label>
-      <input id="code" type="text" placeholder="e.g. k3x9qa2m" />
-      <button id="join" class="secondary">Join</button>
-    </div>
-
-    <div id="inParty" class="hidden">
-      <div id="partyInfo" class="muted"></div>
-      <div id="invite" class="link"></div>
-      <button id="copy">Copy invite link</button>
-      <button id="chat" class="secondary">Open chat &amp; voice</button>
-      <div class="row hidden" id="hostRow">
-        <input type="checkbox" id="hostOnly" /><label for="hostOnly" style="margin:0">Only I control playback</label>
+    <header>
+      <img src="icons/icon48.png" alt="" />
+      <div>
+        <h1>NetParty</h1>
+        <p class="sub">Watch together, in sync</p>
       </div>
-      <button id="leave" class="secondary">Leave party</button>
-    </div>
+    </header>
+
+    <!-- not on Netflix / JioHotstar -->
+    <section id="vOff" class="hidden">
+      <p class="lead">Open Netflix or JioHotstar to start or join a party.</p>
+      <div class="two">
+        <button class="ghost" data-open="https://www.netflix.com/browse">Open Netflix</button>
+        <button class="ghost" data-open="https://www.hotstar.com/in/home">Open JioHotstar</button>
+      </div>
+    </section>
+
+    <!-- on the site, not in a party -->
+    <section id="vIdle" class="hidden">
+      <label for="name">Your name</label>
+      <input id="name" type="text" maxlength="24" placeholder="What friends will see" />
+
+      <div id="startBox">
+        <button id="create" class="primary">Start a party</button>
+        <p class="hint" id="startHint"></p>
+      </div>
+
+      <div class="divider"><span>or join a friend</span></div>
+      <div class="joinrow">
+        <input id="code" type="text" placeholder="Paste invite link or code" />
+        <button id="join" class="ghost small">Join</button>
+      </div>
+    </section>
+
+    <!-- in a party -->
+    <section id="vParty" class="hidden">
+      <div class="card">
+        <div class="label">Party code</div>
+        <div class="code" id="partyCode"></div>
+        <div class="who" id="who"></div>
+      </div>
+      <button id="copy" class="primary">Copy invite link</button>
+      <p class="hint">Friends open the link, install NetParty if they haven't, and land in sync.</p>
+      <button id="chat" class="ghost">Open chat &amp; voice</button>
+      <label class="toggle hidden" id="hostRow">
+        <input type="checkbox" id="hostOnly" />
+        <span>Only I can play, pause and skip</span>
+      </label>
+      <button id="leave" class="text danger">Leave party</button>
+    </section>
 
     <div id="error" class="err"></div>
 
     <details>
-      <summary>Settings</summary>
-      <label for="name">Your name</label>
-      <input id="name" type="text" maxlength="24" />
-      <label for="server">Party server URL</label>
-      <input id="server" type="text" placeholder="wss://your-server.example.com" />
-      <button id="save" class="secondary">Save</button>
+      <summary>Advanced</summary>
+      <label for="server">Party server</label>
+      <input id="server" type="text" placeholder="wss://…" />
+      <button id="save" class="ghost small">Save</button>
     </details>
 
     <script src="popup.js"></script>

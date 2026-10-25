@@ -1,13 +1,31 @@
 // NetParty sync server (Node). Room logic lives in core.js; this is the ws transport.
 import http from "node:http";
 import { WebSocketServer } from "ws";
-import { createHub, defaultIceServers } from "./core.js";
+import fs from "node:fs";
+import { createHub, defaultIceServers, joinPage } from "./core.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const hub = createHub({ iceServers: defaultIceServers(process.env) });
 const rooms = hub.rooms;
 
+// optional: serve the extension zip from invite pages (set EXTENSION_ZIP=/path/netparty.zip)
+const ZIP = process.env.EXTENSION_ZIP && fs.existsSync(process.env.EXTENSION_ZIP) ? process.env.EXTENSION_ZIP : null;
+
 const server = http.createServer((req, res) => {
+  const j = (req.url || "").match(/^\/j\/([a-z0-9]{4,16})(\/netparty\.zip)?\/?(?:\?.*)?$/i);
+  if (j) {
+    const room = hub.getRoom(j[1]);
+    if (j[2]) {
+      if (!ZIP || !room || !room.members.size) {
+        res.writeHead(404, { "content-type": "text/plain" });
+        return res.end("Not available.\n");
+      }
+      res.writeHead(200, { "content-type": "application/zip", "content-disposition": 'attachment; filename="netparty.zip"' });
+      return fs.createReadStream(ZIP).pipe(res);
+    }
+    res.writeHead(room ? 200 : 404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    return res.end(joinPage(room, j[1], { hasDownload: !!ZIP }));
+  }
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ ok: true, rooms: rooms.size }));

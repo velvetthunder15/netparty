@@ -11,3 +11,10 @@ class_name = "PartyHub"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PartyHub"]
+
+# the extension zip is bundled into the Worker (built by `npm run build:zip`) and
+# served only through a live party's invite page (see index.js)
+[[rules]]
+type = "Data"
+globs = ["**/*.zip"]
+fallthrough = false

@@ -330,10 +330,12 @@
     ui.render();
   }
 
-  const inviteLink = () =>
-    party.roomId && party.state?.videoId
-      ? watchUrl(party.state.videoId, party.roomId)
-      : null;
+  // Invite links go to the party server's join page, which tells friends without the
+  // extension how to get it and sends everyone else straight to the right title.
+  const joinPageBase = () => party.serverUrl.replace(/^ws(s?):\/\//, "http$1://").replace(/\/+$/, "");
+  const inviteLink = () => (party.roomId ? `${joinPageBase()}/j/${party.roomId}` : null);
+  const directLink = () =>
+    party.roomId && party.state?.videoId ? watchUrl(party.state.videoId, party.roomId) : null;
 
   const canControl = () => !party.hostOnly || party.me === party.hostId;
 
@@ -581,6 +583,9 @@
       get speaking() {
         return speaking;
       },
+      get volume() {
+        return volume;
+      },
       peerInfo: (id) => ({ ...(peerState.get(id) || {}), connected: peers.get(id)?.pc.connectionState === "connected" }),
       async join() {
         if (active || !party.roomId) return;
@@ -674,61 +679,130 @@
   })();
 
   // ------------------------------------------------------------------ UI
+  // Lives in a shadow root so the streaming site's CSS can't break it.
   const ui = (() => {
-    let root, panel, membersEl, chatEl, input, statusEl, voiceBtn, muteBtn, toggleBtn;
+    let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
     let open = false;
     let unread = 0;
-    const stop = (e) => e.stopPropagation(); // keep keystrokes away from Netflix hotkeys
+    let toastTimer = 0;
+
+    const initials = (name) =>
+      name
+        .split(/\s+/)
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase() || "?";
+    const hue = (id) => [...String(id)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
+    const svg = (d) => {
+      const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      s.setAttribute("viewBox", "0 0 24 24");
+      s.setAttribute("aria-hidden", "true");
+      s.innerHTML = d;
+      return s;
+    };
+    const ICON = {
+      chat: '<path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2z"/>',
+      send: '<path fill="currentColor" d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9z"/>',
+      close: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/>',
+      link: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+      mic: '<path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12z"/>',
+      micOff: '<path fill="currentColor" d="M15 10.6V6a3 3 0 0 0-5.9-.8zM19 12h-2a5 5 0 0 1-.6 2.3l1.5 1.5A7 7 0 0 0 19 12zM4.3 3 3 4.3l6 6V12a3 3 0 0 0 4.5 2.6l1.6 1.6A5 5 0 0 1 7 12H5a7 7 0 0 0 6 6.9V21h2v-2.1a7 7 0 0 0 3.6-1.5l3.1 3.1 1.3-1.3z"/>',
+      phoneOff: '<path fill="currentColor" d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.4-1.7 1-2.4 1.6-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 12.8a1 1 0 0 1 0-1.4C3.4 8.5 7.5 7 12 7s8.6 1.5 11.7 4.4a1 1 0 0 1 0 1.4L21 15.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.6-1.5-1.2-2.4-1.6-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/>',
+      crown: '<path fill="currentColor" d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/>',
+    };
+    const iconBtn = (icon, title, onclick, cls = "") =>
+      el("button", { class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
+
+    function sendChat() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      updateSend();
+      net.request("chat", { text }).catch((err) => system("Message not sent: " + err.message));
+      input.focus();
+    }
+    const updateSend = () => (sendBtn.disabled = !input.value.trim());
+
+    // keys typed in the panel arrive here first (early.js), before the site's hotkeys
+    window.__netpartyKey = (e) => {
+      if (e.isComposing) return;
+      if (e.key === "Enter" && !e.shiftKey && shadow.activeElement === input) {
+        e.preventDefault();
+        sendChat();
+      } else if (e.key === "Escape") hide();
+    };
 
     function build() {
-      toggleBtn = el("button", { class: "np-toggle", title: "NetParty", onclick: () => (open ? hide() : show()) }, "💬");
-      statusEl = el("div", { class: "np-status" });
-      membersEl = el("div", { class: "np-members" });
-      chatEl = el("div", { class: "np-chat" });
-      input = el("input", { class: "np-input", placeholder: "Say something…", maxlength: "500" });
-      for (const evt of ["keydown", "keyup", "keypress"]) input.addEventListener(evt, stop, true);
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && input.value.trim()) {
-          net.request("chat", { text: input.value.trim() }).catch((err) => system(err.message));
-          input.value = "";
-        }
-      });
-      voiceBtn = el("button", { class: "np-btn", onclick: () => (voice.active ? voice.leave() : voice.join()) }, "🎙 Join voice");
-      muteBtn = el("button", { class: "np-btn", onclick: () => voice.toggleMute() }, "Mute");
-      const vol = el("input", { type: "range", min: "0", max: "1", step: "0.05", value: "1", class: "np-vol", title: "Voice volume" });
-      vol.addEventListener("input", () => voice.setVolume(Number(vol.value)));
-      const copyBtn = el("button", {
-        class: "np-btn",
-        onclick: async () => {
-          const link = inviteLink();
-          if (!link) return;
-          await navigator.clipboard.writeText(link).catch(() => {});
-          system("Invite link copied.");
+      host = el("div", { id: "netparty-root" });
+      shadow = host.attachShadow({ mode: "open" });
+      shadow.append(el("link", { rel: "stylesheet", href: chrome.runtime.getURL("overlay.css") }));
+
+      badge = el("span", { class: "np-badge" });
+      toggleBtn = el("button", { class: "np-toggle", title: "Party chat (NetParty)", onclick: () => (open ? hide() : show()) }, svg(ICON.chat), badge);
+      toastEl = el("div", { class: "np-toast", onclick: show });
+
+      codeEl = el("span", { class: "np-code" });
+      metaEl = el("div", { class: "np-meta" });
+      const copyBtn = el(
+        "button",
+        {
+          class: "np-pill",
+          onclick: async () => {
+            const link = inviteLink();
+            if (!link) return;
+            await navigator.clipboard.writeText(link).catch(() => {});
+            copyBtn.lastChild.textContent = "Copied!";
+            setTimeout(() => (copyBtn.lastChild.textContent = "Copy invite"), 1500);
+          },
         },
-      }, "🔗 Copy invite");
-      const leaveBtn = el("button", { class: "np-btn np-danger", onclick: () => leaveParty().then(hide) }, "Leave");
-      panel = el(
-        "div",
-        { class: "np-panel" },
-        el("div", { class: "np-head" }, el("strong", {}, "NetParty"), el("button", { class: "np-x", onclick: hide }, "×")),
-        statusEl,
-        el("div", { class: "np-row" }, copyBtn, leaveBtn),
-        el("div", { class: "np-row" }, voiceBtn, muteBtn, vol),
-        membersEl,
-        chatEl,
-        input,
+        svg(ICON.link),
+        el("span", {}, "Copy invite"),
       );
-      for (const evt of ["keydown", "keyup", "keypress", "wheel", "click", "dblclick", "mousedown"]) panel.addEventListener(evt, stop);
-      root = el("div", { id: "netparty-root" }, toggleBtn, panel);
+      const head = el(
+        "div",
+        { class: "np-head" },
+        el("div", { class: "np-title" }, el("div", { class: "np-brand" }, "NetParty ", codeEl), metaEl),
+        iconBtn(ICON.close, "Close (Esc)", hide, "np-close"),
+      );
+
+      peopleEl = el("div", { class: "np-people" });
+      voiceBox = el("div", { class: "np-voice" });
+      chatEl = el("div", { class: "np-chat", role: "log" });
+
+      input = el("input", { class: "np-input", type: "text", placeholder: "Message the party…", maxlength: "500", autocomplete: "off" });
+      input.addEventListener("input", updateSend);
+      sendBtn = iconBtn(ICON.send, "Send (Enter)", sendChat, "np-send");
+      sendBtn.disabled = true;
+      const composer = el("form", { class: "np-composer", onsubmit: (e) => (e.preventDefault(), sendChat()) }, input, sendBtn);
+
+      const leaveBtn = el("button", { class: "np-link-btn", onclick: () => confirm("Leave this party?") && leaveParty().then(hide) }, "Leave party");
+
+      panel = el(
+        "aside",
+        { class: "np-panel" },
+        head,
+        el("div", { class: "np-actions" }, copyBtn, leaveBtn),
+        el("div", { class: "np-section-label" }, "Watching"),
+        peopleEl,
+        voiceBox,
+        chatEl,
+        composer,
+      );
+      // keep clicks and scrolls inside the panel from reaching the player
+      for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"])
+        panel.addEventListener(evt, (e) => e.stopPropagation());
+      root = el("div", { class: "np-root" }, toggleBtn, toastEl, panel);
+      shadow.append(root);
       document.addEventListener("fullscreenchange", mount);
     }
 
     function mount() {
-      if (!root) build();
-      // Netflix fullscreens a container element; move the overlay inside it
-      const host = document.fullscreenElement || document.body;
-      if (host && root.parentElement !== host) host.append(root);
-      root.style.display = party.roomId && videoIdFromUrl() ? "" : "none";
+      if (!host) build();
+      // sites fullscreen a container element; the overlay must live inside it to stay visible
+      const parent = document.fullscreenElement || document.body;
+      if (parent && host.parentElement !== parent) parent.append(host);
+      host.style.display = party.roomId ? "" : "none";
     }
 
     function show() {
@@ -736,7 +810,9 @@
       unread = 0;
       mount();
       root.classList.add("np-open");
+      toastEl.classList.remove("np-show");
       render();
+      setTimeout(() => input.focus(), 50);
     }
     function hide() {
       open = false;
@@ -744,51 +820,100 @@
       render();
     }
 
+    function toast(name, text) {
+      if (open) return;
+      toastEl.replaceChildren(el("b", {}, name), " ", text.length > 80 ? text.slice(0, 80) + "…" : text);
+      toastEl.classList.add("np-show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove("np-show"), 4000);
+    }
+
     function render() {
-      if (!root) return;
+      if (!host) return;
       mount();
-      toggleBtn.textContent = unread ? `💬 ${unread}` : "💬";
+      badge.textContent = unread > 9 ? "9+" : unread ? String(unread) : "";
+      badge.style.display = unread ? "" : "none";
+      codeEl.textContent = party.roomId ? "· " + party.roomId : "";
       const st = party.state;
-      statusEl.textContent = party.roomId
-        ? `Party ${party.roomId} · ${party.members.length} watching${party.hostOnly ? " · host controls" : ""}${st ? " · " + (st.playing ? "▶" : "⏸") + " " + fmt(expectedPosition(st)) : ""}`
-        : "Not in a party";
-      voiceBtn.textContent = voice.active ? "Leave voice" : "🎙 Join voice";
-      muteBtn.disabled = !voice.active;
-      muteBtn.textContent = voice.muted ? "Unmute" : "Mute";
-      membersEl.replaceChildren(
+      metaEl.textContent = st
+        ? `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`
+        : "";
+
+      peopleEl.replaceChildren(
         ...party.members.map((m) => {
           const isMe = m.id === party.me;
-          const info = isMe ? { muted: voice.muted, speaking: voice.speaking, connected: true } : voice.peerInfo(m.id);
+          const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
           const inVoice = isMe ? voice.active : !!m.inVoice;
-          const icon = !inVoice ? "" : info.muted ? " 🔇" : " 🎙";
+          const avatar = el("div", { class: "np-avatar", style: `--h:${hue(m.id)}` }, initials(m.name));
+          if (m.host) avatar.append(el("span", { class: "np-crown", title: "Host" }, svg(ICON.crown)));
+          if (inVoice) avatar.append(el("span", { class: "np-mic" + (info.muted ? " np-off" : ""), title: info.muted ? "Muted" : "In voice" }, svg(info.muted ? ICON.micOff : ICON.mic)));
           return el(
-            "span",
-            { class: "np-member" + (info.speaking && inVoice ? " np-speaking" : "") },
-            (m.host ? "👑 " : "") + m.name + (isMe ? " (you)" : "") + icon,
+            "div",
+            { class: "np-person" + (inVoice && info.speaking && !info.muted ? " np-speaking" : ""), title: m.name + (m.host ? " (host)" : "") },
+            avatar,
+            el("div", { class: "np-pname" }, isMe ? "You" : m.name),
           );
         }),
       );
+
+      const inVoiceCount = party.members.filter((m) => (m.id === party.me ? voice.active : m.inVoice)).length;
+      // only rebuild the voice bar when it changes (so the volume slider isn't replaced mid-drag)
+      const sig = [voice.active, voice.muted, voice.speaking, inVoiceCount].join();
+      if (sig === voiceBox.dataset.sig) return;
+      voiceBox.dataset.sig = sig;
+      if (!voice.active) {
+        voiceBox.replaceChildren(
+          el(
+            "button",
+            { class: "np-join-voice", onclick: () => voice.join() },
+            svg(ICON.mic),
+            el("span", {}, inVoiceCount ? `Join voice · ${inVoiceCount} talking` : "Join voice chat"),
+          ),
+        );
+      } else {
+        const vol = el("input", { type: "range", min: "0", max: "1", step: "0.05", class: "np-vol", title: "Friends' voice volume" });
+        vol.value = String(voice.volume ?? 1);
+        vol.addEventListener("input", () => voice.setVolume(Number(vol.value)));
+        voiceBox.replaceChildren(
+          el(
+            "div",
+            { class: "np-voice-bar" },
+            el("button", { class: "np-round" + (voice.muted ? " np-muted" : ""), title: voice.muted ? "Unmute" : "Mute", onclick: () => voice.toggleMute() }, svg(voice.muted ? ICON.micOff : ICON.mic)),
+            el("div", { class: "np-voice-label" }, voice.muted ? "You're muted" : voice.speaking ? "Speaking…" : "Voice on", el("small", {}, `${inVoiceCount} in voice`)),
+            vol,
+            el("button", { class: "np-round np-hang", title: "Leave voice", onclick: () => voice.leave() }, svg(ICON.phoneOff)),
+          ),
+        );
+      }
     }
 
     function addLine(node) {
-      if (!root) build();
+      if (!host) build();
+      const nearBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
       chatEl.append(node);
       while (chatEl.childElementCount > 300) chatEl.firstElementChild.remove();
-      chatEl.scrollTop = chatEl.scrollHeight;
-      if (!open) {
-        unread++;
-        render();
-      }
+      if (nearBottom || !open) chatEl.scrollTop = chatEl.scrollHeight;
     }
 
     function chat(d) {
       const mine = d.id === party.me;
-      addLine(el("div", { class: "np-msg" + (mine ? " np-mine" : "") }, el("b", {}, d.name + ": "), d.text));
+      const time = new Date(d.ts || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      addLine(
+        el(
+          "div",
+          { class: "np-msg" + (mine ? " np-mine" : "") },
+          mine ? "" : el("div", { class: "np-author", style: `--h:${hue(d.id)}` }, d.name),
+          el("div", { class: "np-bubble" }, d.text, el("span", { class: "np-time" }, time)),
+        ),
+      );
+      if (!open && !mine) {
+        unread++;
+        toast(d.name, d.text);
+        render();
+      }
     }
     function system(text) {
-      if (!root) build();
-      chatEl.append(el("div", { class: "np-sys" }, text));
-      chatEl.scrollTop = chatEl.scrollHeight;
+      addLine(el("div", { class: "np-sys" }, text));
     }
 
     setInterval(() => party.roomId && open && render(), 1000);
@@ -802,13 +927,15 @@
         switch (msg.cmd) {
           case "status":
             return {
+              site: SITE_NAME,
               onWatchPage: !!videoIdFromUrl(),
               roomId: party.roomId,
-              members: party.members.length,
+              members: party.members.map((m) => m.name),
               invite: inviteLink(),
               hostOnly: party.hostOnly,
               isHost: party.me === party.hostId,
               voice: voice.active,
+              chatOpen: false,
             };
           case "create":
             await createParty();
@@ -837,10 +964,12 @@
   (async () => {
     await loadPrefs();
     const params = new URLSearchParams(location.search);
-    const fromLink = params.get("npParty");
+    // early.js saved the code at page start, in case the site's router dropped it since
+    const fromLink = params.get("npParty") || sessionStorage.getItem("netpartyInvite");
+    sessionStorage.removeItem("netpartyInvite");
     const fromSession = sessionStorage.getItem("netpartyRoom");
     const room = fromLink || fromSession;
-    if (fromLink) {
+    if (params.has("npParty")) {
       params.delete("npParty");
       const q = params.toString();
       history.replaceState(history.state, "", location.pathname + (q ? "?" + q : ""));

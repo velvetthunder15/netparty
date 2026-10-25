@@ -128,6 +128,25 @@ await b.req("voiceLeave", {});
 assert.equal((await a.next("voice", (m) => m.data.event === "leave")).data.id, bId);
 ok("voice leave");
 
+{
+  const http = TARGET.replace(/^ws/, "http");
+  const page = await fetch(`${http}/j/${snap.roomId}`);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.match(html, /invited you/);
+  assert.ok(html.includes(`https://www.netflix.com/watch/81234567?npParty=${snap.roomId}`));
+  const dl = await fetch(`${http}/j/${snap.roomId}/netparty.zip`);
+  console.log("  (extension download: HTTP " + dl.status + ")");
+  assert.ok(dl.status === 200 || dl.status === 404); // 404 when the server has no zip configured
+  if (dl.status === 200) assert.ok((await dl.arrayBuffer()).byteLength > 5000);
+  const gone = await fetch(`${http}/j/zzzzzzzz`);
+  assert.equal(gone.status, 404);
+  assert.match(await gone.text(), /ended/);
+  const zip = await fetch(`${http}/j/zzzzzzzz/netparty.zip`);
+  assert.equal(zip.status, 404);
+  ok("invite page (live party, ended party, gated download)");
+}
+
 // host leaves -> host passes to B, and B's voice-state cleanup on disconnect
 a.close();
 const sysLeft = await b.next("system", (m) => /left/.test(m.data.text));
