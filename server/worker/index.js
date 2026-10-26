@@ -2,6 +2,28 @@
 // Durable Object ("hub"), which runs the same room logic as the Node server.
 import { createHub, defaultIceServers, joinPage } from "../core.js";
 import extensionZip from "./public/netparty-extension.zip";
+// landing site (copied from the Hark-built page) bundled into the Worker
+import siteIndex from "./site/index.html";
+import sitePrivacy from "./site/privacy.html";
+import siteCss from "./site/hark.css";
+import siteHeroCss from "./site/hark-hero.css";
+import siteJs from "./site/hark.js.txt";
+import imgSpace from "./site/still-space.jpg";
+import imgNeon from "./site/still-neon.jpg";
+import imgFriends from "./site/friends.jpg";
+
+const HTML = "text/html; charset=utf-8";
+const SITE = {
+  "/": [siteIndex, HTML],
+  "/index.html": [siteIndex, HTML],
+  "/privacy": [sitePrivacy, HTML],
+  "/hark.css": [siteCss, "text/css; charset=utf-8"],
+  "/hark-hero.css": [siteHeroCss, "text/css; charset=utf-8"],
+  "/hark.js": [siteJs, "text/javascript; charset=utf-8"],
+  "/still-space.jpg": [imgSpace, "image/jpeg"],
+  "/still-neon.jpg": [imgNeon, "image/jpeg"],
+  "/friends.jpg": [imgFriends, "image/jpeg"],
+};
 
 export class PartyHub {
   constructor(state, env) {
@@ -58,7 +80,21 @@ export default {
   async fetch(request, env) {
     const stub = env.HUB.get(env.HUB.idFromName("global"));
     const url = new URL(request.url);
-    // the extension zip is only handed out from a live party's invite page
+    if (url.hostname === "www.netparty.tech")
+      return Response.redirect("https://netparty.tech" + url.pathname + url.search, 301);
+    const isWs = request.headers.get("Upgrade") === "websocket";
+    if (!isWs && (request.method === "GET" || request.method === "HEAD")) {
+      const page = SITE[url.pathname];
+      if (page)
+        return new Response(request.method === "HEAD" ? null : page[0], {
+          headers: { "content-type": page[1], "cache-control": page[1] === HTML ? "public, max-age=300" : "public, max-age=86400" },
+        });
+      if (url.pathname === "/download/netparty-extension.zip")
+        return new Response(extensionZip, {
+          headers: { "content-type": "application/zip", "content-disposition": 'attachment; filename="netparty-extension.zip"', "cache-control": "public, max-age=300" },
+        });
+    }
+    // invite pages also offer the zip from a live party's invite page
     const dl = url.pathname.match(/^\/j\/([a-z0-9]{4,16})\/netparty\.zip$/i);
     if (dl) {
       const live = await stub.fetch(new Request(`${url.origin}/live/${dl[1]}`));

@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NetParty — Watch together, in sync</title>
+    <meta name="description" content="NetParty is a free Chrome extension for watch parties: synced play, pause and seek, with text chat and voice chat beside the video. No account needed." />
+    <meta property="og:title" content="NetParty — Watch together, in sync" />
+    <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat and voice right beside the video. Free Chrome extension." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://netparty.tech/" />
+    <meta name="theme-color" content="#0B0A12" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237C5CFF'/%3E%3Cstop offset='1' stop-color='%23B05CFF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4 6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-7l-5 4v-4.3A4 4 0 0 1 4 14z' fill='url(%23g)' opacity='.55'/%3E%3Cpath d='M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z' fill='url(%23g)'/%3E%3Cpath d='M17 14.5v7l6-3.5z' fill='%23fff'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap"
+    />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <link rel="stylesheet" href="hark.css" />
+    <link rel="stylesheet" href="hark-hero.css" />
+    <script>document.documentElement.classList.add("x-js");</script>
+    <style>
+      :root {
+        --x-ink: #0b0a12; --x-s1: #15131f; --x-s2: #1c1929; --x-line: #2a2638;
+        --x-text: #f4f2fa; --x-mute: #a7a2b8; --x-v: #7c5cff; --x-o: #b05cff; --x-amber: #ffb547;
+        --x-grad: linear-gradient(135deg, #7c5cff, #b05cff);
+        --x-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --x-mono: "JetBrains Mono", ui-monospace, monospace;
+        --x-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 20px 50px -20px rgba(0,0,0,.7);
+        color-scheme: dark;
+      }
+      html { scroll-padding-top: 84px; }
+      body { background: var(--x-ink); color: var(--x-text); font: 400 16px/1.55 var(--x-inter); }
+      body::before {
+        content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: .06;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      ::selection { background: rgba(124,92,255,.45); }
+      :focus-visible { outline: 2px solid var(--x-o); outline-offset: 3px; border-radius: 8px; }
+      .x-mono { font-family: var(--x-mono); }
+      html, .page { overflow-x: clip; }
+      .x-grad-text { background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #c4a6ff; -webkit-text-fill-color: transparent; }
+
+      /* buttons */
+      .x-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px;
+        padding: 0 22px; border-radius: 999px; font: 600 15px/1 var(--x-inter); text-decoration: none;
+        border: 1px solid transparent; cursor: pointer; transition: transform .2s, box-shadow .2s, background .2s, border-color .2s;
+        white-space: nowrap;
+      }
+      .x-btn--primary { background: var(--x-grad); color: #fff; box-shadow: 0 8px 28px -8px rgba(124,92,255,.7), 0 1px 0 rgba(255,255,255,.25) inset; }
+      .x-btn--primary:hover { transform: translateY(-1px); box-shadow: 0 12px 34px -8px rgba(176,92,255,.8), 0 1px 0 rgba(255,255,255,.25) inset; }
+      .x-btn--ghost { background: #15131f; color: var(--x-text); border-color: var(--x-line); }
+      .x-btn--ghost:hover { border-color: #463f5e; background: #1c1929; }
+      .x-btn--sm { min-height: 44px; padding: 0 16px; font-size: 14px; }
+
+      /* logo */
+      .x-logo { display: inline-flex; min-height: 44px; align-items: center; gap: 9px; font: 700 18px/1 var(--x-inter); letter-spacing: -0.03em; color: var(--x-text); text-decoration: none; }
+      .x-logo svg { width: 28px; height: 28px; flex: none; }
+
+      /* nav */
+      .x-nav {
+        position: sticky; top: 10px; z-index: 50; display: flex; align-items: center; gap: 16px;
+        padding: 8px 8px 8px 18px; border-radius: 999px; border: 1px solid var(--x-line);
+        background: rgba(21,19,31,.62); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+      }
+      .x-nav__links { display: flex; gap: 4px; margin-left: auto; }
+      .x-nav__links a { color: var(--x-mute); text-decoration: none; font-size: 14px; font-weight: 500; padding: 0 12px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px; transition: color .2s; }
+      .x-nav__links a:hover { color: var(--x-text); }
+      @media (max-width: 720px) { .x-nav__links { display: none; } .x-nav .x-gh { margin-left: auto; } }
+
+      /* hero */
+      .x-hero { position: relative; isolation: isolate; text-align: center; padding: clamp(48px, 9vw, 104px) 0 0; }
+      /* hero background: arc glow, corner glows, grain */
+      .x-bg {
+        --edge: clamp(250px, 24vw, 360px); --h: 72vw;
+        position: absolute; z-index: -1; top: -120px; bottom: 0; left: 50%; width: 100vw; margin-left: -50vw;
+        overflow: hidden; pointer-events: none; background: #050409;
+        -webkit-mask-image: linear-gradient(#000 0, #000 68%, transparent 100%);
+        mask-image: linear-gradient(#000 0, #000 68%, transparent 100%);
+      }
+      .x-arc {
+        position: absolute; left: 50%; top: calc(var(--edge) - var(--h)); width: 160vw; height: var(--h);
+        transform: translateX(-50%); transform-origin: 50% 100%; will-change: transform, opacity;
+        animation: x-breathe 10s ease-in-out infinite alternate;
+      }
+      .x-arc::before, .x-arc::after { content: ""; position: absolute; inset: 0; border-radius: 50%; }
+      .x-arc::before {
+        background: radial-gradient(closest-side, rgba(124,92,255,0) 52%, rgba(124,92,255,.10) 70%, rgba(140,96,255,.30) 86%, rgba(176,92,255,.62) 96%, rgba(176,92,255,0) 100%);
+        filter: blur(28px);
+      }
+      .x-arc::after {
+        background: radial-gradient(closest-side, rgba(214,180,255,0) 92%, rgba(222,196,255,.55) 98.4%, rgba(214,180,255,0) 100%);
+        filter: blur(5px);
+      }
+      @keyframes x-breathe { from { opacity: .82; transform: translateX(-50%) scale(1); } to { opacity: 1; transform: translateX(-50%) scale(1.035); } }
+      .x-corner { position: absolute; bottom: 14%; width: 62vw; height: 62vw; max-width: 900px; max-height: 900px; border-radius: 50%; background: radial-gradient(closest-side, rgba(124,92,255,.20), rgba(176,92,255,.07) 55%, transparent); filter: blur(30px); }
+      .x-corner--l { left: -26vw; } .x-corner--r { right: -26vw; background: radial-gradient(closest-side, rgba(176,92,255,.18), rgba(124,92,255,.06) 55%, transparent); }
+      .x-grain {
+        position: absolute; inset: -40%; opacity: .06; will-change: transform; animation: x-grain 1s steps(6) infinite;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+      }
+      @keyframes x-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(-1%, -3%); } }
+      .x-live { width: 8px; height: 8px; border-radius: 50%; background: var(--x-amber); box-shadow: 0 0 0 0 rgba(255,181,71,.6); animation: x-ping 2s infinite; flex: none; }
+      @keyframes x-ping { 0% { box-shadow: 0 0 0 0 rgba(255,181,71,.55); } 70%,100% { box-shadow: 0 0 0 7px rgba(255,181,71,0); } }
+      .x-word { font: 800 clamp(72px, 14vw, 180px)/.92 var(--x-inter); letter-spacing: -0.055em; margin: 0 auto; padding: 0 .04em .06em; background: linear-gradient(135deg, #9a80ff 10%, #7c5cff 45%, #b05cff 90%); -webkit-background-clip: text; background-clip: text; color: #c4a6ff; -webkit-text-fill-color: transparent; filter: drop-shadow(0 10px 40px rgba(124,92,255,.45)); }
+      /* hero wordmark with a 3D icon orbit: icons and the wordmark share one preserve-3d context */
+      .x-orbit-wrap { position: relative; width: 100vw; margin-left: calc(50% - 50vw); overflow-x: clip; padding-block: clamp(28px, 6vw, 72px); }
+      .x-stage { perspective: 1800px; perspective-origin: 50% 40%; }
+      .x-scene { position: relative; transform-style: preserve-3d; }
+      .x-scene > .x-word { position: relative; }
+      .x-orb { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; transform: rotateZ(var(--z)) rotateX(var(--x)); pointer-events: none; }
+      .x-orb--1 { --r: clamp(156px, 40vw, 430px); --x: -16deg; --z: 7deg; --d: 18s; --s: clamp(28px, 3.2vw, 42px); }
+      .x-orb--2 { --r: clamp(172px, 45vw, 540px); --x: -11deg; --z: -5deg; --d: 26s; --s: clamp(28px, 3.4vw, 44px); }
+      .x-orb--3 { --r: clamp(120px, 28vw, 320px); --x: -24deg; --z: 3deg; --d: 34s; --s: clamp(28px, 2.8vw, 36px); }
+      .x-orb__spin { position: absolute; transform-style: preserve-3d; animation: x-orbit var(--d) linear infinite; will-change: transform; }
+      .x-orb--2 .x-orb__spin, .x-orb--2 .x-ic__face { animation-direction: reverse; }
+      @keyframes x-orbit { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+      .x-ic { --a: calc(var(--k) * 360deg); position: absolute; transform-style: preserve-3d; transform: rotateY(var(--a)) translateZ(var(--r)); }
+      .x-ic__face {
+        position: absolute; width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+        display: grid; place-items: center; border-radius: 30%; color: #fff; overflow: hidden;
+        background: linear-gradient(135deg, #8a6bff, #7c5cff 40%, #b05cff);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 6px rgba(40,10,90,.35), 0 6px 16px -6px rgba(0,0,0,.6);
+        transform: rotateY(calc(-1 * var(--a))) rotateX(calc(-1 * var(--x))) rotateZ(calc(-1 * var(--z)));
+        will-change: transform, opacity;
+        animation: x-face var(--d) linear infinite, x-depth var(--d) linear infinite;
+        animation-delay: 0s, calc(var(--k) * var(--d) * -1);
+      }
+      .x-orb--2 .x-ic__face { animation-delay: 0s, calc((1 - var(--k)) * var(--d) * -1); }
+      .x-orb--2 .x-ic__face { animation-direction: reverse, normal; }
+      .x-ic__face::before { content: ""; position: absolute; inset: 0 0 50% 0; background: linear-gradient(rgba(255,255,255,.38), rgba(255,255,255,0)); border-radius: inherit; }
+      .x-ic__face svg { position: relative; width: 56%; height: 56%; }
+      .x-ic__face--dark { background: linear-gradient(135deg, #221d36, #15131f); border: 1px solid #3b3552; }
+      .x-ic__face--dark svg { width: 66%; height: 66%; }
+      @keyframes x-face {
+        from { transform: rotateY(calc(-1 * var(--a))) rotateX(calc(-1 * var(--x))) rotateZ(calc(-1 * var(--z))); }
+        to { transform: rotateY(calc(-1 * var(--a) - 360deg)) rotateX(calc(-1 * var(--x))) rotateZ(calc(-1 * var(--z))); }
+      }
+      @keyframes x-depth {
+        0%, 100% { opacity: 1; scale: 1.08; filter: blur(0) drop-shadow(0 0 12px rgba(176,92,255,.75)); }
+        25%, 75% { opacity: .78; scale: .9; filter: blur(.3px) drop-shadow(0 0 5px rgba(176,92,255,.3)); }
+        50% { opacity: .42; scale: .72; filter: blur(1.4px) drop-shadow(0 0 0 rgba(176,92,255,0)); }
+      }
+      .x-h1 { font: 700 clamp(24px, 3.4vw, 40px)/1.15 var(--x-inter); letter-spacing: -0.025em; margin: 14px auto 0; max-width: 24ch; text-wrap: balance; }
+      .x-gh { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; color: var(--x-text); background: #15131f; border: 1px solid var(--x-line); text-decoration: none; transition: border-color .2s, background .2s; }
+      .x-gh:hover { border-color: #463f5e; background: #1c1929; }
+      .x-gh svg { width: 20px; height: 20px; }
+      .x-p-brand svg { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; }
+      .x-lead { color: var(--x-mute); font-size: clamp(16px, 1.6vw, 19px); max-width: 58ch; margin: 22px auto 0; }
+      .x-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 32px; }
+      .x-fine { color: var(--x-mute); font-size: 13px; margin-top: 16px; }
+      .x-caption { color: var(--x-mute); font-size: 12px; margin-top: 14px; opacity: .8; }
+
+      /* mock */
+      .x-mock { margin: clamp(44px, 7vw, 72px) auto 0; max-width: 1040px; text-align: left; }
+      .x-win { border-radius: 18px; border: 1px solid var(--x-line); background: var(--x-s1); overflow: hidden; box-shadow: 0 40px 120px -30px rgba(124,92,255,.35), 0 30px 60px -30px rgba(0,0,0,.9); }
+      .x-win__bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: #121019; border-bottom: 1px solid var(--x-line); }
+      .x-dots { display: flex; gap: 7px; flex: none; }
+      .x-dots i { width: 11px; height: 11px; border-radius: 50%; background: #3a3550; }
+      .x-dots i:nth-child(1) { background: #6b5a8f; } .x-dots i:nth-child(2) { background: #8a6d4a; } .x-dots i:nth-child(3) { background: #4f4870; }
+      .x-tab { font-size: 12px; color: var(--x-text); background: var(--x-s2); border: 1px solid var(--x-line); border-bottom: 0; padding: 6px 14px; border-radius: 9px 9px 0 0; margin-bottom: -11px; white-space: nowrap; }
+      .x-addr { flex: 1; min-width: 0; font: 12px var(--x-mono); color: var(--x-mute); background: #0e0d15; border: 1px solid var(--x-line); border-radius: 999px; padding: 6px 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .x-addr b { color: var(--x-text); font-weight: 400; }
+      .x-split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 3fr); min-height: 470px; }
+      .x-player { position: relative; background: #000; overflow: hidden; display: flex; align-items: center; }
+      .x-player > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: filter .5s; }
+      .x-player.is-paused > img { filter: brightness(.55) saturate(.8); }
+      .x-player__ui { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 18px 14px; background: linear-gradient(transparent, rgba(0,0,0,.75)); display: grid; gap: 10px; }
+      .x-prog { height: 3px; border-radius: 3px; background: rgba(255,255,255,.25); position: relative; }
+      .x-prog span { position: absolute; inset: 0 auto 0 0; width: 62%; background: var(--x-grad); border-radius: 3px; transition: width 1s linear; }
+      .x-prog span::after { content: ""; position: absolute; right: -5px; top: -4px; width: 11px; height: 11px; border-radius: 50%; background: #fff; }
+      .x-ctrl { display: flex; align-items: center; gap: 12px; color: #fff; font: 13px var(--x-mono); }
+      .x-ctrl svg { width: 18px; height: 18px; }
+      .x-ctrl .x-ico-pause { display: none; }
+      .x-player.is-paused .x-ctrl .x-ico-play { display: none; }
+      .x-player.is-paused .x-ctrl .x-ico-pause { display: block; }
+      .x-bigplay { position: absolute; left: 50%; top: 45%; width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: rgba(11,10,18,.6); border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(6px); display: grid; place-items: center; opacity: 0; transform: scale(.85); transition: opacity .35s, transform .35s; }
+      .x-bigplay svg { width: 28px; height: 28px; color: #fff; }
+      .x-player.is-paused .x-bigplay { opacity: 1; transform: none; }
+      .x-paused-tag { position: absolute; top: 14px; left: 14px; font: 500 12px var(--x-mono); color: #fff; background: rgba(11,10,18,.7); border: 1px solid rgba(255,255,255,.15); padding: 5px 10px; border-radius: 999px; display: inline-flex; gap: 7px; align-items: center; opacity: 0; transition: opacity .35s; }
+      .x-player.is-paused .x-paused-tag { opacity: 1; }
+
+      /* panel: matches the real extension's overlay.css */
+      .x-panel { background: #141418; border-left: 1px solid #34343d; display: flex; flex-direction: column; font: 14px/1.4 var(--x-inter); color: #f3f3f6; min-width: 0; }
+      .x-p-head { padding: 16px 16px 6px; }
+      .x-p-brand { font-size: 15px; font-weight: 700; }
+      .x-p-code { font: 500 12px var(--x-mono); color: #a3a3ad; }
+      .x-p-meta { color: #a3a3ad; font-size: 12px; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+      .x-p-actions { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px; }
+      .x-p-pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px; background: #6b4cf0; color: #fff; font-weight: 600; font-size: 12px; }
+      .x-p-pill svg { width: 14px; height: 14px; }
+      .x-p-link { color: #a3a3ad; font-size: 12px; }
+      .x-p-label { padding: 4px 16px 0; color: #a3a3ad; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .x-p-people { display: flex; justify-content: center; gap: 10px; padding: 14px 12px 10px; }
+      .x-p-person { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 46px; }
+      .x-av { position: relative; width: 38px; height: 38px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; box-shadow: 0 0 0 2px #141418, 0 0 0 2px transparent; transition: box-shadow .15s; }
+      .x-av--j { background: linear-gradient(135deg, #7c5cff, #b05cff); }
+      .x-av--e { background: linear-gradient(135deg, #e0609a, #9b4de0); }
+      .x-av--t { background: linear-gradient(135deg, #3d8bff, #5c5cff); }
+      .x-av--o { background: linear-gradient(135deg, #ff9b54, #d65cc0); }
+      .x-p-person.is-talking .x-av { box-shadow: 0 0 0 2px #141418, 0 0 0 4px #a48bff; }
+      .x-crown { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 15px; height: 15px; color: #ffc93c; }
+      .x-tick { position: absolute; right: -4px; bottom: -4px; width: 17px; height: 17px; border-radius: 50%; background: var(--x-amber); color: #1a1205; border: 2px solid #141418; display: grid; place-items: center; transform: scale(0); transition: transform .3s cubic-bezier(.3,1.6,.5,1); }
+      .x-tick svg { width: 9px; height: 9px; }
+      .x-panel.is-synced .x-tick { transform: scale(1); }
+      .x-panel.is-synced .x-p-person:nth-child(2) .x-tick { transition-delay: .08s; }
+      .x-panel.is-synced .x-p-person:nth-child(3) .x-tick { transition-delay: .16s; }
+      .x-panel.is-synced .x-p-person:nth-child(4) .x-tick { transition-delay: .24s; }
+      .x-p-name { font-size: 12px; color: #a3a3ad; }
+      .x-p-voice { padding: 0 16px 12px; border-bottom: 1px solid #34343d; }
+      .x-vbar { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: #24242b; }
+      .x-vround { width: 32px; height: 32px; flex: none; border-radius: 50%; background: #33333d; display: grid; place-items: center; }
+      .x-vround svg { width: 15px; height: 15px; }
+      .x-vlabel { flex: 1; font-size: 12px; font-weight: 600; }
+      .x-eq { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+      .x-eq i { width: 3px; height: 100%; border-radius: 2px; background: #a48bff; transform-origin: bottom; animation: x-eq 1s ease-in-out infinite; }
+      .x-eq i:nth-child(2) { animation-delay: -.3s; } .x-eq i:nth-child(3) { animation-delay: -.6s; } .x-eq i:nth-child(4) { animation-delay: -.15s; }
+      @keyframes x-eq { 0%,100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+      .x-chat { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-height: 190px; overflow: hidden; }
+      .x-msg { display: flex; flex-direction: column; align-items: flex-start; max-width: 88%; animation: x-pop .35s ease-out both; }
+      .x-msg.is-mine { align-self: flex-end; align-items: flex-end; }
+      .x-author { font-size: 12px; font-weight: 600; margin: 0 0 2px 10px; }
+      .x-bubble { padding: 6px 11px; border-radius: 16px 16px 16px 4px; background: #24242b; font-size: 13px; }
+      .x-msg.is-mine .x-bubble { background: #6b4cf0; color: #fff; border-radius: 16px 16px 4px 16px; }
+      .x-sys { align-self: center; text-align: center; color: #a3a3ad; font-size: 12px; padding: 2px 10px; display: inline-flex; align-items: center; gap: 6px; animation: x-pop .35s ease-out both; }
+      .x-sys .x-live { width: 6px; height: 6px; animation: none; }
+      .x-typing { display: inline-flex; gap: 3px; padding: 9px 12px; border-radius: 16px 16px 16px 4px; background: #24242b; }
+      .x-msg.is-mine .x-typing { background: #7c5cff; border-radius: 16px 16px 4px 16px; }
+      .x-typing i { width: 5px; height: 5px; border-radius: 50%; background: #a3a3ad; animation: x-bounce 1s infinite; }
+      .x-msg.is-mine .x-typing i { background: #fff; }
+      .x-typing i:nth-child(2) { animation-delay: .15s; } .x-typing i:nth-child(3) { animation-delay: .3s; }
+      @keyframes x-bounce { 0%,60%,100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-3px); opacity: 1; } }
+      @keyframes x-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .x-composer { display: flex; gap: 8px; padding: 10px 14px 14px; border-top: 1px solid #34343d; }
+      .x-input { flex: 1; min-width: 0; padding: 9px 14px; border-radius: 999px; border: 1px solid #34343d; background: #1b1b21; color: #a3a3ad; font-size: 13px; white-space: nowrap; overflow: hidden; }
+      .x-send { width: 36px; height: 36px; flex: none; border-radius: 50%; background: #7c5cff; color: #fff; display: grid; place-items: center; }
+      .x-send svg { width: 15px; height: 15px; }
+      @media (max-width: 820px) {
+        .x-split { grid-template-columns: 1fr; min-height: 0; }
+        .x-player { aspect-ratio: 16 / 9; }
+        .x-panel { border-left: 0; border-top: 1px solid #34343d; }
+        .x-chat { min-height: 210px; }
+        .x-tab { display: none; }
+      }
+
+      /* sections */
+      .x-sec { padding: clamp(80px, 11vw, 140px) 0 0; }
+      .x-sec__head { text-align: center; max-width: 760px; margin: 0 auto clamp(36px, 5vw, 56px); }
+      .x-eyebrow { font: 500 12px var(--x-mono); color: var(--x-o); letter-spacing: .08em; text-transform: uppercase; }
+      .x-h2 { font: 700 clamp(32px, 4.6vw, 54px)/1.06 var(--x-inter); letter-spacing: -0.03em; margin-top: 14px; text-wrap: balance; }
+      .x-card { background: var(--x-s1); border: 1px solid var(--x-line); border-radius: 20px; box-shadow: var(--x-shadow); transition: border-color .25s, transform .25s; }
+      .x-card:hover { border-color: #3b3552; }
+      .x-card h3 { font: 600 18px/1.25 var(--x-inter); letter-spacing: -0.02em; }
+      .x-card p { color: var(--x-mute); font-size: 14.5px; margin-top: 6px; }
+      .x-vig { position: relative; display: grid; place-items: center; background: var(--x-s2); border: 1px solid var(--x-line); border-radius: 14px; height: 150px; overflow: hidden; margin-bottom: 20px; }
+      .x-vig::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, rgba(124,92,255,.14), transparent 70%); pointer-events: none; }
+      .x-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: #221f31; border: 1px solid #36304a; font-size: 13px; font-weight: 500; color: var(--x-text); white-space: nowrap; position: relative; }
+      .x-chip--dash { background: transparent; border-style: dashed; color: var(--x-mute); }
+
+      /* steps */
+      .x-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+      .x-step { padding: 14px 14px 22px; }
+      .x-step .x-num { font: 500 12px var(--x-mono); color: var(--x-mute); display: block; margin: 0 6px 8px; }
+      .x-step h3, .x-step p { margin-inline: 6px; }
+      @media (max-width: 1000px) { .x-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 600px) { .x-steps { grid-template-columns: 1fr; } }
+      .x-ext-mark { width: 18px; height: 18px; }
+      .x-ok { color: var(--x-amber); }
+      .x-tb { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px; background: #121019; border: 1px solid var(--x-line); }
+      .x-tb .x-chip { font-size: 12px; padding: 6px 10px; gap: 6px; }
+      .x-tb i { width: 22px; height: 22px; border-radius: 50%; background: #262236; }
+      .x-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 0 10px; }
+      .x-fakebtn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+      .x-fakebtn--w { background: #fff; color: #111; }
+      .x-fakebtn--v { background: var(--x-grad); color: #fff; animation: x-glow 2.4s ease-in-out infinite; }
+      @keyframes x-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(176,92,255,0); } 50% { box-shadow: 0 0 0 5px rgba(176,92,255,.25); } }
+      .x-linkchip { font: 12px var(--x-mono); }
+      .x-toast { position: absolute; top: -32px; right: 6px; font: 600 12px var(--x-inter); color: #1a1205; background: var(--x-amber); padding: 4px 9px; border-radius: 999px; animation: x-toast 3s ease-in-out infinite; }
+      @keyframes x-toast { 0%,15% { opacity: 0; transform: translateY(6px); } 25%,75% { opacity: 1; transform: none; } 90%,100% { opacity: 0; transform: translateY(-4px); } }
+      .x-bars { width: 76%; display: grid; gap: 14px; }
+      .x-bar { height: 4px; border-radius: 4px; background: #2e2a40; position: relative; }
+      .x-bar span { position: absolute; inset: 0 auto 0 0; width: 58%; border-radius: 4px; background: var(--x-grad); animation: x-grow 4s ease-in-out infinite; }
+      .x-bar span::after { content: ""; position: absolute; right: -5px; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--x-amber); box-shadow: 0 0 10px rgba(255,181,71,.6); }
+      @keyframes x-grow { 0% { width: 30%; } 50% { width: 66%; } 100% { width: 30%; } }
+
+      /* bento */
+      .x-bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+      .x-feat { padding: 14px 14px 24px; display: flex; flex-direction: column; }
+      .x-feat h3, .x-feat p { margin-inline: 8px; }
+      .x-feat--wide { grid-column: span 2; }
+      .x-feat--wide .x-vig { height: 210px; }
+      @media (max-width: 900px) { .x-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 600px) { .x-bento { grid-template-columns: 1fr; } .x-feat--wide { grid-column: auto; } .x-feat--wide .x-vig { height: 180px; } }
+
+      /* feature vignettes */
+      .x-sync { width: min(82%, 520px); display: grid; gap: 16px; }
+      .x-scrub { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 12px; }
+      .x-scrub__who { font: 12px var(--x-mono); color: var(--x-mute); }
+      .x-scrub__track { position: relative; height: 6px; border-radius: 6px; background: #2e2a40; }
+      .x-scrub__fill { position: absolute; inset: 0 auto 0 0; width: 60%; border-radius: 6px; background: var(--x-grad); }
+      .x-scrub__fill::after { content: ""; position: absolute; right: -7px; top: -4px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(124,92,255,.35); }
+      .x-scrub--drift .x-scrub__fill { animation: x-drift 4s cubic-bezier(.6,0,.2,1) infinite; }
+      @keyframes x-drift { 0%,15% { width: 44%; } 55%,100% { width: 60%; } }
+      .x-drift { font-size: 12px; color: var(--x-mute); text-align: center; margin-top: 4px; }
+      .x-drift__a { color: var(--x-text); }
+      .x-voice { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; width: 80%; }
+      .x-ring { position: relative; border-radius: 50%; }
+      .x-ring::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid #a48bff; animation: x-ring 1.8s ease-out infinite; }
+      .x-ring--2::after { animation-delay: .6s; } .x-ring--3::after { animation-delay: 1.2s; }
+      @keyframes x-ring { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+      .x-ring .x-av { box-shadow: none; }
+      .x-mute { flex-basis: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; color: var(--x-mute); }
+      .x-switch { position: relative; width: 34px; height: 20px; border-radius: 999px; background: #34303f; flex: none; }
+      .x-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+      .x-switch--host { animation: x-sw-bg 4s ease-in-out infinite; }
+      .x-switch--host::after { animation: x-sw-knob 4s ease-in-out infinite; }
+      @keyframes x-sw-bg { 0%,30% { background: #34303f; } 40%,90% { background: #7c5cff; } 100% { background: #34303f; } }
+      @keyframes x-sw-knob { 0%,30% { transform: none; } 40%,90% { transform: translateX(14px); } 100% { transform: none; } }
+      .x-host { font-size: 12.5px; }
+      .x-dock { display: flex; width: 78%; height: 100px; border-radius: 10px; overflow: hidden; border: 1px solid #36304a; background: #141418; }
+      .x-dock__player { flex: 1; position: relative; min-width: 0; }
+      .x-dock__player img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .x-dock__panel { width: 34%; flex: none; border-left: 1px solid #34343d; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; padding: 8px 7px; overflow: hidden; animation: x-dock 5s ease-in-out infinite; }
+      .x-dock__panel i { display: block; height: 8px; width: 70%; border-radius: 6px; background: #2c2c35; }
+      .x-dock__panel i.is-me { align-self: flex-end; background: #7c5cff; width: 60%; }
+      @keyframes x-dock { 0%,40% { width: 34%; padding-inline: 7px; } 50%,85% { width: 0; padding-inline: 0; border-left-width: 0; } 95%,100% { width: 34%; padding-inline: 7px; } }
+      .x-binge { display: grid; justify-items: center; gap: 12px; }
+      .x-arrow { color: var(--x-mute); }
+      .x-ep { color: #c48aff; }
+      .x-binge__line { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--x-mute); animation: x-fadeup 4s ease-in-out infinite; }
+      @keyframes x-fadeup { 0%,20% { opacity: 0; transform: translateY(5px); } 32%,85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+      .x-plats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 14px; }
+      .x-fifty { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; justify-content: center; }
+      .x-fifty__num { font: 800 84px/1 var(--x-inter); letter-spacing: -0.05em; background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #c4a6ff; -webkit-text-fill-color: transparent; }
+      .x-stack { display: flex; }
+      .x-stack .x-av { box-shadow: 0 0 0 3px var(--x-s2); margin-left: -10px; }
+      .x-stack .x-av:first-child { margin-left: 0; }
+      .x-av--more { background: #2c2840; color: var(--x-text); font-size: 12px; }
+      @media (max-width: 420px) { .x-stack .x-av:nth-child(n+5):not(.x-av--more) { display: none; } .x-fifty__num { font-size: 64px; } }
+
+      /* image card */
+      .x-night { position: relative; border-radius: 24px; overflow: hidden; border: 1px solid var(--x-line); min-height: clamp(380px, 52vw, 560px); display: flex; align-items: flex-end; }
+      .x-night img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .x-night::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,10,18,0) 30%, rgba(11,10,18,.88)), linear-gradient(90deg, rgba(11,10,18,.4), transparent 60%); }
+      .x-night__copy { position: relative; z-index: 1; padding: clamp(24px, 5vw, 56px); }
+      .x-night__quote { font: 700 clamp(36px, 6vw, 72px)/1.02 var(--x-inter); letter-spacing: -0.03em; max-width: 12ch; }
+      .x-night__small { color: #d6d2e3; margin-top: 14px; font-size: 16px; max-width: 46ch; }
+
+      /* faq */
+      .x-faq { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
+      .x-faq details { background: var(--x-s1); border: 1px solid var(--x-line); border-radius: 16px; transition: border-color .2s, background .2s; }
+      .x-faq details[open] { border-color: #3b3552; background: var(--x-s2); }
+      .x-faq summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; min-height: 44px; font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
+      .x-faq summary::-webkit-details-marker { display: none; }
+      .x-faq summary::after { content: ""; flex: none; width: 10px; height: 10px; border-right: 2px solid var(--x-mute); border-bottom: 2px solid var(--x-mute); transform: rotate(45deg) translate(-2px, -2px); transition: transform .25s; }
+      .x-faq details[open] summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+      .x-faq details p { padding: 0 20px 20px; color: var(--x-mute); max-width: 62ch; }
+
+      /* install */
+      .x-band { position: relative; overflow: hidden; text-align: center; border-radius: 28px; border: 1px solid var(--x-line); background: var(--x-s1); padding: clamp(56px, 9vw, 104px) clamp(20px, 5vw, 64px); }
+      .x-band { background: linear-gradient(#08070e, #0e0c16); }
+      .x-band::before {
+        content: ""; position: absolute; left: 50%; top: 0; width: 170%; height: 120%; transform: translate(-50%, -62%); border-radius: 50%; pointer-events: none;
+        background: radial-gradient(closest-side, rgba(124,92,255,0) 58%, rgba(124,92,255,.08) 74%, rgba(150,96,255,.22) 88%, rgba(176,92,255,.42) 97%, rgba(176,92,255,0) 100%);
+        filter: blur(22px); animation: x-breathe-band 10s ease-in-out infinite alternate;
+      }
+      .x-band::after {
+        content: ""; position: absolute; inset: 0; opacity: .05; pointer-events: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+      }
+      @keyframes x-breathe-band { from { opacity: .7; } to { opacity: 1; } }
+      .x-band > * { position: relative; z-index: 1; }
+      .x-band .x-h2 { font-size: clamp(36px, 5.4vw, 64px); max-width: 14ch; margin: 0 auto; }
+      .x-note { color: var(--x-mute); font-size: 14px; margin: 26px auto 0; max-width: 56ch; }
+      .x-beta { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; padding: 0; list-style: none; }
+      .x-beta li { font: 12px var(--x-mono); color: var(--x-text); background: var(--x-s2); border: 1px solid var(--x-line); border-radius: 999px; padding: 6px 12px; }
+      .x-beta b { color: var(--x-o); font-weight: 500; margin-right: 6px; }
+      .x-join { display: flex; gap: 8px; max-width: 480px; margin: 22px auto 0; }
+      .x-join[hidden] { display: none; }
+      .x-join input { flex: 1; min-width: 0; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--x-line); background: #0e0d15; color: var(--x-text); font: 14px var(--x-inter); outline: none; }
+      .x-join input:focus { border-color: var(--x-v); }
+      .x-join__err { color: var(--x-amber); font-size: 13px; margin-top: 10px; min-height: 1em; }
+      @media (max-width: 420px) { .x-join { flex-direction: column; } .x-cta .x-btn { width: 100%; } }
+
+      /* footer */
+      .x-foot { margin-top: clamp(80px, 10vw, 120px); padding: 32px 0 8px; border-top: 1px solid var(--x-line); display: grid; gap: 22px; }
+      .x-foot__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; }
+      .x-foot__tag { color: var(--x-mute); font-size: 14px; margin-top: 8px; }
+      .x-foot__links { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+      .x-foot__links a { color: var(--x-mute); text-decoration: none; font-size: 14px; padding: 0 10px; min-height: 44px; display: inline-flex; align-items: center; }
+      .x-foot__links a:hover { color: var(--x-text); }
+      .x-foot__links a.x-gh { padding: 0; justify-content: center; margin-left: 4px; }
+      .x-foot__legal { color: #8a859c; font-size: 12px; }
+
+      /* reveal */
+      .x-js .x-rv { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+      .x-js .x-rv.is-in { opacity: 1; transform: none; }
+      @media (prefers-reduced-motion: reduce) {
+        .x-js .x-rv { opacity: 1; transform: none; transition: none; }
+        *, *::before, *::after { animation: none !important; transition: none !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <linearGradient id="x-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF" /><stop offset="1" stop-color="#B05CFF" /></linearGradient>
+        <symbol id="np-mark" viewBox="0 0 32 32">
+          <path d="M4 6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-7l-5 4v-4.3A4 4 0 0 1 4 14z" fill="url(#x-g)" opacity=".55" />
+          <path d="M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z" fill="url(#x-g)" />
+          <path d="M17 14.5v7l6-3.5z" fill="#fff" />
+        </symbol>
+        <symbol id="gh-mark" viewBox="0 0 24 24">
+          <path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+        </symbol>
+      </defs>
+    </svg>
+    <div class="page" id="top">
+      <header class="x-nav">
+        <a class="x-logo" href="#top" aria-label="NetParty home"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
+        <nav class="x-nav__links" aria-label="Main">
+          <a href="#how">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
+        <a class="x-btn x-btn--primary x-btn--sm" href="#install">Add to Chrome</a>
+      </header>
+
+      <main>
+        <section class="x-hero" aria-labelledby="hero-title">
+          <div class="x-bg" aria-hidden="true">
+            <div class="x-arc"></div>
+            <div class="x-corner x-corner--l"></div>
+            <div class="x-corner x-corner--r"></div>
+            <div class="x-grain"></div>
+          </div>
+          <div class="x-orbit-wrap">
+            <div class="x-stage">
+              <div class="x-scene">
+                <div class="x-orb x-orb--1" aria-hidden="true">
+                  <div class="x-orb__spin">
+                    <span class="x-ic" style="--k:0"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 6.5v11l9-5.5z" /></svg></span></span>
+                    <span class="x-ic" style="--k:.25"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-4 3v-3H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /><path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01" stroke-width="2.6" /></svg></span></span>
+                    <span class="x-ic" style="--k:.5"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v-3a8 8 0 0 1 16 0v3" /><rect x="3" y="14" width="4.5" height="6.5" rx="1.6" fill="currentColor" /><rect x="16.5" y="14" width="4.5" height="6.5" rx="1.6" fill="currentColor" /></svg></span></span>
+                    <span class="x-ic" style="--k:.75"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 8.5A7.5 7.5 0 0 0 5.6 7.2M5 4v3.5h3.5" /><path d="M5 15.5a7.5 7.5 0 0 0 13.4 1.3M19 20v-3.5h-3.5" /></svg></span></span>
+                  </div>
+                </div>
+                <div class="x-orb x-orb--2" aria-hidden="true">
+                  <div class="x-orb__spin">
+                    <span class="x-ic" style="--k:.125"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10.5h12L16.4 21H7.6z" fill="currentColor" fill-opacity=".25" /><path d="M10 10.5 10.6 21M14 10.5 13.4 21" /><circle cx="8" cy="8" r="2.6" fill="currentColor" /><circle cx="12" cy="6.4" r="2.8" fill="currentColor" /><circle cx="16" cy="8" r="2.6" fill="currentColor" /></svg></span></span>
+                    <span class="x-ic" style="--k:.375"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor" /><path d="M6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6" /></svg></span></span>
+                    <span class="x-ic" style="--k:.625"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 20.5s-7.5-4.6-7.5-10.4A4.2 4.2 0 0 1 12 7.4a4.2 4.2 0 0 1 7.5 2.7c0 5.8-7.5 10.4-7.5 10.4z" /></svg></span></span>
+                    <span class="x-ic" style="--k:.875"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="10" width="17" height="10" rx="2" /><path d="m3.6 6.6 15.8-3 .8 3.9-15.8 3z" fill="currentColor" fill-opacity=".25" /><path d="m8 5.8 2.2 3.4M13 4.9l2.2 3.4" /></svg></span></span>
+                  </div>
+                </div>
+                <div class="x-orb x-orb--3" aria-hidden="true">
+                  <div class="x-orb__spin">
+                    <span class="x-ic" style="--k:.08"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5" /><path d="M8.5 14a4.2 4.2 0 0 0 7 0M9 9.5h.01M15 9.5h.01" /></svg></span></span>
+                    <span class="x-ic" style="--k:.41"><span class="x-ic__face"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z" fill="currentColor" fill-opacity=".25" /><path d="M14 7.5v1.5M14 11.3v1.4M14 15v1.5" /></svg></span></span>
+                    <span class="x-ic" style="--k:.74"><span class="x-ic__face x-ic__face--dark"><svg viewBox="0 0 32 32"><use href="#np-mark" /></svg></span></span>
+                  </div>
+                </div>
+                <h1 class="x-word x-rv" id="hero-title">NetParty</h1>
+              </div>
+            </div>
+          </div>
+          <p class="x-h1 x-rv">Watch together, perfectly <span class="x-grad-text">in sync.</span></p>
+          <p class="x-lead x-rv">Start a party from any title, send one link, and everyone's play, pause and seek stay locked together, with chat and voice right beside the video.</p>
+          <div class="x-cta x-rv">
+            <a class="x-btn x-btn--primary" href="#install">Add to Chrome — it's free</a>
+            <a class="x-btn x-btn--ghost" href="#how">See how it works</a>
+          </div>
+          <p class="x-fine x-rv">No account. No sign-up. Everyone uses their own streaming subscription.</p>
+
+          <figure class="x-mock x-rv" aria-label="Animated illustration of a NetParty watch party">
+            <div class="x-win">
+              <div class="x-win__bar">
+                <span class="x-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="x-tab">Movie night</span>
+                <span class="x-addr">watch · <b>NetParty party gqxnzbom</b></span>
+              </div>
+              <div class="x-split">
+                <div class="x-player" id="x-player">
+                  <img src="still-space.jpg" alt="Film still: a cinematic scene playing in the video player" />
+                  <span class="x-paused-tag"><span class="x-live" aria-hidden="true"></span>Paused for everyone</span>
+                  <span class="x-bigplay" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg></span>
+                  <div class="x-player__ui">
+                    <div class="x-prog"><span id="x-prog"></span></div>
+                    <div class="x-ctrl">
+                      <svg class="x-ico-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+                      <svg class="x-ico-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                      <span id="x-clock">1:12:08</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="x-panel" id="x-panel">
+                  <div class="x-p-head">
+                    <p class="x-p-brand"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty <span class="x-p-code">· party code gqxnzbom</span></p>
+                    <p class="x-p-meta" id="x-status">▶ Playing at 1:12:08</p>
+                  </div>
+                  <div class="x-p-actions">
+                    <span class="x-p-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>Copy invite</span>
+                    <span class="x-p-link">Leave party</span>
+                  </div>
+                  <p class="x-p-label">Watching</p>
+                  <div class="x-p-people">
+                    <div class="x-p-person is-talking"><span class="x-av x-av--j">J<svg class="x-crown" viewBox="0 0 24 24" fill="currentColor" aria-label="Host"><path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z" /></svg><span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Jake</span></div>
+                    <div class="x-p-person is-talking"><span class="x-av x-av--e">E<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Emma</span></div>
+                    <div class="x-p-person is-talking"><span class="x-av x-av--t">T<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Tyler</span></div>
+                    <div class="x-p-person"><span class="x-av x-av--o">O<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Olivia</span></div>
+                  </div>
+                  <div class="x-p-voice">
+                    <div class="x-vbar">
+                      <span class="x-vround" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg></span>
+                      <span class="x-vlabel">Voice chat · 3 talking</span>
+                      <span class="x-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                    </div>
+                  </div>
+                  <div class="x-chat" id="x-chat" aria-live="off"></div>
+                  <div class="x-composer">
+                    <span class="x-input">Message the party…</span>
+                    <span class="x-send" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 20.5l18-8.5L3 3.5 3 10l12 2-12 2z" /></svg></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <figcaption class="x-caption">Illustration of the real NetParty panel. Film still is illustrative.</figcaption>
+          </figure>
+        </section>
+        <section class="x-sec" id="how" aria-labelledby="how-title">
+          <div class="x-sec__head x-rv">
+            <p class="x-eyebrow">How it works</p>
+            <h2 class="x-h2" id="how-title">From install to your first party in a minute.</h2>
+          </div>
+          <ol class="x-steps" style="list-style:none;margin:0;padding:0">
+            <li class="x-card x-step x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <span class="x-tb"><i></i><span class="x-chip"><svg class="x-ext-mark"><use href="#np-mark" /></svg>NetParty · Installed <span class="x-ok">✓</span></span></span>
+              </div>
+              <span class="x-num">01</span>
+              <h3>Add NetParty to Chrome</h3>
+              <p>One click. Works in Chrome and other Chromium browsers.</p>
+            </li>
+            <li class="x-card x-step x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <span class="x-btns"><span class="x-fakebtn x-fakebtn--w">▶ Play</span><span class="x-fakebtn x-fakebtn--v">👥 Start a NetParty</span></span>
+              </div>
+              <span class="x-num">02</span>
+              <h3>Hit Start a NetParty</h3>
+              <p>The button sits right next to Play on supported title pages.</p>
+            </li>
+            <li class="x-card x-step x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <span class="x-chip x-linkchip">netparty.tech/j/gqxnzbom<span class="x-toast">Copied</span></span>
+              </div>
+              <span class="x-num">03</span>
+              <h3>Send the invite link</h3>
+              <p>Friends open it, install if they need to, and land in your party.</p>
+            </li>
+            <li class="x-card x-step x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-bars"><div class="x-bar"><span></span></div><div class="x-bar"><span></span></div><div class="x-bar"><span></span></div></div>
+              </div>
+              <span class="x-num">04</span>
+              <h3>Watch in sync</h3>
+              <p>Play, pause and seek once. Everyone follows instantly.</p>
+            </li>
+          </ol>
+        </section>
+
+        <section class="x-sec" id="features" aria-labelledby="feat-title">
+          <div class="x-sec__head x-rv">
+            <p class="x-eyebrow">Features</p>
+            <h2 class="x-h2" id="feat-title">Everything a movie night needs. Nothing it doesn't.</h2>
+          </div>
+          <div class="x-bento">
+            <article class="x-card x-feat x-feat--wide x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-sync">
+                  <div class="x-scrub"><span class="x-scrub__who">You</span><span class="x-scrub__track"><span class="x-scrub__fill"></span></span></div>
+                  <div class="x-scrub x-scrub--drift"><span class="x-scrub__who">Emma</span><span class="x-scrub__track"><span class="x-scrub__fill"></span></span></div>
+                  <p class="x-drift x-mono">drift <span class="x-drift__a">−1.4s</span> → <span class="x-ok">0.0s</span></p>
+                </div>
+              </div>
+              <h3>Frame-tight sync</h3>
+              <p>A shared party clock keeps everyone within a couple of seconds, and quietly corrects drift while you watch.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-voice">
+                  <div class="x-ring"><span class="x-av x-av--e">E</span></div>
+                  <div class="x-ring x-ring--2"><span class="x-av x-av--j">J</span></div>
+                  <div class="x-ring x-ring--3"><span class="x-av x-av--t">T</span></div>
+                  <span class="x-mute"><span class="x-switch"></span>Mute</span>
+                </div>
+              </div>
+              <h3>Voice chat</h3>
+              <p>Talk over the movie like you're on the same couch. Voice goes peer-to-peer between friends.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-dock">
+                  <div class="x-dock__player"><img src="still-neon.jpg" alt="" /></div>
+                  <div class="x-dock__panel"><i></i><i></i><i class="is-me"></i><i></i></div>
+                </div>
+              </div>
+              <h3>Chat beside the video</h3>
+              <p>Split-screen panel that shrinks the player instead of covering it. Hide it anytime for full screen.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <span class="x-chip x-host"><span class="x-switch x-switch--host"></span>Only I can play, pause and skip</span>
+              </div>
+              <h3>Host controls</h3>
+              <p>Lock playback so only the host can play, pause and skip.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-binge">
+                  <span class="x-chip x-mono">S1:E3 <span class="x-arrow">→</span> <span class="x-ep">S1:E4</span></span>
+                  <p class="x-binge__line"><span class="x-live"></span>Party moved to new episode</p>
+                </div>
+              </div>
+              <h3>Binge-proof</h3>
+              <p>Next episode? The whole party moves with you. Reload the page and you keep your seat and the chat.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-plats"><span class="x-chip">Netflix</span><span class="x-chip">JioHotstar</span><span class="x-chip x-chip--dash">+ more soon</span></div>
+              </div>
+              <h3>Netflix and JioHotstar</h3>
+              <p>Works on both today. More platforms are on the way.</p>
+            </article>
+            <article class="x-card x-feat x-feat--wide x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-fifty">
+                  <span class="x-fifty__num">50</span>
+                  <span class="x-stack"><span class="x-av x-av--j">J</span><span class="x-av x-av--e">E</span><span class="x-av x-av--t">T</span><span class="x-av x-av--o">O</span><span class="x-av x-av--e">A</span><span class="x-av x-av--t">R</span><span class="x-av x-av--more">+44</span></span>
+                </div>
+              </div>
+              <h3>Up to 50 per party</h3>
+              <p>Room for the whole group chat.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="x-sec" aria-label="Made for nights like this">
+          <figure class="x-night x-rv" style="margin:0">
+            <img src="friends.jpg" alt="Three friends in separate rooms laughing at their laptops" />
+            <figcaption class="x-night__copy">
+              <p class="x-night__quote">Different rooms. <span class="x-grad-text">Same couch.</span></p>
+              <p class="x-night__small">No screen-sharing lag, no counting down '3, 2, 1, play'.</p>
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="x-sec" id="faq" aria-labelledby="faq-title">
+          <div class="x-sec__head x-rv">
+            <p class="x-eyebrow">FAQ</p>
+            <h2 class="x-h2" id="faq-title">Questions, answered.</h2>
+          </div>
+          <div class="x-faq">
+            <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
+            <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
+            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix and JioHotstar in Google Chrome on a computer (Chromium browsers like Edge and Brave should work too). Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>How does voice chat work?</summary><p>Click Join voice chat in the panel and allow your microphone. Audio travels directly between the people in the party.</p></details>
+            <details class="x-rv"><summary>What happens to our chat?</summary><p>Party chat lives only while the party does. Ended parties and their messages are cleared within 6 hours.</p></details>
+            <details class="x-rv"><summary>Can someone else control playback?</summary><p>By default anyone can play, pause or seek. The host can switch on 'Only I can play, pause and skip' in the popup.</p></details>
+          </div>
+        </section>
+
+        <section class="x-sec" id="install" aria-labelledby="install-title">
+          <div class="x-band x-rv">
+            <h2 class="x-h2" id="install-title">Your next movie night <span class="x-grad-text">starts here.</span></h2>
+            <div class="x-cta">
+              <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download>Add to Chrome — it's free</a>
+              <button class="x-btn x-btn--ghost" type="button" id="x-join-toggle" aria-expanded="false" aria-controls="x-join">Join a party</button>
+            </div>
+            <form class="x-join" id="x-join" hidden novalidate>
+              <input id="x-join-input" aria-label="Invite link or party code" type="text" placeholder="Paste an invite link or party code" autocomplete="off" spellcheck="false" />
+              <button class="x-btn x-btn--primary" type="submit">Join</button>
+            </form>
+            <p class="x-join__err" id="x-join-err" aria-live="polite"></p>
+            <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
+            <ol class="x-beta">
+              <li><b>1</b>Unzip</li>
+              <li><b>2</b>Open chrome://extensions</li>
+              <li><b>3</b>Turn on Developer mode</li>
+              <li><b>4</b>Load unpacked → pick the folder</li>
+            </ol>
+          </div>
+        </section>
+      </main>
+
+      <footer class="x-foot">
+        <div class="x-foot__top">
+          <div>
+            <a class="x-logo" href="#top"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
+            <p class="x-foot__tag">Free watch parties, for everyone.</p>
+          </div>
+          <nav class="x-foot__links" aria-label="Footer">
+            <a href="#how">How it works</a>
+            <a href="#features">Features</a>
+            <a href="#faq">FAQ</a>
+            <a href="/privacy">Privacy</a>
+            <a href="mailto:chiragrasane15@gmail.com">Contact</a>
+            <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
+          </nav>
+        </div>
+        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix or JioHotstar. Netflix and JioHotstar are trademarks of their respective owners.</p>
+      </footer>
+    </div>
+    <script src="hark.js"></script>
+    <script>
+      (function () {
+        var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        /* reveal on scroll */
+        var els = document.querySelectorAll(".x-rv");
+        if (reduce || !("IntersectionObserver" in window)) {
+          els.forEach(function (el) { el.classList.add("is-in"); });
+        } else {
+          var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+              if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); }
+            });
+          }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+          els.forEach(function (el, i) {
+            var sib = el.parentElement ? Array.prototype.indexOf.call(el.parentElement.children, el) : 0;
+            el.style.transitionDelay = Math.min(sib, 6) * 60 + "ms";
+            io.observe(el);
+          });
+        }
+
+        /* live mock */
+        var chat = document.getElementById("x-chat");
+        var player = document.getElementById("x-player");
+        var panel = document.getElementById("x-panel");
+        var clock = document.getElementById("x-clock");
+        var status = document.getElementById("x-status");
+        var prog = document.getElementById("x-prog");
+        var START = 72 * 60 + 1; // 1:12:01
+        var secs = START, playing = true, timers = [], tick = null;
+
+        function fmt(s) { var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h + ":" + String(m).padStart(2, "0") + ":" + String(x).padStart(2, "0"); }
+        function paint() {
+          clock.textContent = fmt(secs);
+          status.textContent = (playing ? "▶ Playing at " : "❚❚ Paused at ") + fmt(secs);
+          prog.style.width = (62 + (secs - START) * 0.12) + "%";
+        }
+        var people = { Emma: { h: 330 }, Tyler: { h: 220 }, Jake: { h: 260 } };
+        function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
+        function trim() { while (chat.children.length > 6) chat.removeChild(chat.firstChild); }
+        function msg(who, text, mine) {
+          var m = el("div", "x-msg" + (mine ? " is-mine" : ""));
+          if (!mine) { var a = el("span", "x-author", who); a.style.color = "hsl(" + people[who].h + " 70% 72%)"; m.appendChild(a); }
+          m.appendChild(el("span", "x-bubble", text));
+          chat.appendChild(m); trim(); return m;
+        }
+        function typing(who, mine) {
+          var m = el("div", "x-msg" + (mine ? " is-mine" : ""));
+          if (!mine) { var a = el("span", "x-author", who); a.style.color = "hsl(" + people[who].h + " 70% 72%)"; m.appendChild(a); }
+          var t = el("span", "x-typing"); t.innerHTML = "<i></i><i></i><i></i>"; m.appendChild(t);
+          chat.appendChild(m); trim(); return m;
+        }
+        function sys(text, dot) {
+          var s = el("p", "x-sys"); if (dot) s.appendChild(el("span", "x-live"));
+          s.appendChild(document.createTextNode(text)); chat.appendChild(s); trim();
+        }
+        function setPlaying(p) { playing = p; player.classList.toggle("is-paused", !p); panel.classList.toggle("is-synced", !p); paint(); }
+        function at(ms, fn) { timers.push(setTimeout(fn, ms)); }
+        function swap(t, who, text, mine) { if (t.parentNode) t.parentNode.removeChild(t); msg(who, text, mine); }
+
+        function run() {
+          timers.forEach(clearTimeout); timers = [];
+          chat.innerHTML = ""; secs = START; setPlaying(true);
+          var t1, t2, t3;
+          at(700, function () { t1 = typing("Emma"); });
+          at(2000, function () { swap(t1, "Emma", "wait who's the guy in the suit??"); });
+          at(3000, function () { t2 = typing("Tyler"); });
+          at(4200, function () { swap(t2, "Tyler", "no spoilers 😤"); });
+          at(5000, function () { t3 = typing("Jake", true); });
+          at(6300, function () { swap(t3, "Jake", "pausing for snacks", true); });
+          at(7000, function () { secs = START + 7; setPlaying(false); sys("Jake paused at 1:12:08", true); });
+          at(10500, function () { setPlaying(true); sys("Jake resumed", true); });
+          at(14000, run);
+        }
+
+        if (reduce) {
+          secs = START + 7; playing = true; paint();
+          msg("Emma", "wait who's the guy in the suit??");
+          msg("Tyler", "no spoilers 😤");
+          msg("Jake", "pausing for snacks", true);
+          sys("Jake paused at 1:12:08", true);
+          sys("Jake resumed", true);
+        } else {
+          tick = setInterval(function () { if (playing) { secs++; paint(); } }, 1000);
+          run();
+        }
+
+        /* join a party */
+        var toggle = document.getElementById("x-join-toggle");
+        var form = document.getElementById("x-join");
+        var input = document.getElementById("x-join-input");
+        var err = document.getElementById("x-join-err");
+        toggle.addEventListener("click", function () {
+          var open = form.hidden;
+          form.hidden = !open; toggle.setAttribute("aria-expanded", String(open));
+          if (open) input.focus(); else err.textContent = "";
+        });
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var v = input.value.trim();
+          if (!v) { err.textContent = "Paste an invite link or party code first."; return; }
+          if (/^https?:\/\//i.test(v)) { window.location.href = v; return; }
+          if (/^[a-z0-9]+$/i.test(v)) { window.location.href = "/j/" + v; return; }
+          if (/^[\w.-]+\.[a-z]{2,}\//i.test(v)) { window.location.href = "https://" + v; return; }
+          var m = v.match(/\/j\/([a-z0-9]+)/i);
+          if (m) { window.location.href = "/j/" + m[1]; return; }
+          err.textContent = "That doesn't look like a party code or invite link.";
+        });
+      })();
+    </script>
+  </body>
+</html>

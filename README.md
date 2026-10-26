@@ -9,7 +9,7 @@ Supported: **Netflix** (`netflix.com/watch/...`) and **JioHotstar**
 Features
 - Playback sync: play, pause, seek, and episode changes follow the party
   (server-clock sync, 1 s seek threshold, drift correction every 3 s)
-- Invite links: `https://netparty.chiragrasane15.workers.dev/j/<code>` opens an invite page that sends
+- Invite links: `https://netparty.tech/j/<code>` opens an invite page that sends
   friends to the right title (auto-joins) and lets them download the extension while the party is live
 - Split-screen chat: the player shrinks to make room for a docked chat column (nothing covers the
   player controls); hide it to go back to full width
@@ -63,7 +63,7 @@ Tips
 
 ## 1. The server
 
-A hosted server is live at `wss://netparty.chiragrasane15.workers.dev`
+A hosted server is live at `wss://netparty.tech` (also reachable at wss://netparty.chiragrasane15.workers.dev); landing page at https://netparty.tech, privacy at /privacy, download at /download/netparty-extension.zip
 (Cloudflare Worker + Durable Object, free plan) and is the extension's default,
 so you can skip straight to step 2.
 

@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const DEFAULT_SERVER = "wss://netparty.chiragrasane15.workers.dev";
+const DEFAULT_SERVER = "wss://netparty.tech";
 const SITE_RE = /^https:\/\/www\.(netflix|hotstar|jiohotstar)\.com\//;
 let tabId = null;
 

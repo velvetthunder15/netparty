@@ -3,13 +3,15 @@
 // Netflix's page CSP. One WebSocket per connected tab port.
 // Chrome 116+ keeps the worker alive while a WebSocket is active.
 
-const DEFAULT_SERVER = "wss://netparty.chiragrasane15.workers.dev";
+const DEFAULT_SERVER = "wss://netparty.tech";
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const { serverUrl, name } = await chrome.storage.sync.get(["serverUrl", "name"]);
   const patch = {};
   // builds before 1.0.1 defaulted to a local server; move those (and only those) to the hosted one
-  if (!serverUrl || (reason === "update" && serverUrl === "ws://localhost:8787")) patch.serverUrl = DEFAULT_SERVER;
+  // and 1.5.0 moved the hosted server from workers.dev to netparty.tech (same backend)
+  const OLD = ["ws://localhost:8787", "wss://netparty.chiragrasane15.workers.dev"];
+  if (!serverUrl || (reason === "update" && OLD.includes(serverUrl))) patch.serverUrl = DEFAULT_SERVER;
   if (!name) patch.name = "Guest " + Math.floor(100 + Math.random() * 900);
   if (Object.keys(patch).length) await chrome.storage.sync.set(patch);
 });

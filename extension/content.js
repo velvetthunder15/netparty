@@ -272,7 +272,7 @@
     members: [],
     state: null, // { playing, position, at (server ms), videoId }
     name: "Guest",
-    serverUrl: "wss://netparty.chiragrasane15.workers.dev",
+    serverUrl: "wss://netparty.tech",
     error: null,
   };
   let suppressUntil = 0;
