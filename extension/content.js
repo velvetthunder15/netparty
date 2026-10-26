@@ -277,6 +277,18 @@
     await clock.sync();
   }
 
+  // Stable id for this browser tab: survives reloads and episode changes, so the server
+  // gives us our seat (and host role) back instead of treating us as a new person.
+  const TAB_ID = (() => {
+    let id = sessionStorage.getItem("netpartyCid");
+    if (!/^[a-z0-9]{16}$/.test(id || "")) {
+      const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
+      id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => abc[b % 36]).join("");
+      sessionStorage.setItem("netpartyCid", id);
+    }
+    return id;
+  })();
+
   async function createParty() {
     const vid = videoIdFromUrl();
     if (!vid) throw new Error(`Open a ${SITE_NAME} title and press play first, then start the party.`);
@@ -284,6 +296,7 @@
     const st = (await bridge.status()) || { position: 0, playing: false };
     const snap = await net.request("create", {
       name: party.name,
+      cid: TAB_ID,
       videoId: vid,
       playing: st.playing,
       position: st.position,
@@ -296,9 +309,9 @@
 
   async function joinParty(roomId) {
     await ensureConnected();
-    const snap = await net.request("join", { roomId, name: party.name });
+    const snap = await net.request("join", { roomId, name: party.name, cid: TAB_ID });
     onJoined(snap);
-    ui.system("You joined the party.");
+    if (!snap.returning) ui.system("You joined the party.");
     await applyRemote(snap.state, "join");
     // came back after an episode change with voice on: reconnect voice too
     if (sessionStorage.getItem("netpartyVoice")) voice.join().catch(() => {});
@@ -326,7 +339,10 @@
     party.state = snap.state;
     party.error = null;
     sessionStorage.setItem("netpartyRoom", snap.roomId);
-    ui.show();
+    ui.loadHistory(snap.history || []);
+    // keep the chat open/closed the way it was before a reload
+    if (sessionStorage.getItem("netpartyPanel") === "closed") ui.mount();
+    else ui.show();
     ui.render();
   }
 
@@ -477,7 +493,7 @@
           const room = party.roomId;
           try {
             await clock.sync(3);
-            const snap = await net.request("join", { roomId: room, name: party.name });
+            const snap = await net.request("join", { roomId: room, name: party.name, cid: TAB_ID });
             onJoined(snap);
             ui.system("Reconnected.");
             applyRemote(snap.state, "rejoin");
@@ -818,37 +834,46 @@
       if (pageStyle?.isConnected) return;
       pageStyle = el("style", { id: "netparty-dock-style" });
       pageStyle.textContent = `
-html.np-docked, html.np-docked body { overflow-x: hidden !important; }
-html.np-docked body { width: calc(100vw - var(--np-w)) !important; min-width: 0 !important; }
 html.np-docked [data-np-shrink] {
-  width: calc(100vw - var(--np-w)) !important; max-width: calc(100vw - var(--np-w)) !important;
-  min-width: 0 !important; right: auto !important; left: 0 !important;
+  left: 0 !important; right: auto !important;
+  width: calc(100% - var(--np-w)) !important; max-width: calc(100% - var(--np-w)) !important; min-width: 0 !important;
 }`;
       (document.head || document.documentElement).append(pageStyle);
     }
-    // mark the player's full-width containers (the <video> and its ancestors, plus
-    // full-screen-wide fixed layers near the top) so the stylesheet can narrow them
-    function markShrinkTargets(w) {
-      const top = document.fullscreenElement || document.body;
-      if (!top) return;
-      const full = (n) => {
-        if (n.hasAttribute("data-np-shrink")) return true;
-        const r = n.getBoundingClientRect();
-        return r.width >= innerWidth - 2 && r.left <= 1;
-      };
-      const v = mainVideo();
-      for (let n = v; n && n !== top && n !== document.documentElement; n = n.parentElement)
-        if (n !== host && full(n)) n.setAttribute("data-np-shrink", "");
-      for (const a of top.children) {
-        if (a === host) continue;
-        for (const n of [a, ...a.children]) {
-          const pos = getComputedStyle(n).position;
-          if ((pos === "fixed" || pos === "absolute") && full(n)) n.setAttribute("data-np-shrink", "");
-        }
+    // Narrow exactly ONE element: the site's player box. The site then lays out the
+    // video and its controls inside the smaller box itself, so nothing is cropped.
+    // (Forcing widths on the <video> or its inner wrappers fights the player's own
+    // sizing and crops the picture.)
+    const PLAYER_BOX = {
+      netflix: [".sizing-wrapper", ".watch-video--player-view", ".watch-video", "[data-uia=player]"],
+      hotstar: [],
+    };
+    function playerBox() {
+      for (const sel of PLAYER_BOX[IS_HOTSTAR ? "hotstar" : "netflix"] || []) {
+        const n = document.querySelector(sel);
+        if (n && n.getBoundingClientRect().width > 0) return n;
       }
+      // generic: the outermost full-width ancestor of the video, below the page root
+      const top = document.fullscreenElement || document.body;
+      const v = mainVideo();
+      let box = null;
+      for (let n = v?.parentElement; n && n !== top && n !== document.documentElement; n = n.parentElement) {
+        if (n === host) break;
+        const r = n.getBoundingClientRect();
+        const wide = n.hasAttribute("data-np-shrink") || (r.width >= innerWidth - 2 && r.left <= 1);
+        if (wide) box = n;
+      }
+      return box;
+    }
+    function markShrinkTargets() {
+      const box = playerBox();
+      if (!box || box.hasAttribute("data-np-shrink")) return;
+      for (const old of document.querySelectorAll("[data-np-shrink]")) old.removeAttribute("data-np-shrink");
+      box.setAttribute("data-np-shrink", "");
+      requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
     }
     function dockCheck(force) {
-      const docked = open && !!party.roomId;
+      const docked = open && !!party.roomId && !!videoIdFromUrl();
       const w = dockWidth();
       const sig = [docked, w, !!document.fullscreenElement].join();
       const html = document.documentElement;
@@ -856,7 +881,7 @@ html.np-docked [data-np-shrink] {
         ensurePageStyle();
         html.style.setProperty("--np-w", w + "px");
         host.style.setProperty("--np-w", w + "px");
-        markShrinkTargets(w);
+        markShrinkTargets();
       }
       if (sig === lastDockSig && !force) return;
       lastDockSig = sig;
@@ -873,7 +898,8 @@ html.np-docked [data-np-shrink] {
       // sites fullscreen a container element; the overlay must live inside it to stay visible
       const parent = document.fullscreenElement || document.body;
       if (parent && host.parentElement !== parent) parent.append(host);
-      host.style.display = party.roomId ? "" : "none";
+      // only on a watch page; on Netflix's browse pages the party waits in the background
+      host.style.display = party.roomId && videoIdFromUrl() ? "" : "none";
       if (!party.roomId && open) {
         open = false;
         root.classList.remove("np-open");
@@ -883,6 +909,7 @@ html.np-docked [data-np-shrink] {
 
     function show() {
       open = true;
+      sessionStorage.setItem("netpartyPanel", "open");
       unread = 0;
       mount();
       root.classList.add("np-open");
@@ -894,6 +921,7 @@ html.np-docked [data-np-shrink] {
     }
     function hide() {
       open = false;
+      if (party.roomId) sessionStorage.setItem("netpartyPanel", "closed");
       root?.classList.remove("np-open");
       render();
       if (host) dockCheck();
@@ -984,8 +1012,8 @@ html.np-docked [data-np-shrink] {
       if (nearBottom || !open) chatEl.scrollTop = chatEl.scrollHeight;
     }
 
-    function chat(d) {
-      const mine = d.id === party.me;
+    function chat(d, replay = false) {
+      const mine = d.id === party.me || (!!d.cid && d.cid === TAB_ID);
       const time = new Date(d.ts || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
       addLine(
         el(
@@ -995,7 +1023,7 @@ html.np-docked [data-np-shrink] {
           el("div", { class: "np-bubble" }, d.text, el("span", { class: "np-time" }, time)),
         ),
       );
-      if (!open && !mine) {
+      if (!open && !mine && !replay) {
         unread++;
         toast(d.name, d.text);
         render();
@@ -1003,6 +1031,13 @@ html.np-docked [data-np-shrink] {
     }
     function system(text) {
       addLine(el("div", { class: "np-sys" }, text));
+    }
+    // everything said in the party so far (the server keeps the last 150 lines)
+    function loadHistory(list) {
+      if (!host) build();
+      chatEl.replaceChildren();
+      for (const h of list) h.kind === "chat" ? chat(h, true) : system(h.text);
+      chatEl.scrollTop = chatEl.scrollHeight;
     }
 
     // the only thing that changes every second is the playback clock
@@ -1013,7 +1048,7 @@ html.np-docked [data-np-shrink] {
         ? `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`
         : "";
     }, 1000);
-    return { mount, show, hide, render, chat, system, dockCheck: () => host && dockCheck() };
+    return { mount, show, hide, render, chat, system, loadHistory, dockCheck: () => host && dockCheck() };
   })();
 
   // ------------------------------------------------ popup <-> content API

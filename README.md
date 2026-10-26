@@ -134,3 +134,8 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
 Teleparty's extension was studied for inspiration using
 [REA (rea-agents)](https://www.npmjs.com/package/rea-agents), a reverse-engineering CLI and MCP server.
 No Teleparty or REA code is included; NetParty is an original implementation.
+
+## v1.3.1
+- Split-screen no longer crops the video: only the site's player box is narrowed (Netflix `.sizing-wrapper` / `.watch-video--player-view`, JioHotstar the outermost full-width player container) and the player re-lays out the picture itself.
+- Reloading the page (or changing episode) keeps your seat: chat history is replayed (last 150 lines), the host stays host, voice reconnects, the chat panel stays open or closed as you left it, and friends don't see "left/joined" spam. A dropped connection keeps its seat for 15 seconds.
+- The chat panel only shows on watch pages, so Netflix's browse pages aren't covered.

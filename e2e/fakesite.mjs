@@ -3,10 +3,15 @@ import https from "node:https";
 import fs from "node:fs";
 const video = fs.readFileSync("test.webm");
 const page = (title) => `<!doctype html><html><head><title>${title}</title></head><body style="margin:0;background:#000">
-<div class="watch-video" style="position:fixed;inset:0;background:#000"><div class="player" style="position:relative;width:100%;height:100%">
-<video id="v" src="/test.webm" muted autoplay style="width:100%;height:100%"></video>
+<div class="watch-video" style="position:fixed;inset:0;background:#000"><div class="watch-video--player-view" style="position:absolute;top:0;left:0;width:100%;height:100%">
+<video id="v" src="/test.webm" muted autoplay style="position:absolute;top:0;left:0"></video>
 <div class="controls" style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;justify-content:space-between;align-items:center;padding:0 20px;background:linear-gradient(transparent,#000a)">
-<button id="playbtn" style="font-size:24px">▶</button><span style="color:#fff">Fake Title</span><button id="fsbtn" style="font-size:24px">⛶</button></div></div></div>
+<button id="playbtn" style="font-size:20px">play</button><span style="color:#fff">Fake Title</span><button id="fsbtn" style="font-size:20px">full</button></div></div></div>
+<script>
+// like Netflix: the player sizes the <video> in px from its container box
+const pv = document.querySelector(".watch-video--player-view"), vid = document.getElementById("v");
+new ResizeObserver(() => { const r = pv.getBoundingClientRect(); vid.style.width = r.width + "px"; vid.style.height = r.height + "px"; }).observe(pv);
+</script>
 <script>
 // like a streaming site: router strips unknown query params, hotkeys eat Space/Enter
 setTimeout(() => history.replaceState(null, "", location.pathname), 50);
@@ -28,5 +33,7 @@ https.createServer({ key: fs.readFileSync("key.pem"), cert: fs.readFileSync("cer
     return res.end(video);
   }
   res.writeHead(200, { "content-type": "text/html" });
-  res.end(page(req.headers.host + req.url));
+  const html = page(req.headers.host + req.url);
+  // JioHotstar's markup is different: exercise the generic player-box detection
+  res.end(/hotstar/.test(req.headers.host) ? html.replaceAll("watch-video--player-view", "hs-player-inner").replaceAll("watch-video", "hs-player-shell") : html);
 }).listen(8443, () => console.log("fake site on 8443"));

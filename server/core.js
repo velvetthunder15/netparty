@@ -3,6 +3,8 @@
 const ROOM_TTL_MS = 10 * 60 * 1000; // keep an empty room this long
 const MAX_CHAT = 500;
 const MAX_MEMBERS = 50;
+const HISTORY = 150; // chat + system lines replayed to anyone who (re)joins
+const GRACE_MS = 15_000; // a dropped connection keeps its seat (and host role) this long
 
 export function defaultIceServers(env = {}) {
   const ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
@@ -45,8 +47,26 @@ function memberList(room) {
 }
 
 function snapshot(room) {
-  return { roomId: room.id, hostId: room.hostId, hostOnly: room.hostOnly, state: room.state, members: memberList(room) };
+  return {
+    roomId: room.id,
+    hostId: room.hostId,
+    hostOnly: room.hostOnly,
+    state: room.state,
+    members: memberList(room),
+    history: room.history,
+  };
 }
+
+function remember(room, entry) {
+  room.history.push(entry);
+  if (room.history.length > HISTORY) room.history.splice(0, room.history.length - HISTORY);
+}
+function systemLine(room, text, exceptId = null) {
+  const data = { text, ts: Date.now() };
+  remember(room, { kind: "system", ...data });
+  broadcast(room, { type: "system", data }, exceptId);
+}
+const membersMsg = (room) => ({ type: "members", data: { members: memberList(room), hostId: room.hostId } });
 
 function cleanName(s) {
   return String(s || "Guest").replace(/\s+/g, " ").trim().slice(0, 24) || "Guest";
@@ -62,10 +82,11 @@ function validState(d) {
   );
 }
 
-function leaveRoom(client) {
+function leaveRoom(client, { silent = false } = {}) {
   const room = client.roomId && rooms.get(client.roomId);
   client.roomId = null;
-  if (!room) return;
+  clearTimeout(client.graceTimer);
+  if (!room || room.members.get(client.id) !== client) return;
   if (client.inVoice) broadcast(room, { type: "voice", data: { event: "leave", id: client.id } }, client.id);
   client.inVoice = false;
   room.members.delete(client.id);
@@ -73,19 +94,36 @@ function leaveRoom(client) {
     room.emptySince = Date.now();
     return;
   }
-  if (room.hostId === client.id) room.hostId = room.members.keys().next().value;
-  broadcast(room, { type: "members", data: { members: memberList(room), hostId: room.hostId } });
-  broadcast(room, { type: "system", data: { text: `${client.name} left` } });
+  if (room.hostId === client.id) room.hostId = [...room.members.values()].find((m) => !m.away)?.id || room.members.keys().next().value;
+  broadcast(room, membersMsg(room));
+  if (!silent) systemLine(room, `${client.name} left`);
 }
 
+// Same browser tab coming back (page reload, episode change, network blip): it
+// takes over its old seat silently and keeps the host role.
 function joinRoom(client, room) {
   if (client.roomId) leaveRoom(client);
+  const old = client.cid ? [...room.members.values()].find((m) => m.cid === client.cid && m !== client) : null;
+  let returning = false;
+  if (old) {
+    returning = true;
+    clearTimeout(old.graceTimer);
+    if (old.inVoice) broadcast(room, { type: "voice", data: { event: "leave", id: old.id } }, old.id);
+    room.members.delete(old.id);
+    old.roomId = null;
+    if (room.hostId === old.id) room.hostId = client.id;
+  }
   room.members.set(client.id, client);
   room.emptySince = null;
   client.roomId = room.id;
-  broadcast(room, { type: "members", data: { members: memberList(room), hostId: room.hostId } }, client.id);
-  broadcast(room, { type: "system", data: { text: `${client.name} joined` } }, client.id);
+  if (!room.members.has(room.hostId)) room.hostId = client.id;
+  if (room.hostCid && room.hostCid === client.cid) room.hostId = client.id; // host came back after a long drop
+  broadcast(room, membersMsg(room), client.id);
+  if (!returning) systemLine(room, `${client.name} joined`, client.id);
+  return returning;
 }
+
+const cleanCid = (s) => (typeof s === "string" && /^[a-z0-9]{8,32}$/i.test(s) ? s : null);
 
 const handlers = {
   time(client, _data, reply) {
@@ -97,6 +135,7 @@ const handlers = {
     do id = newId(8);
     while (rooms.has(id));
     client.name = cleanName(data?.name);
+    client.cid = cleanCid(data?.cid);
     const now = Date.now();
     /** @type {Room} */
     const room = {
@@ -104,6 +143,8 @@ const handlers = {
       members: new Map(),
       hostId: client.id,
       hostOnly: !!data?.hostOnly,
+      hostCid: client.cid,
+      history: [],
       emptySince: null,
       state: {
         playing: !!data?.playing,
@@ -123,8 +164,9 @@ const handlers = {
     if (!room) return reply(null, "Party not found. It may have ended.");
     if (room.members.size >= MAX_MEMBERS) return reply(null, "Party is full.");
     client.name = cleanName(data?.name);
-    joinRoom(client, room);
-    reply(snapshot(room));
+    client.cid = cleanCid(data?.cid);
+    const returning = joinRoom(client, room);
+    reply({ ...snapshot(room), returning });
   },
 
   leave(client, _data, reply) {
@@ -154,8 +196,9 @@ const handlers = {
     if (!room) return reply(null, "Not in a party.");
     const text = String(data?.text || "").trim().slice(0, MAX_CHAT);
     if (!text) return reply(null, "Empty message.");
-    const msg = { type: "chat", data: { id: client.id, name: client.name, text, ts: Date.now() } };
-    broadcast(room, msg);
+    const line = { id: client.id, cid: client.cid, name: client.name, text, ts: Date.now() };
+    remember(room, { kind: "chat", ...line });
+    broadcast(room, { type: "chat", data: line });
     reply({ ok: true });
   },
 
@@ -171,6 +214,7 @@ const handlers = {
     if (!room) return reply(null, "Not in a party.");
     if (client.id !== room.hostId) return reply(null, "Only the host can change settings.");
     room.hostOnly = !!data?.hostOnly;
+    room.hostCid = client.cid;
     broadcast(room, { type: "settings", data: { hostOnly: room.hostOnly } });
     reply({ ok: true });
   },
@@ -244,7 +288,20 @@ function connect(sendRaw) {
       }
     },
     close() {
-      leaveRoom(client);
+      // keep the seat briefly so a reload doesn't spam "left/joined" or drop the host
+      const room = client.roomId && rooms.get(client.roomId);
+      if (!room || !client.cid) return leaveRoom(client);
+      client.away = true;
+      client.send = () => {};
+      if (client.inVoice) {
+        client.inVoice = false;
+        broadcast(room, { type: "voice", data: { event: "leave", id: client.id } }, client.id);
+        broadcast(room, membersMsg(room));
+      }
+      client.graceTimer = setTimeout(() => {
+        if (client.roomId) leaveRoom(client);
+        if (room.members.size === 0) room.emptySince = Date.now();
+      }, GRACE_MS);
     },
   };
 }

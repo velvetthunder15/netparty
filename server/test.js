@@ -147,6 +147,36 @@ ok("voice leave");
   ok("invite page (live party, ended party, gated download)");
 }
 
+{
+  // page reload: same tab id rejoins silently, keeps host, gets chat history back
+  const c = client(), d = client();
+  await Promise.all([c.ready, d.ready]);
+  await c.next("welcome");
+  await d.next("welcome");
+  const cs = await c.req("create", { name: "Host", cid: "tabid12345", videoId: "81234567", playing: true, position: 1000, at: Date.now() });
+  await d.req("join", { roomId: cs.roomId, name: "Pal" });
+  await c.req("chat", { text: "before reload" });
+  await d.next("chat");
+  c.close();
+  await new Promise((r) => setTimeout(r, 300));
+  const c2 = client();
+  await c2.ready;
+  const c2Id = (await c2.next("welcome")).data.userId;
+  const back = await c2.req("join", { roomId: cs.roomId, name: "Host", cid: "tabid12345" });
+  assert.equal(back.returning, true);
+  assert.equal(back.hostId, c2Id);
+  assert.equal(back.members.length, 2);
+  const chat = back.history.find((h) => h.kind === "chat");
+  assert.equal(chat.text, "before reload");
+  assert.equal(chat.cid, "tabid12345");
+  await new Promise((r) => setTimeout(r, 400));
+  const spam = await d.next("system", (m) => /left|joined/.test(m.data.text)).catch(() => null);
+  assert.equal(spam, null, "unexpected: " + JSON.stringify(spam?.data));
+  ok("reload keeps seat, host role and chat history (no left/joined spam)");
+  c2.close();
+  d.close();
+}
+
 // host leaves -> host passes to B, and B's voice-state cleanup on disconnect
 a.close();
 const sysLeft = await b.next("system", (m) => /left/.test(m.data.text));

@@ -1,6 +1,6 @@
-import { chromium } from "playwright";
+import { chromium } from "/workspace/work/pw/node_modules/playwright/index.mjs";
 import fs from "node:fs";
-const EXT = new URL("../extension", import.meta.url).pathname;
+const EXT = "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/extension";
 const SERVER = process.env.SERVER || "ws://localhost:8787";
 const SITE = process.env.SITE || "https://www.netflix.com/watch/12345";
 const out = (...a) => console.log(...a);
@@ -59,7 +59,7 @@ out("guest sys:", JSON.stringify(await shadow(gp, (r) => { return [...r.querySel
 const layout = async (p) => p.evaluate(() => {
   const r = (q) => document.querySelector(q).getBoundingClientRect();
   const panel = document.getElementById("netparty-root").shadowRoot.querySelector(".np-panel").getBoundingClientRect();
-  return { vw: innerWidth, videoRight: Math.round(r("video").right), fsRight: Math.round(r("#fsbtn").right), panelLeft: Math.round(panel.left), panelW: Math.round(panel.width), docked: document.documentElement.classList.contains("np-docked") };
+  return { vw: innerWidth, videoW: Math.round(r("video").width), boxW: Math.round(r("[data-np-shrink]").width), videoRight: Math.round(r("video").right), fsRight: Math.round(r("#fsbtn").right), panelLeft: Math.round(panel.left), panelW: Math.round(panel.width), docked: document.documentElement.classList.contains("np-docked") };
 });
 out("guest layout (docked):", JSON.stringify(await layout(gp)));
 out("guest url after router strip:", gp.url());
@@ -94,6 +94,21 @@ const [ht, gt] = [await hp.evaluate(() => document.querySelector("video").curren
 out("after host seek to 60s and play: host", ht.toFixed(1), "guest", gt.toFixed(1), "playing:", !(await gp.evaluate(() => document.querySelector("video").paused)));
 
 await hp.screenshot({ path: "host-panel.png" });
+
+// reloads: guest reloads, then host reloads; chat history, seats and host role must survive
+const shot = (p) => shadow(p, (r) => { return { people: [...r.querySelectorAll(".np-pname")].map((n) => n.textContent), crown: r.querySelectorAll(".np-crown").length, msgs: [...r.querySelectorAll(".np-bubble")].map((n) => n.firstChild.textContent), sys: [...r.querySelectorAll(".np-sys")].map((n) => n.textContent) }; });
+await gp.reload();
+await gp.waitForTimeout(4500);
+out("guest after reload:", JSON.stringify(await shot(gp)));
+await hp.reload();
+await hp.waitForTimeout(4500);
+const hs = await shot(hp);
+out("host after reload:", JSON.stringify(hs));
+out("host still host:", await hp.evaluate(() => { const r = document.getElementById("netparty-root").shadowRoot; const c = r.querySelector(".np-crown"); return c && c.closest(".np-person")?.querySelector(".np-pname")?.textContent; }));
+out("guest saw left/joined spam:", JSON.stringify((await shot(gp)).sys.filter((t) => /left|joined/.test(t) && !/^You/.test(t))));
+await hp.evaluate(() => document.querySelector("video").pause());
+await gp.waitForTimeout(2000);
+out("sync after reloads (guest paused):", await gp.evaluate(() => document.querySelector("video").paused));
 await shadow(gp, (r) => { r.querySelector(".np-close").click(); });
 await gp.waitForTimeout(300);
 out("guest layout (chat hidden):", JSON.stringify(await gp.evaluate(() => ({ vw: innerWidth, videoRight: Math.round(document.querySelector("video").getBoundingClientRect().right), docked: document.documentElement.classList.contains("np-docked") }))));
