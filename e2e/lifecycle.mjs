@@ -62,10 +62,10 @@ check("start button shown on title page", !!btn);
 if (btn) {
   const geo = await hp.evaluate((hot) => {
     const b = document.querySelector("[data-netparty-start]").getBoundingClientRect();
-    const ref = document.querySelector(hot ? "#shimmerContainer a" : "#moreinfo").getBoundingClientRect();
+    const ref = document.querySelector(hot ? "#hswatch" : "#nfplay").getBoundingClientRect();
     return { b: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)], ref: [Math.round(ref.left), Math.round(ref.top), Math.round(ref.width), Math.round(ref.height)] };
   }, HOT);
-  check("button placed next to " + (HOT ? "Watch" : "More Info"), HOT ? geo.b[1] >= geo.ref[1] + geo.ref[3] : geo.b[0] >= geo.ref[0] + geo.ref[2] && Math.abs(geo.b[3] - geo.ref[3]) <= 2, JSON.stringify(geo));
+  check("button placed next to " + (HOT ? "Watch" : "Play"), HOT ? (geo.b[1] >= geo.ref[1] + geo.ref[3] || geo.b[0] >= geo.ref[0] + geo.ref[2]) : geo.b[0] >= geo.ref[0] + geo.ref[2] && Math.abs(geo.b[3] - geo.ref[3]) <= 2, JSON.stringify(geo));
   await hp.screenshot({ path: (HOT ? "hs" : "nf") + "-start-button.png" });
   await btn.click();
 }

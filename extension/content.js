@@ -646,55 +646,88 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
     const visible = (n) => {
       const r = n.getBoundingClientRect();
-      return r.width > 40 && r.height > 20;
+      if (r.width < 40 || r.height < 20 || r.bottom < 0 || r.top > innerHeight * 1.5) return false;
+      const cs = getComputedStyle(n);
+      return cs.visibility !== "hidden" && cs.display !== "none" && parseFloat(cs.opacity || "1") > 0.1;
+    };
+    // the clickable "face" of a candidate: the inner <button> when it's wrapped in a link
+    const face = (n) => (n.matches("a") && n.querySelector("button")) || n;
+    const label = (n) => ((n.getAttribute("aria-label") || "") + " " + (n.innerText || n.textContent || "")).trim().replace(/\s+/g, " ");
+    // the outermost element that is still "just the play button" (an <a> wrapping a <button>)
+    const outer = (n) => {
+      const a = n.closest("a");
+      return a && a.contains(n) && a.querySelectorAll("button").length <= 1 ? a : n;
+    };
+    const skip = (n) => n.closest(`[${MARK}], nav`) || /trailer|preview/i.test(label(n));
+    function place(play, btn) {
+      const host = outer(play);
+      const parent = host.parentElement;
+      const pcs = parent ? getComputedStyle(parent) : null;
+      const row = pcs && /flex/.test(pcs.display) && !pcs.flexDirection.startsWith("column");
+      const gap = pcs && pcs.columnGap;
+      if (!row || !gap || gap === "normal" || gap === "0px") btn.style.marginLeft = "0.75rem";
+      if (pcs && /flex/.test(pcs.display) && pcs.flexDirection.startsWith("column")) {
+        btn.style.marginLeft = "0";
+        btn.style.marginTop = "0.5rem";
+        btn.style.width = face(play).getBoundingClientRect().width + "px";
+      }
+      host.insertAdjacentElement("afterend", btn);
+      host.setAttribute(MARK + "-anchor", "1");
+    }
+    const already = (play) => {
+      const host = outer(play);
+      return host.nextElementSibling?.hasAttribute(MARK) || host.parentElement?.querySelector(`:scope > [${MARK}]`);
     };
     function netflix() {
-      // home-page billboard: after "More Info"
-      for (const box of document.querySelectorAll('[data-uia="billboard-actions"]')) {
-        if (box.querySelector(`[${MARK}]`)) continue;
-        const play = box.querySelector('[data-uia="play-video-button"], [data-uia="play-button"], a.playLink');
-        if (!play || !visible(play.querySelector("button") || play)) continue;
-        const btn = makeButton(play.matches("a") ? play.querySelector("button") || play : play, () => play.click());
-        const gap = getComputedStyle(box).columnGap;
-        if (!gap || gap === "normal" || gap === "0px") btn.style.marginLeft = "0.75rem";
-        box.append(btn);
-      }
-      // title details pop-up (More Info, /title/<id>): after Play
-      for (const modal of document.querySelectorAll('[data-uia^="modal-motion-container-DETAIL"]')) {
-        const controls = modal.querySelector('[data-uia="mini-modal-controls"]') || modal;
-        if (controls.querySelector(`[${MARK}]`)) continue;
-        const play = controls.querySelector('a.playLink[data-uia="play-button"], [data-uia="play-button"]');
-        if (!play || !visible(play.querySelector("button") || play)) continue;
-        const btn = makeButton(play.querySelector("button") || play, () => play.click());
-        btn.style.marginLeft = "0.5rem";
-        btn.style.marginRight = "0.5rem";
-        play.insertAdjacentElement("afterend", btn);
+      // Big Play / Resume buttons: home billboard, the More Info pop-up, /title/<id>.
+      // Netflix tags them data-uia="play-button" (or similar); fall back to links into
+      // /watch/<id> and to buttons labelled Play / Resume.
+      const cands = new Set([
+        ...document.querySelectorAll('[data-uia*="play-button"], [data-uia*="play-video"], [data-uia="billboard-play"]'),
+        ...document.querySelectorAll('a[href*="/watch/"]'),
+        ...[...document.querySelectorAll("button")].filter((b) => /^(play|resume|continue|watch)\b/i.test(label(b))),
+      ]);
+      for (const c of cands) {
+        if (skip(c)) continue;
+        const f = face(c);
+        if (!visible(f)) continue;
+        const r = f.getBoundingClientRect();
+        if (r.width < 80 || r.height < 28) continue; // round hover play icons, thumbnails
+        if (c.matches("a") && !c.querySelector("button") && !/play|resume|watch/i.test(label(c) + (c.getAttribute("data-uia") || ""))) continue; // poster links
+        if (already(c)) continue;
+        const btn = makeButton(f, () => f.click());
+        place(c, btn);
       }
     }
     function hotstar() {
-      // detail page: the big Watch button is <a href=".../watch"><button>
-      const links = [...document.querySelectorAll('a[href*="/watch"]')].filter(
-        (a) => a.querySelector("button") && /\/\d{5,}\/watch/.test(new URL(a.href, location.href).pathname) && visible(a.querySelector("button")) && !a.closest(`[${MARK}]`),
-      );
-      const seen = new Set();
-      for (const a of links) {
-        const parent = a.parentElement;
-        if (!parent || seen.has(parent) || parent.querySelector(`[${MARK}]`)) continue;
-        if (a.querySelector("button").getBoundingClientRect().width < 120) continue; // skip episode thumbnails, icons
-        seen.add(parent);
-        const btn = makeButton(a.querySelector("button"), () => {
+      // the big Watch / Watch Now / Watch First Episode / Resume / Subscribe to Watch button
+      const re = /^(watch|play|resume|continue|subscribe to watch|start watching)\b/i;
+      const cands = [...document.querySelectorAll('button, a[href*="/watch"], [role=button]')].filter((n) => {
+        if (skip(n)) return false;
+        const f = face(n);
+        if (!visible(f)) return false;
+        const r = f.getBoundingClientRect();
+        if (r.width < 110 || r.height < 32 || r.top > innerHeight) return false;
+        const href = n.closest("a")?.getAttribute("href") || "";
+        return re.test(label(f)) || /\/\d{5,}\/watch/.test(href) && f.matches("button");
+      });
+      // biggest one wins; one per page
+      cands.sort((x, y) => {
+        const a = face(x).getBoundingClientRect(), b = face(y).getBoundingClientRect();
+        return b.width * b.height - a.width * a.height;
+      });
+      const c = cands[0];
+      if (!c || document.querySelector(`[${MARK}]`)) return;
+      const f = face(c);
+      const btn = makeButton(f, () => {
+        const a = c.closest("a");
+        if (a && /\/watch/.test(a.getAttribute("href") || "")) {
           const u = new URL(a.href, location.href);
           u.searchParams.set("npStart", "1");
           location.href = u.toString();
-        });
-        const pcs = getComputedStyle(parent);
-        const inRow = /flex/.test(pcs.display) && pcs.flexDirection.startsWith("row");
-        btn.style.width = inRow ? "auto" : a.querySelector("button").getBoundingClientRect().width + "px";
-        if (inRow) (btn.style.marginTop = "0"), (btn.style.marginLeft = "0.75rem");
-        if (!inRow) btn.style.marginTop = "0.5rem";
-        a.insertAdjacentElement("afterend", btn);
-        break; // one per page is enough
-      }
+        } else f.click(); // site navigates itself; the sessionStorage flag rides along
+      });
+      place(c, btn);
     }
     return {
       inject() {

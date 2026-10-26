@@ -19,13 +19,13 @@ const player = () => {
 };
 const netflixBrowse = () =>
   '<div style="padding:40px"><h1>Home</h1><div class="billboard"><p>A family reunion turns into a bloodbath.</p>' +
-  '<div data-uia="billboard-actions" style="display:flex;align-items:center">' +
+  '<div class="billboard-links button-layer" style="display:flex;align-items:center">' +
   '<div><button data-uia="play-video-button" id="nfplay" style="height:56px;padding:0 28px;border-radius:6px;border:0;font-size:20px;font-weight:700">Play</button></div>' +
   '<div style="margin-left:12px"><button id="moreinfo" style="height:56px;padding:0 28px;border-radius:6px;border:0;font-size:20px;background:#6d6d6eb3;color:#fff">More Info</button></div>' +
   '</div></div></div>';
 const hotstarDetail = () =>
   '<div id="shimmerContainer" style="padding:40px"><h1>Fake Movie</h1><div class="w-full" style="width:320px">' +
-  '<a href="' + location.pathname.replace(/\\/$/, "") + '/watch"><button style="width:320px;height:48px;border-radius:8px;border:0;font-size:18px">Watch Now</button></a></div></div>';
+  '<button id="hswatch" style="width:320px;height:48px;border-radius:8px;border:0;font-size:18px"><span>Watch Now</span></button></div></div>';
 function render() {
   const app = document.getElementById("app");
   if (isWatch()) {
@@ -35,7 +35,11 @@ function render() {
     new ResizeObserver(() => { const r = pv.getBoundingClientRect(); vid.style.width = r.width + "px"; vid.style.height = r.height + "px"; }).observe(pv);
     // like a streaming site: router strips unknown query params
     setTimeout(() => history.replaceState(null, "", location.pathname), 50);
-  } else if (HOT && /\\/in\\/movies\\//.test(location.pathname)) app.innerHTML = hotstarDetail();
+  } else if (HOT && /\\/in\\/movies\\//.test(location.pathname)) {
+    app.innerHTML = hotstarDetail();
+    // like real JioHotstar: a plain <button>, the app navigates in JS
+    document.getElementById("hswatch").onclick = () => window.__go(location.pathname.replace(/\\/$/, "") + "/watch");
+  }
   else if (HOT) app.innerHTML = '<div style="padding:40px"><h1>JioHotstar home</h1></div>';
   else {
     app.innerHTML = netflixBrowse();
