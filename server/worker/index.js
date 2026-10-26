@@ -7,14 +7,24 @@ export class PartyHub {
   constructor(state, env) {
     this.state = state;
     this.env = env;
-    this.hub = createHub({ iceServers: defaultIceServers(env) });
+    // parties are mirrored to Durable Object storage so a restart (deploys, Cloudflare
+    // moving the object) doesn't lose them; clients reconnect and rejoin on their own
+    const kv = state.storage;
+    this.hub = createHub({
+      iceServers: defaultIceServers(env),
+      store: {
+        get: (id) => kv.get("room:" + id),
+        put: (id, obj) => kv.put("room:" + id, obj),
+        del: (id) => kv.delete("room:" + id),
+      },
+    });
   }
 
   async fetch(request) {
     const url = new URL(request.url);
     const j = url.pathname.match(/^\/j\/([a-z0-9]{4,16})\/?$/i);
     if (j) {
-      const room = this.hub.getRoom(j[1]);
+      const room = await this.hub.findRoom(j[1]);
       return new Response(joinPage(room, j[1], { hasDownload: true }), {
         status: room ? 200 : 404,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
@@ -22,8 +32,8 @@ export class PartyHub {
     }
     const live = url.pathname.match(/^\/live\/([a-z0-9]{4,16})$/i);
     if (live) {
-      const room = this.hub.getRoom(live[1]);
-      return new Response(null, { status: room && room.members.size ? 204 : 404 });
+      const room = await this.hub.findRoom(live[1]);
+      return new Response(null, { status: room ? 204 : 404 });
     }
     if (url.pathname === "/health")
       return Response.json({ ok: true, rooms: this.hub.rooms.size });

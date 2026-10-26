@@ -38,14 +38,14 @@ No server setup needed: the extension uses the hosted server by default.
 
 | Action | How |
 | --- | --- |
-| Start a party | NetParty icon → **Start a party** (link copied) |
+| Start a party | **Start a NetParty** button next to Play / More Info (Netflix) or under Watch (JioHotstar): opens the title and starts the party. Or, on a playing title, NetParty icon → **Start a party** |
 | Join a party | Open the invite link, or icon → paste the link or code → **Join** |
 | Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
 | Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
 | Lock controls | Host: icon → **Only I can play, pause and skip** |
 | Change your name | Icon → **Your name** (before starting or joining) |
-| Leave | Icon → **Leave party** |
+| Leave | Exit the title, or **Leave party**. If the host leaves, the party ends for everyone; a guest leaving just leaves. Next episode keeps the party going. |
 
 Tips
 - Everyone needs their own account on a plan that streams that title in their region.
@@ -139,3 +139,10 @@ No Teleparty or REA code is included; NetParty is an original implementation.
 - Split-screen no longer crops the video: only the site's player box is narrowed (Netflix `.sizing-wrapper` / `.watch-video--player-view`, JioHotstar the outermost full-width player container) and the player re-lays out the picture itself.
 - Reloading the page (or changing episode) keeps your seat: chat history is replayed (last 150 lines), the host stays host, voice reconnects, the chat panel stays open or closed as you left it, and friends don't see "left/joined" spam. A dropped connection keeps its seat for 15 seconds.
 - The chat panel only shows on watch pages, so Netflix's browse pages aren't covered.
+
+## v1.4.0
+
+- **Start a NetParty** button on Netflix (home billboard, next to More Info, and the title details pop-up) and JioHotstar (title page, under Watch). One click opens the title and creates the party with the chat open.
+- Leaving the title ends the party: the host exiting (back to browse, another page) closes it for everyone and friends see "<host> ended the party"; a guest exiting just leaves. Nobody gets pulled back into the movie anymore. Going to the next episode stays on a watch page, so the party continues and friends follow.
+- Joining from a browse page sends you to the party's title first.
+- Parties are saved on the server, so a server restart no longer causes "Party not found"; tabs reconnect and rejoin on their own and keep retrying (no more giving up after a few tries).

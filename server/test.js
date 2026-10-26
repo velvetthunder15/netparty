@@ -177,6 +177,72 @@ ok("voice leave");
   d.close();
 }
 
+{
+  // host ends the party: everyone is told, the code stops working
+  const e = client(), f = client();
+  await Promise.all([e.ready, f.ready]);
+  await e.next("welcome");
+  await f.next("welcome");
+  const es = await e.req("create", { name: "Host", cid: "endtest1234", videoId: "81234567", playing: false, position: 0, at: Date.now() });
+  await f.req("join", { roomId: es.roomId, name: "Pal" });
+  await assert.rejects(f.req("end", {}), /Only the host/);
+  await e.req("end", {});
+  const ended = await f.next("ended");
+  assert.equal(ended.data.byName, "Host");
+  await assert.rejects(f.req("join", { roomId: es.roomId, name: "Pal" }), /not found/);
+  await assert.rejects(f.req("chat", { text: "hi" }), /Not in a party/);
+  const http = TARGET.replace(/^ws/, "http");
+  assert.equal((await fetch(`${http}/j/${es.roomId}`)).status, 404);
+  ok("host ends party for everyone");
+  e.close();
+  f.close();
+}
+
+{
+  // server restart: a party saved to the store comes back with state, host and chat
+  const { createHub } = await import("./core.js");
+  const disk = new Map();
+  const store = { get: async (k) => structuredClone(disk.get(k) ?? null), put: async (k, v) => disk.set(k, structuredClone(v)), del: async (k) => disk.delete(k) };
+  const fake = (hub) => {
+    const inbox = [];
+    let seq = 0;
+    const waits = new Map();
+    const conn = hub.connect((raw) => {
+      const m = JSON.parse(raw);
+      if (m.type === "reply") waits.get(m.reqId)?.(m);
+      else inbox.push(m);
+    });
+    return {
+      inbox,
+      conn,
+      req: (type, data) =>
+        new Promise((res, rej) => {
+          const reqId = ++seq;
+          waits.set(reqId, (m) => (m.error ? rej(new Error(m.error)) : res(m.data)));
+          conn.message(JSON.stringify({ type, reqId, data }));
+        }),
+    };
+  };
+  const hub1 = createHub({ store });
+  const h = fake(hub1);
+  const s1 = await h.req("create", { name: "Host", cid: "persist12345", videoId: "81234567", playing: true, position: 42000, at: Date.now() });
+  await h.req("chat", { text: "survive this" });
+  await new Promise((r) => setTimeout(r, 450));
+  const hub2 = createHub({ store }); // "restart": nothing in memory
+  const g = fake(hub2);
+  const gs = await g.req("join", { roomId: s1.roomId, name: "Pal", cid: "guest1234567" });
+  assert.equal(gs.state.position, 42000);
+  assert.equal(gs.history.find((x) => x.kind === "chat").text, "survive this");
+  const h2 = fake(hub2);
+  const hs = await h2.req("join", { roomId: s1.roomId, name: "Host", cid: "persist12345" });
+  assert.equal(hs.hostId, h2.conn.id); // creator gets host back
+  assert.ok(await hub2.findRoom(s1.roomId));
+  await h2.req("end", {});
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(disk.size, 0);
+  ok("party survives a server restart (store) and is deleted when ended");
+}
+
 // host leaves -> host passes to B, and B's voice-state cleanup on disconnect
 a.close();
 const sysLeft = await b.next("system", (m) => /left/.test(m.data.text));

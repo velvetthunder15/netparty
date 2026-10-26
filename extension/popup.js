@@ -47,7 +47,7 @@ async function refresh() {
     $("create").disabled = !st.onWatchPage;
     $("startHint").textContent = st.onWatchPage
       ? `Starts a party for what's playing on ${st.site}.`
-      : `Open something on ${st.site} and press play first.`;
+      : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
   }
 }
 

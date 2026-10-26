@@ -4,7 +4,8 @@ const ROOM_TTL_MS = 10 * 60 * 1000; // keep an empty room this long
 const MAX_CHAT = 500;
 const MAX_MEMBERS = 50;
 const HISTORY = 150; // chat + system lines replayed to anyone who (re)joins
-const GRACE_MS = 15_000; // a dropped connection keeps its seat (and host role) this long
+const GRACE_MS = 15_000;
+const RESTORE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // a saved party older than this is not brought back // a dropped connection keeps its seat (and host role) this long
 
 export function defaultIceServers(env = {}) {
   const ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
@@ -12,7 +13,9 @@ export function defaultIceServers(env = {}) {
   return ice;
 }
 
-export function createHub({ iceServers = defaultIceServers() } = {}) {
+// store (optional): { get(id) -> Promise<obj|null>, put(id, obj), del(id) }. With one, a party
+// survives a server restart: its playback state, host and chat come back on the next join.
+export function createHub({ iceServers = defaultIceServers(), store = null } = {}) {
 const ICE_SERVERS = iceServers;
 const newId = (n = 8) => {
   const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -60,6 +63,56 @@ function snapshot(room) {
 function remember(room, entry) {
   room.history.push(entry);
   if (room.history.length > HISTORY) room.history.splice(0, room.history.length - HISTORY);
+  save(room);
+}
+
+// ---- persistence (debounced; failures only cost restart-survival, never the live party)
+function save(room) {
+  if (!store || room.ended || room.saveTimer) return;
+  room.saveTimer = setTimeout(() => {
+    room.saveTimer = null;
+    if (room.ended) return;
+    const { id, state, hostOnly, hostCid, history } = room;
+    Promise.resolve(store.put(id, { id, state, hostOnly, hostCid, history, savedAt: Date.now() })).catch(() => {});
+  }, 300);
+}
+function forget(id) {
+  if (store) Promise.resolve(store.del(id)).catch(() => {});
+}
+const restoring = new Map();
+async function findRoom(code) {
+  const id = String(code || "").toLowerCase();
+  if (!/^[a-z0-9]{4,16}$/.test(id)) return null;
+  if (rooms.has(id) || !store) return rooms.get(id) || null;
+  if (!restoring.has(id)) {
+    restoring.set(
+      id,
+      (async () => {
+        try {
+          const saved = await store.get(id);
+          if (rooms.has(id)) return rooms.get(id);
+          if (!saved || Date.now() - (saved.savedAt || 0) > RESTORE_MAX_AGE_MS) return null;
+          const room = {
+            id,
+            members: new Map(),
+            hostId: null,
+            hostOnly: !!saved.hostOnly,
+            hostCid: saved.hostCid || null,
+            history: Array.isArray(saved.history) ? saved.history.slice(-HISTORY) : [],
+            emptySince: Date.now(),
+            state: saved.state,
+          };
+          rooms.set(id, room);
+          return room;
+        } catch {
+          return null;
+        } finally {
+          restoring.delete(id);
+        }
+      })(),
+    );
+  }
+  return restoring.get(id);
 }
 function systemLine(room, text, exceptId = null) {
   const data = { text, ts: Date.now() };
@@ -156,11 +209,12 @@ const handlers = {
     };
     rooms.set(id, room);
     joinRoom(client, room);
+    save(room);
     reply(snapshot(room));
   },
 
-  join(client, data, reply) {
-    const room = rooms.get(String(data?.roomId || "").toLowerCase());
+  async join(client, data, reply) {
+    const room = await findRoom(data?.roomId);
     if (!room) return reply(null, "Party not found. It may have ended.");
     if (room.members.size >= MAX_MEMBERS) return reply(null, "Party is full.");
     client.name = cleanName(data?.name);
@@ -169,8 +223,34 @@ const handlers = {
     reply({ ...snapshot(room), returning });
   },
 
+  // which title a party is on, without joining it (so a guest can be sent there first)
+  async peek(_client, data, reply) {
+    const room = await findRoom(data?.roomId);
+    if (!room || room.ended) return reply(null, "Party not found. It may have ended.");
+    reply({ roomId: room.id, videoId: room.state.videoId, members: room.members.size });
+  },
+
   leave(client, _data, reply) {
     leaveRoom(client);
+    reply({ ok: true });
+  },
+
+  // host closes the party for everyone (e.g. they left the movie)
+  end(client, _data, reply) {
+    const room = client.roomId && rooms.get(client.roomId);
+    if (!room) return reply({ ok: true });
+    if (client.id !== room.hostId) return reply(null, "Only the host can end the party.");
+    room.ended = true;
+    clearTimeout(room.saveTimer);
+    broadcast(room, { type: "ended", data: { byName: client.name } }, client.id);
+    for (const m of room.members.values()) {
+      clearTimeout(m.graceTimer);
+      m.roomId = null;
+      m.inVoice = false;
+    }
+    room.members.clear();
+    rooms.delete(room.id);
+    forget(room.id);
     reply({ ok: true });
   },
 
@@ -187,6 +267,7 @@ const handlers = {
       videoId: data.videoId ? String(data.videoId) : room.state.videoId,
       by: client.id,
     };
+    save(room);
     broadcast(room, { type: "state", data: { ...room.state, byName: client.name, reason: data.reason || null } }, client.id);
     reply({ ok: true });
   },
@@ -214,7 +295,7 @@ const handlers = {
     if (!room) return reply(null, "Not in a party.");
     if (client.id !== room.hostId) return reply(null, "Only the host can change settings.");
     room.hostOnly = !!data?.hostOnly;
-    room.hostCid = client.cid;
+    save(room);
     broadcast(room, { type: "settings", data: { hostOnly: room.hostOnly } });
     reply({ ok: true });
   },
@@ -281,7 +362,12 @@ function connect(sendRaw) {
         msg.reqId !== undefined && send(client, { type: "reply", reqId: msg.reqId, data, error: error || null });
       if (!fn) return reply(null, "Unknown type.");
       try {
-        fn(client, msg.data, reply);
+        const r = fn(client, msg.data, reply);
+        if (r && typeof r.catch === "function")
+          r.catch((e) => {
+            console.error(e);
+            reply(null, "Server error.");
+          });
       } catch (e) {
         console.error(e);
         reply(null, "Server error.");
@@ -308,10 +394,14 @@ function connect(sendRaw) {
 
 function sweep() {
   const now = Date.now();
-  for (const [id, room] of rooms) if (room.emptySince && now - room.emptySince > ROOM_TTL_MS) rooms.delete(id);
+  for (const [id, room] of rooms)
+    if (room.emptySince && now - room.emptySince > ROOM_TTL_MS) {
+      rooms.delete(id);
+      forget(id);
+    }
 }
 
-return { connect, sweep, rooms, getRoom: (code) => rooms.get(String(code || "").toLowerCase()) };
+return { connect, sweep, rooms, getRoom: (code) => rooms.get(String(code || "").toLowerCase()), findRoom };
 }
 
 // ---------------------------------------------------------------- invite page
@@ -329,14 +419,14 @@ export function watchUrlFor(videoId, roomId) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 export function joinPage(room, code, { hasDownload = false } = {}) {
-  const live = !!room && room.members.size > 0;
-  const host = live ? [...room.members.values()].find((m) => m.id === room.hostId) : null;
+  const live = !!room && !room.ended;
+  const host = live ? [...room.members.values()].find((m) => m.id === room.hostId) || [...room.members.values()][0] : null;
   const site = room?.state.videoId?.startsWith("hs:") ? "JioHotstar" : "Netflix";
   const watch = live ? watchUrlFor(room.state.videoId, room.id) : null;
   const body = !live
     ? `<h1>This party has ended</h1><p>Ask your friend for a fresh invite link.</p>`
     : `<h1>${esc(host?.name || "A friend")} invited you to a watch party</h1>
-<p class="sub">${room.members.size} watching on ${site} · party <code>${esc(room.id)}</code></p>
+<p class="sub">${room.members.size ? room.members.size + " watching" : "Live"} on ${site} · party <code>${esc(room.id)}</code></p>
 <a class="btn" href="${esc(watch)}">Join on ${site}</a>
 <p class="note">You need your own ${site} account and the NetParty extension in Chrome (or Edge, Brave).</p>
 <details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>

@@ -11,12 +11,12 @@ const rooms = hub.rooms;
 // optional: serve the extension zip from invite pages (set EXTENSION_ZIP=/path/netparty.zip)
 const ZIP = process.env.EXTENSION_ZIP && fs.existsSync(process.env.EXTENSION_ZIP) ? process.env.EXTENSION_ZIP : null;
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const j = (req.url || "").match(/^\/j\/([a-z0-9]{4,16})(\/netparty\.zip)?\/?(?:\?.*)?$/i);
   if (j) {
-    const room = hub.getRoom(j[1]);
+    const room = await hub.findRoom(j[1]);
     if (j[2]) {
-      if (!ZIP || !room || !room.members.size) {
+      if (!ZIP || !room) {
         res.writeHead(404, { "content-type": "text/plain" });
         return res.end("Not available.\n");
       }

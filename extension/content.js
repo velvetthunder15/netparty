@@ -99,6 +99,30 @@
     let retries = 0;
     let url = null;
 
+    // port traffic keeps Chrome from idling out the background worker that holds the socket
+    setInterval(() => {
+      if (!port || !wantOpen) return;
+      try {
+        port.postMessage({ cmd: "ping" });
+      } catch {
+        port = null;
+        onLost();
+      }
+    }, 20000);
+    // come back straight away when the network or the tab returns
+    const kick = () => {
+      if (wantOpen && !open) {
+        retries = 0;
+        try {
+          port ? port.postMessage({ cmd: "open", url }) : connect();
+        } catch {
+          connect();
+        }
+      }
+    };
+    addEventListener("online", kick);
+    document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && kick());
+
     function connect() {
       port = chrome.runtime.connect({ name: "netparty-socket" });
       port.onMessage.addListener((m) => {
@@ -139,8 +163,9 @@
       if (was) emit({ type: "_closed" });
       if (!wantOpen) return;
       retries++;
-      if (retries > 8) return emit({ type: "_failed" });
-      const delay = Math.min(15000, 500 * 2 ** retries);
+      // keep trying for as long as we're in a party; just tell the user once if it drags on
+      if (retries === 6) emit({ type: "_failed" });
+      const delay = Math.min(10000, 500 * 2 ** Math.min(retries, 5));
       setTimeout(() => {
         if (!wantOpen) return;
         try {
@@ -251,6 +276,7 @@
     error: null,
   };
   let suppressUntil = 0;
+  let lastEpisodeChange = 0;
   let lastLocalAction = 0;
   let videoEl = null;
 
@@ -309,6 +335,15 @@
 
   async function joinParty(roomId) {
     await ensureConnected();
+    if (!videoIdFromUrl()) {
+      // not on a player yet (browse page): go to the party's title; the invite code
+      // rides along in the URL and the join happens there
+      const info = await net.request("peek", { roomId });
+      if (!info.videoId) throw new Error("The host hasn't opened a title yet.");
+      net.stop();
+      location.href = watchUrl(info.videoId, info.roomId);
+      return info;
+    }
     const snap = await net.request("join", { roomId, name: party.name, cid: TAB_ID });
     onJoined(snap);
     if (!snap.returning) ui.system("You joined the party.");
@@ -318,17 +353,49 @@
     return snap;
   }
 
-  async function leaveParty() {
-    await voice.leave();
+  // Leaving: a guest just leaves; the host (or anyone, with end=true, who is host)
+  // closes the party for everyone.
+  async function leaveParty({ end = false, reason = "" } = {}) {
+    const wasHost = !!party.me && party.me === party.hostId;
+    await voice.leave().catch(() => {});
     try {
-      await net.request("leave", {});
+      if (net.open) await net.request(end && wasHost ? "end" : "leave", {}, 3000);
     } catch {}
+    resetParty();
+    if (reason) notice(reason);
+  }
+
+  function resetParty() {
     party.roomId = null;
+    party.hostId = null;
     party.members = [];
     party.state = null;
     net.stop();
-    sessionStorage.removeItem("netpartyRoom");
+    for (const k of ["netpartyRoom", "netpartyVoice", "netpartyPanel"]) sessionStorage.removeItem(k);
+    ui.hide();
     ui.render();
+  }
+
+  // small banner for things that happen when the party panel isn't showing
+  let noticeHost = null;
+  function notice(text) {
+    if (!noticeHost) {
+      noticeHost = el("div", { id: "netparty-notice" });
+      const sh = noticeHost.attachShadow({ mode: "open" });
+      sh.append(
+        el("style", {}, `.n{position:fixed;top:18px;left:50%;transform:translate(-50%,-20px);opacity:0;z-index:2147483647;
+background:#1b1b22;color:#f3f3f6;border:1px solid #7c5cff;border-radius:12px;padding:10px 16px;
+font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 8px 30px #0008;transition:.25s;pointer-events:none}
+.n.s{opacity:1;transform:translate(-50%,0)} b{color:#a48bff}`),
+        el("div", { class: "n" }),
+      );
+    }
+    const box = noticeHost.shadowRoot.querySelector(".n");
+    box.replaceChildren(el("b", {}, "NetParty "), text);
+    (document.fullscreenElement || document.body).append(noticeHost);
+    requestAnimationFrame(() => box.classList.add("s"));
+    clearTimeout(notice.t);
+    notice.t = setTimeout(() => box.classList.remove("s"), 5000);
   }
 
   function onJoined(snap) {
@@ -359,7 +426,10 @@
   async function applyRemote(st, reason) {
     if (!st) return;
     const vid = videoIdFromUrl();
+    if (!vid) return; // not on a watch page (left the title): never pull them back in
     if (st.videoId && !sameVideo(vid, st.videoId)) {
+      // a late update from the old episode right after we switched: ours wins
+      if (Date.now() - lastEpisodeChange < 8000) return;
       // different title/episode: follow the party
       sessionStorage.setItem("netpartyRoom", party.roomId);
       location.href = watchUrl(st.videoId, party.roomId);
@@ -383,7 +453,7 @@
     clearTimeout(sendTimer);
     sendTimer = setTimeout(async () => {
       const st = await bridge.status();
-      if (!st || !party.roomId) return;
+      if (!st || !party.roomId || !Number.isFinite(st.position) || !videoIdFromUrl()) return;
       if (!canControl()) {
         ui.system("Only the host can control playback.");
         return applyRemote(party.state, "revert");
@@ -396,8 +466,9 @@
         videoId: videoIdFromUrl(),
         reason: kind,
       };
-      party.state = state;
-      net.request("state", state).catch((e) => ui.system(e.message));
+      // only count it once the server took it (a rejected update must not hide an
+      // episode change from the check in watchPlayer)
+      net.request("state", state).then(() => (party.state = state), (e) => ui.system(e.message));
     }, 250);
   }
 
@@ -417,27 +488,228 @@
   // attach to the <video> element and follow Netflix's SPA navigation
   let lastVideoId = videoIdFromUrl();
   function watchPlayer() {
-    const v = mainVideo();
-    if (v && v !== videoEl) {
-      videoEl = v;
-      for (const evt of ["play", "pause", "seeked"]) v.addEventListener(evt, () => onLocalPlayerEvent(evt));
-      v.addEventListener("loadeddata", () => party.roomId && party.state && applyRemote(party.state, "loaded"), { once: true });
-      if (party.roomId && party.state) setTimeout(() => applyRemote(party.state, "attach"), 800);
-    }
+    // episode change first, so a newly attached player syncs to the NEW episode
     const vid = videoIdFromUrl();
     if (vid !== lastVideoId) {
       lastVideoId = vid;
       // we moved to another episode ourselves: take the party with us
       if (vid && party.roomId && party.state && !sameVideo(party.state.videoId, vid) && canControl()) {
         const state = { playing: true, position: 0, at: clock.serverNow(), videoId: vid, reason: "episode" };
+        const prev = party.state;
         party.state = state;
-        net.request("state", state).catch(() => {});
+        lastEpisodeChange = Date.now();
+        net.request("state", state).catch(() => {
+          party.state = prev; // retry on the next check
+          lastVideoId = null;
+        });
         ui.system("Moved the party to a new episode.");
       }
     }
+    const v = mainVideo();
+    if (v && v !== videoEl) {
+      videoEl = v;
+      for (const evt of ["play", "pause", "seeked"]) v.addEventListener(evt, () => onLocalPlayerEvent(evt));
+      v.addEventListener("loadeddata", () => party.roomId && party.state && applyRemote(party.state, "loaded"), { once: true });
+      // read party.state when the timer fires, not now (it may change in between)
+      if (party.roomId && party.state) setTimeout(() => party.roomId && party.state && applyRemote(party.state, "attach"), 800);
+    }
+    partyLifecycle(vid);
+    if (!vid && !party.roomId) startButtons.inject();
     ui.mount();
     ui.dockCheck();
   }
+
+  // ---- party lifecycle tied to the watch page
+  // * leaving the title (any non-watch page) ends the party if you're the host, or
+  //   takes you out of it if you're a guest. Next episode stays on a watch page, so
+  //   the party carries on.
+  // * a pending invite or "Start a NetParty" request is acted on once a player opens.
+  const LEAVE_GRACE_MS = 2500; // ride out the site's own route changes
+  let offWatchSince = 0;
+  let busy = false;
+  let booted = false; // the boot sequence below decides first (reload / rejoin)
+  const takeFlag = (key, maxAgeMs) => {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    let v;
+    try {
+      v = JSON.parse(raw);
+    } catch {
+      v = raw;
+    }
+    const ts = typeof v === "object" && v ? v.ts : Number(v);
+    if (!ts || Date.now() - ts > maxAgeMs) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+    return v;
+  };
+  async function waitForPlayer(ms = 20000) {
+    for (let t = 0; t < ms; t += 500) {
+      if (!videoIdFromUrl()) return false;
+      if (await bridge.status()) return true;
+      await sleep(500);
+    }
+    return !!(await bridge.status());
+  }
+  function partyLifecycle(vid) {
+    if (busy || !booted) return;
+    if (party.roomId) {
+      if (vid) {
+        offWatchSince = 0;
+        // opened someone else's invite while already in a party: switch parties
+        const inv = takeFlag("netpartyInvite", 10 * 60 * 1000);
+        if (inv) {
+          sessionStorage.removeItem("netpartyInvite");
+          const code = String(inv.code || inv);
+          if (code !== party.roomId) {
+            busy = true;
+            (async () => {
+              try {
+                await leaveParty({ end: true });
+                await waitForPlayer();
+                await joinParty(code);
+              } catch (e) {
+                resetParty();
+                notice("Couldn't join: " + e.message);
+              } finally {
+                busy = false;
+              }
+            })();
+          }
+        }
+        return;
+      }
+      if (!offWatchSince) offWatchSince = Date.now();
+      if (Date.now() - offWatchSince < LEAVE_GRACE_MS) return;
+      offWatchSince = 0;
+      const host = party.me === party.hostId;
+      busy = true;
+      leaveParty({ end: true, reason: host ? "You left the title, so the party ended." : "You left the party." }).finally(() => (busy = false));
+      return;
+    }
+    if (!vid) return;
+    const invite = takeFlag("netpartyInvite", 10 * 60 * 1000);
+    const start = !invite && takeFlag("netpartyStart", 2 * 60 * 1000);
+    if (!invite && !start) return;
+    busy = true;
+    (async () => {
+      try {
+        await waitForPlayer();
+        if (invite) {
+          sessionStorage.removeItem("netpartyInvite");
+          await joinParty(String(invite.code || invite));
+        } else {
+          sessionStorage.removeItem("netpartyStart");
+          await createParty();
+          ui.show();
+        }
+      } catch (e) {
+        sessionStorage.removeItem("netpartyRoom");
+        notice((invite ? "Couldn't join: " : "Couldn't start the party: ") + e.message);
+      } finally {
+        busy = false;
+      }
+    })();
+  }
+
+  // ---- "Start a NetParty" buttons on title pages (next to Play / More Info)
+  const startButtons = (() => {
+    const MARK = "data-netparty-start";
+    function makeButton(likeEl, onclick) {
+      const cs = getComputedStyle(likeEl);
+      const b = el("button", { type: "button", [MARK]: "1", "aria-label": "Start a NetParty", title: "Start a watch party for this title" });
+      b.style.cssText = [
+        "display:inline-flex", "align-items:center", "justify-content:center", "gap:8px", "white-space:nowrap",
+        "border:none", "cursor:pointer", "color:#fff", "flex:0 0 auto",
+        "background:linear-gradient(135deg,#7c5cff,#b05cff)", "box-shadow:0 4px 18px #7c5cff55",
+        `height:${cs.height}`, `min-height:${cs.height}`, `padding:0 ${Math.max(18, parseFloat(cs.paddingLeft) || 0)}px`,
+        `border-radius:${cs.borderRadius}`, `font-family:${cs.fontFamily}`, `font-size:${cs.fontSize}`,
+        `font-weight:${Math.max(600, parseInt(cs.fontWeight) || 600)}`, `line-height:${cs.lineHeight}`,
+      ].join(";");
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("width", "1.2em");
+      icon.setAttribute("height", "1.2em");
+      icon.innerHTML = '<path fill="currentColor" d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1a4.2 4.2 0 0 1 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/>';
+      b.append(icon, el("span", {}, "Start a NetParty"));
+      const go = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        sessionStorage.setItem("netpartyStart", String(Date.now()));
+        onclick();
+      };
+      b.addEventListener("click", go, true);
+      for (const t of ["mousedown", "pointerdown", "mouseup", "pointerup"]) b.addEventListener(t, (e) => e.stopPropagation());
+      return b;
+    }
+    const visible = (n) => {
+      const r = n.getBoundingClientRect();
+      return r.width > 40 && r.height > 20;
+    };
+    function netflix() {
+      // home-page billboard: after "More Info"
+      for (const box of document.querySelectorAll('[data-uia="billboard-actions"]')) {
+        if (box.querySelector(`[${MARK}]`)) continue;
+        const play = box.querySelector('[data-uia="play-video-button"], [data-uia="play-button"], a.playLink');
+        if (!play || !visible(play.querySelector("button") || play)) continue;
+        const btn = makeButton(play.matches("a") ? play.querySelector("button") || play : play, () => play.click());
+        const gap = getComputedStyle(box).columnGap;
+        if (!gap || gap === "normal" || gap === "0px") btn.style.marginLeft = "0.75rem";
+        box.append(btn);
+      }
+      // title details pop-up (More Info, /title/<id>): after Play
+      for (const modal of document.querySelectorAll('[data-uia^="modal-motion-container-DETAIL"]')) {
+        const controls = modal.querySelector('[data-uia="mini-modal-controls"]') || modal;
+        if (controls.querySelector(`[${MARK}]`)) continue;
+        const play = controls.querySelector('a.playLink[data-uia="play-button"], [data-uia="play-button"]');
+        if (!play || !visible(play.querySelector("button") || play)) continue;
+        const btn = makeButton(play.querySelector("button") || play, () => play.click());
+        btn.style.marginLeft = "0.5rem";
+        btn.style.marginRight = "0.5rem";
+        play.insertAdjacentElement("afterend", btn);
+      }
+    }
+    function hotstar() {
+      // detail page: the big Watch button is <a href=".../watch"><button>
+      const links = [...document.querySelectorAll('a[href*="/watch"]')].filter(
+        (a) => a.querySelector("button") && /\/\d{5,}\/watch/.test(new URL(a.href, location.href).pathname) && visible(a.querySelector("button")) && !a.closest(`[${MARK}]`),
+      );
+      const seen = new Set();
+      for (const a of links) {
+        const parent = a.parentElement;
+        if (!parent || seen.has(parent) || parent.querySelector(`[${MARK}]`)) continue;
+        if (a.querySelector("button").getBoundingClientRect().width < 120) continue; // skip episode thumbnails, icons
+        seen.add(parent);
+        const btn = makeButton(a.querySelector("button"), () => {
+          const u = new URL(a.href, location.href);
+          u.searchParams.set("npStart", "1");
+          location.href = u.toString();
+        });
+        const pcs = getComputedStyle(parent);
+        const inRow = /flex/.test(pcs.display) && pcs.flexDirection.startsWith("row");
+        btn.style.width = inRow ? "auto" : a.querySelector("button").getBoundingClientRect().width + "px";
+        if (inRow) (btn.style.marginTop = "0"), (btn.style.marginLeft = "0.75rem");
+        if (!inRow) btn.style.marginTop = "0.5rem";
+        a.insertAdjacentElement("afterend", btn);
+        break; // one per page is enough
+      }
+    }
+    return {
+      inject() {
+        try {
+          IS_HOTSTAR ? hotstar() : netflix();
+        } catch (e) {
+          console.warn("[NetParty] start button", e);
+        }
+      },
+      clear() {
+        for (const n of document.querySelectorAll(`[${MARK}]`)) n.remove();
+      },
+    };
+  })();
+
   let watchQueued = false;
   new MutationObserver(() => {
     if (watchQueued) return;
@@ -475,6 +747,11 @@
       case "chat":
         ui.chat(msg.data);
         break;
+      case "ended":
+        await voice.leave().catch(() => {});
+        resetParty();
+        notice(`${msg.data.byName} ended the party.`);
+        break;
       case "system":
         ui.system(msg.data.text);
         break;
@@ -499,12 +776,15 @@
             applyRemote(snap.state, "rejoin");
             if (voice.active) voice.rejoin();
           } catch (e) {
-            ui.system("Couldn't rejoin: " + e.message);
+            if (/not found|ended/i.test(e.message)) {
+              resetParty();
+              notice("That party has ended.");
+            } else ui.system("Couldn't rejoin: " + e.message);
           }
         }
         break;
       case "_failed":
-        ui.system("Couldn't reconnect to the party server.");
+        ui.system("Still reconnecting… (check your internet)");
         break;
     }
   });
@@ -802,7 +1082,17 @@
       sendBtn.disabled = true;
       const composer = el("form", { class: "np-composer", onsubmit: (e) => (e.preventDefault(), sendChat()) }, input, sendBtn);
 
-      const leaveBtn = el("button", { class: "np-link-btn", onclick: () => confirm("Leave this party?") && leaveParty().then(hide) }, "Leave party");
+      const leaveBtn = el(
+        "button",
+        {
+          class: "np-link-btn",
+          onclick: () => {
+            const isHost = party.me === party.hostId;
+            if (confirm(isHost ? "End the party for everyone?" : "Leave this party?")) leaveParty({ end: true });
+          },
+        },
+        "Leave party",
+      );
 
       panel = el(
         "aside",
@@ -1075,7 +1365,7 @@ html.np-docked [data-np-shrink] {
             await joinParty(String(msg.roomId || "").trim().toLowerCase());
             return { ok: true };
           case "leave":
-            await leaveParty();
+            await leaveParty({ end: true });
             return { ok: true };
           case "hostOnly":
             await net.request("settings", { hostOnly: !!msg.value });
@@ -1095,25 +1385,35 @@ html.np-docked [data-np-shrink] {
   (async () => {
     await loadPrefs();
     const params = new URLSearchParams(location.search);
-    // early.js saved the code at page start, in case the site's router dropped it since
-    const fromLink = params.get("npParty") || sessionStorage.getItem("netpartyInvite");
-    sessionStorage.removeItem("netpartyInvite");
-    const fromSession = sessionStorage.getItem("netpartyRoom");
-    const room = fromLink || fromSession;
-    if (params.has("npParty")) {
+    if (params.has("npParty") || params.has("npStart")) {
       params.delete("npParty");
+      params.delete("npStart");
       const q = params.toString();
-      history.replaceState(history.state, "", location.pathname + (q ? "?" + q : ""));
+      history.replaceState(history.state, "", location.pathname + (q ? "?" + q : "") + location.hash);
     }
-    if (!room) return;
-    // wait for the player before joining so the first sync lands
-    for (let i = 0; i < 40 && !(await bridge.status()); i++) await sleep(500);
+    const room = sessionStorage.getItem("netpartyRoom");
+    if (!room) return void (booted = true); // invites and "Start a NetParty" are handled by partyLifecycle()
+    busy = true;
     try {
-      await joinParty(room);
+      if (videoIdFromUrl()) {
+        // reload or episode change: take our seat back
+        await waitForPlayer();
+        await joinParty(room);
+      } else {
+        // we left the title with a full page load: close out the party properly
+        await ensureConnected();
+        const snap = await net.request("join", { roomId: room, name: party.name, cid: TAB_ID });
+        party.roomId = snap.roomId;
+        party.hostId = snap.hostId;
+        const host = party.me === party.hostId;
+        await leaveParty({ end: true, reason: host ? "You left the title, so the party ended." : "You left the party." });
+      }
     } catch (e) {
-      sessionStorage.removeItem("netpartyRoom");
-      ui.mount();
-      alert("NetParty: " + e.message);
+      resetParty();
+      if (videoIdFromUrl()) notice(/not found/i.test(e.message) ? "That party has ended." : "Couldn't rejoin: " + e.message);
+    } finally {
+      busy = false;
+      booted = true;
     }
   })();
 })();
