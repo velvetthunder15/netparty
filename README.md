@@ -11,7 +11,9 @@ Features
   (server-clock sync, 1 s seek threshold, drift correction every 3 s)
 - Invite links: `https://netparty.chiragrasane15.workers.dev/j/<code>` opens an invite page that sends
   friends to the right title (auto-joins) and lets them download the extension while the party is live
-- Chat panel with message bubbles, Send button and Enter to send, unread badge and message previews
+- Split-screen chat: the player shrinks to make room for a docked chat column (nothing covers the
+  player controls); hide it to go back to full width
+- Chat with message bubbles, Send button and Enter to send, unread badge and message previews
   (works in fullscreen; keys typed in chat never reach the site's hotkeys)
 - Voice chat: peer-to-peer WebRTC audio, mute, volume, speaking indicator
 - Host-only control lock, host hand-off when the host leaves, auto-reconnect

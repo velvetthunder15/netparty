@@ -1,7 +1,7 @@
 /* NetParty overlay. Loaded inside a shadow root, so it can't leak into the site. */
 :host { all: initial; }
 .np-root {
-  --bg: rgba(18, 18, 22, 0.97);
+  --bg: #141418;
   --card: #24242b;
   --line: #34343d;
   --text: #f3f3f6;
@@ -48,14 +48,14 @@ svg { width: 18px; height: 18px; display: block; }
 .np-toast b { color: var(--accent2); }
 
 /* side panel */
+/* docked column: the page is narrowed by var(--np-w), this fills the gap */
 .np-panel {
-  position: fixed; top: 0; right: 0; width: 340px; height: 100vh;
+  position: fixed; top: 0; right: 0; width: var(--np-w, 340px); height: 100vh;
   display: none; flex-direction: column;
-  background: var(--bg); border-left: 1px solid var(--line);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.45);
+  background: #141418; border-left: 1px solid var(--line);
+  contain: layout paint;
 }
-.np-open .np-panel { display: flex; animation: np-in 0.18s ease-out; }
-@keyframes np-in { from { transform: translateX(30px); opacity: 0; } }
+.np-open .np-panel { display: flex; }
 
 .np-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 16px 6px; }
 .np-brand { font-size: 17px; font-weight: 700; }

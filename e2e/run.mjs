@@ -56,6 +56,12 @@ for (let i = 0; i < 30; i++) {
 }
 out("host members:", JSON.stringify(await shadow(hp, (r) => { return [...r.querySelectorAll(".np-pname")].map((n) => n.textContent); })));
 out("guest sys:", JSON.stringify(await shadow(gp, (r) => { return [...r.querySelectorAll(".np-sys")].map((n) => n.textContent); })));
+const layout = async (p) => p.evaluate(() => {
+  const r = (q) => document.querySelector(q).getBoundingClientRect();
+  const panel = document.getElementById("netparty-root").shadowRoot.querySelector(".np-panel").getBoundingClientRect();
+  return { vw: innerWidth, videoRight: Math.round(r("video").right), fsRight: Math.round(r("#fsbtn").right), panelLeft: Math.round(panel.left), panelW: Math.round(panel.width), docked: document.documentElement.classList.contains("np-docked") };
+});
+out("guest layout (docked):", JSON.stringify(await layout(gp)));
 out("guest url after router strip:", gp.url());
 const gMembers = await shadow(gp, (r) => { return [...r.querySelectorAll(".np-pname")].map((n) => n.textContent); });
 out("guest sees members:", JSON.stringify(gMembers));
@@ -89,6 +95,8 @@ out("after host seek to 60s and play: host", ht.toFixed(1), "guest", gt.toFixed(
 
 await hp.screenshot({ path: "host-panel.png" });
 await shadow(gp, (r) => { r.querySelector(".np-close").click(); });
+await gp.waitForTimeout(300);
+out("guest layout (chat hidden):", JSON.stringify(await gp.evaluate(() => ({ vw: innerWidth, videoRight: Math.round(document.querySelector("video").getBoundingClientRect().right), docked: document.documentElement.classList.contains("np-docked") }))));
 await hp.evaluate(() => document.getElementById("netparty-root").shadowRoot.querySelector(".np-input").focus());
 await hp.keyboard.type("toast test");
 await hp.keyboard.press("Enter");

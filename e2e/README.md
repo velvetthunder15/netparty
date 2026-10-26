@@ -2,7 +2,7 @@
 
 Two real Chromium profiles with the extension loaded, a fake Netflix/JioHotstar watch page
 (router strips query params, hotkeys swallow Space/Enter like the real sites), and the local server.
-Checks: start party → invite page → join → chat via Enter and the Send button → pause/seek sync.
+Checks: split-screen layout, start party → invite page → join → chat via Enter and the Send button → pause/seek sync.
 
 ```bash
 cd e2e && npm i playwright

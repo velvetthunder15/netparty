@@ -420,9 +420,18 @@
       }
     }
     ui.mount();
+    ui.dockCheck();
   }
-  new MutationObserver(() => watchPlayer()).observe(document.documentElement, { childList: true, subtree: true });
-  setInterval(watchPlayer, 1000);
+  let watchQueued = false;
+  new MutationObserver(() => {
+    if (watchQueued) return;
+    watchQueued = true;
+    setTimeout(() => {
+      watchQueued = false;
+      watchPlayer();
+    }, 300);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  setInterval(watchPlayer, 2000);
 
   // ---------------------------------------------------- server messages
   net.on(async (msg) => {
@@ -685,6 +694,7 @@
     let open = false;
     let unread = 0;
     let toastTimer = 0;
+    let peopleSig = "";
 
     const initials = (name) =>
       name
@@ -763,7 +773,7 @@
         "div",
         { class: "np-head" },
         el("div", { class: "np-title" }, el("div", { class: "np-brand" }, "NetParty ", codeEl), metaEl),
-        iconBtn(ICON.close, "Close (Esc)", hide, "np-close"),
+        iconBtn(ICON.close, "Hide chat (Esc)", hide, "np-close"),
       );
 
       peopleEl = el("div", { class: "np-people" });
@@ -794,8 +804,69 @@
         panel.addEventListener(evt, (e) => e.stopPropagation());
       root = el("div", { class: "np-root" }, toggleBtn, toastEl, panel);
       shadow.append(root);
-      document.addEventListener("fullscreenchange", mount);
+      document.addEventListener("fullscreenchange", () => {
+        mount();
+        dockCheck(true);
+      });
     }
+
+    // ---- split-screen dock: the site's player shrinks to make room for the chat column
+    let pageStyle = null;
+    let lastDockSig = "";
+    const dockWidth = () => Math.round(Math.min(380, Math.max(300, innerWidth * 0.22)));
+    function ensurePageStyle() {
+      if (pageStyle?.isConnected) return;
+      pageStyle = el("style", { id: "netparty-dock-style" });
+      pageStyle.textContent = `
+html.np-docked, html.np-docked body { overflow-x: hidden !important; }
+html.np-docked body { width: calc(100vw - var(--np-w)) !important; min-width: 0 !important; }
+html.np-docked [data-np-shrink] {
+  width: calc(100vw - var(--np-w)) !important; max-width: calc(100vw - var(--np-w)) !important;
+  min-width: 0 !important; right: auto !important; left: 0 !important;
+}`;
+      (document.head || document.documentElement).append(pageStyle);
+    }
+    // mark the player's full-width containers (the <video> and its ancestors, plus
+    // full-screen-wide fixed layers near the top) so the stylesheet can narrow them
+    function markShrinkTargets(w) {
+      const top = document.fullscreenElement || document.body;
+      if (!top) return;
+      const full = (n) => {
+        if (n.hasAttribute("data-np-shrink")) return true;
+        const r = n.getBoundingClientRect();
+        return r.width >= innerWidth - 2 && r.left <= 1;
+      };
+      const v = mainVideo();
+      for (let n = v; n && n !== top && n !== document.documentElement; n = n.parentElement)
+        if (n !== host && full(n)) n.setAttribute("data-np-shrink", "");
+      for (const a of top.children) {
+        if (a === host) continue;
+        for (const n of [a, ...a.children]) {
+          const pos = getComputedStyle(n).position;
+          if ((pos === "fixed" || pos === "absolute") && full(n)) n.setAttribute("data-np-shrink", "");
+        }
+      }
+    }
+    function dockCheck(force) {
+      const docked = open && !!party.roomId;
+      const w = dockWidth();
+      const sig = [docked, w, !!document.fullscreenElement].join();
+      const html = document.documentElement;
+      if (docked) {
+        ensurePageStyle();
+        html.style.setProperty("--np-w", w + "px");
+        host.style.setProperty("--np-w", w + "px");
+        markShrinkTargets(w);
+      }
+      if (sig === lastDockSig && !force) return;
+      lastDockSig = sig;
+      html.classList.toggle("np-docked", docked);
+      // let the player recompute its layout for the new size
+      requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    }
+    addEventListener("resize", (e) => {
+      if (e.isTrusted) dockCheck();
+    });
 
     function mount() {
       if (!host) build();
@@ -803,6 +874,11 @@
       const parent = document.fullscreenElement || document.body;
       if (parent && host.parentElement !== parent) parent.append(host);
       host.style.display = party.roomId ? "" : "none";
+      if (!party.roomId && open) {
+        open = false;
+        root.classList.remove("np-open");
+        dockCheck();
+      }
     }
 
     function show() {
@@ -811,13 +887,16 @@
       mount();
       root.classList.add("np-open");
       toastEl.classList.remove("np-show");
+      peopleSig = voiceBox.dataset.sig = "";
       render();
+      dockCheck();
       setTimeout(() => input.focus(), 50);
     }
     function hide() {
       open = false;
       root?.classList.remove("np-open");
       render();
+      if (host) dockCheck();
     }
 
     function toast(name, text) {
@@ -839,6 +918,15 @@
         ? `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`
         : "";
 
+      const pSig = party.members
+        .map((m) => {
+          const isMe = m.id === party.me;
+          const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
+          return [m.id, m.name, m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking].join(":");
+        })
+        .join("|");
+      if (pSig !== peopleSig) {
+      peopleSig = pSig;
       peopleEl.replaceChildren(
         ...party.members.map((m) => {
           const isMe = m.id === party.me;
@@ -855,6 +943,7 @@
           );
         }),
       );
+      }
 
       const inVoiceCount = party.members.filter((m) => (m.id === party.me ? voice.active : m.inVoice)).length;
       // only rebuild the voice bar when it changes (so the volume slider isn't replaced mid-drag)
@@ -891,7 +980,7 @@
       if (!host) build();
       const nearBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
       chatEl.append(node);
-      while (chatEl.childElementCount > 300) chatEl.firstElementChild.remove();
+      while (chatEl.childElementCount > 200) chatEl.firstElementChild.remove();
       if (nearBottom || !open) chatEl.scrollTop = chatEl.scrollHeight;
     }
 
@@ -916,8 +1005,15 @@
       addLine(el("div", { class: "np-sys" }, text));
     }
 
-    setInterval(() => party.roomId && open && render(), 1000);
-    return { mount, show, hide, render, chat, system };
+    // the only thing that changes every second is the playback clock
+    setInterval(() => {
+      if (!party.roomId || !open || !metaEl) return;
+      const st = party.state;
+      metaEl.textContent = st
+        ? `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`
+        : "";
+    }, 1000);
+    return { mount, show, hide, render, chat, system, dockCheck: () => host && dockCheck() };
   })();
 
   // ------------------------------------------------ popup <-> content API

@@ -3,7 +3,10 @@ import https from "node:https";
 import fs from "node:fs";
 const video = fs.readFileSync("test.webm");
 const page = (title) => `<!doctype html><html><head><title>${title}</title></head><body style="margin:0;background:#000">
-<div id="player" style="width:100vw;height:100vh"><video id="v" src="/test.webm" muted autoplay style="width:100%;height:100%"></video></div>
+<div class="watch-video" style="position:fixed;inset:0;background:#000"><div class="player" style="position:relative;width:100%;height:100%">
+<video id="v" src="/test.webm" muted autoplay style="width:100%;height:100%"></video>
+<div class="controls" style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;justify-content:space-between;align-items:center;padding:0 20px;background:linear-gradient(transparent,#000a)">
+<button id="playbtn" style="font-size:24px">▶</button><span style="color:#fff">Fake Title</span><button id="fsbtn" style="font-size:24px">⛶</button></div></div></div>
 <script>
 // like a streaming site: router strips unknown query params, hotkeys eat Space/Enter
 setTimeout(() => history.replaceState(null, "", location.pathname), 50);
