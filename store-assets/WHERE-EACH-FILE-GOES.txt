@@ -1,0 +1,20 @@
+NetParty store assets (v1.7.1)
+
+ICONS (SVG masters in icons/, PNG exports alongside)
+- netparty-icon.svg            master mark, no padding (use for anything, any size)
+- netparty-store-icon-128.svg  128 canvas, 96px art + 16px transparent padding (Chrome guideline)
+- netparty-store-logo-300.svg  300 canvas with padding (Edge logo)
+Stores do not accept SVG uploads, so upload these PNGs:
+- Chrome Web Store  store icon      -> icons/store-icon-128.png
+- Edge Add-ons      extension logo  -> icons/store-logo-300.png
+- Firefox AMO       add-on icon     -> icons/icon-128.png (or icon-64.png)
+- Opera add-ons     icon            -> icons/icon-128.png (64x64 also included)
+Firefox manifest can use netparty-icon.svg directly as its icon.
+
+SCREENSHOTS
+- Chrome, Edge, Firefox: screenshots-1280x800/01..05 (upload in order)
+- Opera: screenshots-opera-612x408/01..05 (Opera's preferred size)
+
+PROMO TILES
+- promo/small-promo-440x280.png  Chrome small promo tile, Edge small promotional tile
+- promo/marquee-1400x560.png     Chrome marquee tile, Edge large promotional tile
