@@ -306,7 +306,7 @@
       .x-feat h3, .x-feat p { margin-inline: 8px; }
       .x-feat--wide { grid-column: span 2; }
       .x-feat--wide .x-vig { height: 210px; }
-      @media (max-width: 900px) { .x-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .x-bento { grid-auto-flow: row dense; } .x-feat--wide:last-child { grid-column: auto; } }
+      @media (max-width: 900px) { .x-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .x-bento { grid-auto-flow: row dense; } }
       @media (max-width: 600px) { .x-bento { grid-template-columns: 1fr; } .x-feat--wide { grid-column: auto; } .x-feat--wide .x-vig { height: 180px; } }
 
       /* feature vignettes */
@@ -346,11 +346,18 @@
       .x-ep { color: #c3a6ff; }
       .x-binge__line { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--x-mute); animation: x-fadeup 4s ease-in-out infinite; }
       @keyframes x-fadeup { 0%,20% { opacity: 0; transform: translateY(5px); } 32%,85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-      .x-plats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 12px; }
-      .x-plat { padding: 5px 12px 5px 5px; }
-      .x-plat__ic { width: 30px; height: 30px; flex: none; border-radius: 50%; background: #0d0c12; border: 1px solid #353147; display: grid; place-items: center; }
-      .x-plat__ic img { width: 20px; height: 20px; object-fit: contain; display: block; }
-      .x-plats .x-chip--dash { padding-block: 10px; }
+      .x-works { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin: 26px auto 0; padding: 0; list-style: none; }
+      .x-works__lab { font: 500 12px var(--x-mono); color: var(--x-mute); letter-spacing: .08em; text-transform: uppercase; margin-right: 4px; }
+      .x-plat { height: 44px; padding: 0 16px 0 6px; font-size: 14px; font-weight: 600; gap: 9px; }
+      .x-plat__ic { width: 32px; height: 32px; flex: none; border-radius: 50%; background: #0d0c12; border: 1px solid #353147; display: grid; place-items: center; }
+      .x-plat__ic img { width: 22px; height: 22px; object-fit: contain; display: block; }
+      @media (max-width: 600px) { .x-works__lab { flex-basis: 100%; text-align: center; margin: 0 0 2px; } }
+      @media (max-width: 420px) {
+        .x-works { gap: 6px; }
+        .x-plat { height: 40px; padding: 0 10px 0 5px; font-size: 13px; gap: 6px; }
+        .x-plat__ic { width: 28px; height: 28px; }
+        .x-plat__ic img { width: 20px; height: 20px; }
+      }
       .x-fifty { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; justify-content: center; }
       .x-fifty__num { font: 800 84px/1 var(--x-inter); letter-spacing: -0.05em; background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #b05cff; -webkit-text-fill-color: transparent; }
       .x-stack { display: flex; }
@@ -371,9 +378,13 @@
       .x-flyup { position: relative; width: 100%; height: 100%; }
       .x-flyup .x-chip { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); font-size: 16px; padding: 7px 14px; }
       .x-fly { position: absolute; bottom: 30px; font-size: 22px; line-height: 1; opacity: 0; will-change: transform, opacity; animation: x-fly 3.5s ease-out infinite; }
-      .x-fly:nth-of-type(1) { left: 22%; } .x-fly:nth-of-type(2) { left: 36%; animation-delay: .7s; } .x-fly:nth-of-type(3) { left: 50%; animation-delay: 1.4s; }
-      .x-fly:nth-of-type(4) { left: 64%; animation-delay: 2.1s; } .x-fly:nth-of-type(5) { left: 76%; animation-delay: 2.8s; }
+      .x-fly { font-size: 26px; bottom: 34px; margin-left: -13px; }
+      .x-fly:nth-of-type(1) { left: 46%; } .x-fly:nth-of-type(2) { left: 54%; animation-delay: .45s; } .x-fly:nth-of-type(3) { left: 49%; animation-delay: .9s; }
       @keyframes x-fly { 0% { opacity: 0; transform: translateY(0) scale(.6); } 15% { opacity: 1; transform: translateY(-16px) scale(1); } 75% { opacity: .85; } 100% { opacity: 0; transform: translateY(-96px) scale(1.05); } }
+      @media (prefers-reduced-motion: reduce) {
+        .x-fly { opacity: 1; }
+        .x-fly:nth-of-type(1) { transform: translateY(-22px); } .x-fly:nth-of-type(2) { transform: translateY(-58px) scale(.9); opacity: .8; } .x-fly:nth-of-type(3) { transform: translateY(-90px) scale(.8); opacity: .6; }
+      }
       .x-gif { width: 82%; display: grid; gap: 10px; }
       .x-gif .x-chip { justify-self: start; font-size: 12px; padding: 6px 12px; color: var(--x-mute); }
       .x-gif__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -381,27 +392,7 @@
       .x-gif__row i:nth-child(2) { animation-delay: .3s; } .x-gif__row i:nth-child(3) { animation-delay: .6s; }
       @keyframes x-shim { from { background-position: 120% 0; } to { background-position: -100% 0; } }
       .x-gif__by { font: 12px var(--x-mono); color: var(--x-mute); justify-self: end; }
-      .x-pfp { display: grid; gap: 12px; justify-items: center; }
-      .x-pfp__msg { display: flex; align-items: flex-end; gap: 8px; }
-      .x-pfp__msg .x-av { width: 32px; height: 32px; font-size: 17px; box-shadow: none; }
-      .x-pfp__picker { display: flex; gap: 4px; padding: 5px 8px; border-radius: 999px; background: #100f16; border: 1px solid var(--x-line); font-size: 18px; line-height: 1; }
-      .x-pfp__picker span { padding: 4px; border-radius: 8px; }
-      .x-pfp__picker span:nth-child(3) { background: #352c52; }
-      .x-size { display: grid; gap: 12px; justify-items: center; }
-      .x-seg { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: #100f16; border: 1px solid var(--x-line); }
-      .x-seg span { min-width: 44px; padding: 6px 10px; border-radius: 999px; text-align: center; font-weight: 600; color: var(--x-mute); line-height: 1.2; }
-      .x-seg span:nth-child(1) { font-size: 12px; } .x-seg span:nth-child(2) { font-size: 15px; } .x-seg span:nth-child(3) { font-size: 18px; }
-      .x-seg span:nth-child(2) { background: var(--x-btn); color: #fff; }
-      .x-size__link { font-size: 13px; color: #c3a6ff; text-decoration: underline; text-underline-offset: 3px; }
       @media (max-width: 420px) { .x-stack .x-av:nth-child(n+5):not(.x-av--more) { display: none; } .x-fifty__num { font-size: 64px; } }
-
-      /* image card */
-      .x-night { position: relative; border-radius: 24px; overflow: hidden; border: 1px solid var(--x-line); min-height: clamp(380px, 52vw, 560px); display: flex; align-items: flex-end; }
-      .x-night img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-      .x-night::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,10,16,0) 30%, rgba(11,10,16,.88)), linear-gradient(90deg, rgba(11,10,16,.4), transparent 60%); }
-      .x-night__copy { position: relative; z-index: 1; padding: clamp(24px, 5vw, 56px); }
-      .x-night__quote { font: 700 clamp(36px, 6vw, 72px)/1.02 var(--x-inter); letter-spacing: -0.03em; max-width: 12ch; }
-      .x-night__small { color: #dcd9e6; margin-top: 14px; font-size: 16px; max-width: 46ch; }
 
       /* faq */
       .x-faq { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
@@ -525,6 +516,12 @@
           </div>
           <p class="x-h1 x-rv">Watch together, perfectly <span class="x-grad-text">in sync.</span></p>
           <p class="x-lead x-rv">Start a party from any title, send one link, and everyone's play, pause and seek stay locked together, with chat and voice right beside the video.</p>
+          <ul class="x-works x-rv" aria-label="Works on">
+            <li class="x-works__lab" aria-hidden="true">Works on</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" alt="" /></span>Netflix</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.png" alt="" /></span>JioHotstar</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" alt="" /></span>YouTube</li>
+          </ul>
           <div class="x-cta x-rv">
             <a class="x-btn x-btn--primary" href="#install">Add to Chrome — it's free</a>
             <a class="x-btn x-btn--ghost" href="#how">See how it works</a>
@@ -669,7 +666,7 @@
                 </div>
               </div>
               <h3>End-to-end encrypted chat</h3>
-              <p>Messages, GIFs, reactions, names and profile pictures are encrypted in your browser. The key lives only in your invite link, so even our server can't read your chat.</p>
+              <p>Only your party can read your chat. Not even our server.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -684,12 +681,12 @@
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
                 <div class="x-flyup">
-                  <i class="x-fly">😂</i><i class="x-fly">😭</i><i class="x-fly">💀</i><i class="x-fly">🥰</i><i class="x-fly">😱</i>
-                  <span class="x-chip">🎉</span>
+                  <i class="x-fly">😂</i><i class="x-fly">😂</i><i class="x-fly">😂</i>
+                  <span class="x-chip">😂</span>
                 </div>
               </div>
-              <h3>Reactions that fly</h3>
-              <p>Tap 🎉 and send 😂 😭 💀 🥰 😱 floating up everyone's screen. Swap in your own five favourites.</p>
+              <h3>Reactions</h3>
+              <p>Send emoji reactions that float up everyone's screen.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -699,28 +696,8 @@
                   <span class="x-gif__by">Powered by KLIPY</span>
                 </div>
               </div>
-              <h3>GIFs for every scene</h3>
-              <p>Search GIFs right from the chat, with suggestions based on what you're watching. Powered by KLIPY.</p>
-            </article>
-            <article class="x-card x-feat x-rv">
-              <div class="x-vig" aria-hidden="true">
-                <div class="x-pfp">
-                  <div class="x-pfp__msg"><span class="x-av x-av--o">🐰</span><span class="x-e2e__bubble">same 🥰</span></div>
-                  <div class="x-pfp__picker"><span>😀</span><span>😂</span><span>🥰</span><span>😭</span><span>💀</span></div>
-                </div>
-              </div>
-              <h3>Emoji and profile pictures</h3>
-              <p>An emoji picker in the chat bar, and a cute animal or food avatar beside every message.</p>
-            </article>
-            <article class="x-card x-feat x-rv">
-              <div class="x-vig" aria-hidden="true">
-                <div class="x-size">
-                  <div class="x-seg"><span>Aa</span><span>Aa</span><span>Aa</span></div>
-                  <span class="x-size__link">netflix.com/title/80057281</span>
-                </div>
-              </div>
-              <h3>Your chat, your way</h3>
-              <p>Small, medium or large chat text, and links in chat are clickable.</p>
+              <h3>GIFs</h3>
+              <p>Search and send GIFs right from the chat.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -739,18 +716,6 @@
               <h3>Binge-proof</h3>
               <p>Next episode? The whole party moves with you. Reload the page and you keep your seat and the chat.</p>
             </article>
-            <article class="x-card x-feat x-rv">
-              <div class="x-vig" aria-hidden="true">
-                <div class="x-plats">
-                  <span class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" alt="" /></span>Netflix</span>
-                  <span class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.png" alt="" /></span>JioHotstar</span>
-                  <span class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" alt="" /></span>YouTube</span>
-                  <span class="x-chip x-chip--dash">+ more soon</span>
-                </div>
-              </div>
-              <h3>Netflix, JioHotstar and YouTube</h3>
-              <p>Works on all three today. More platforms are on the way.</p>
-            </article>
             <article class="x-card x-feat x-feat--wide x-rv">
               <div class="x-vig" aria-hidden="true">
                 <div class="x-fifty">
@@ -762,16 +727,6 @@
               <p>Room for the whole group chat.</p>
             </article>
           </div>
-        </section>
-
-        <section class="x-sec" aria-label="Made for nights like this">
-          <figure class="x-night x-rv" style="margin:0">
-            <img src="friends.jpg" alt="Three friends in separate rooms laughing at their laptops" />
-            <figcaption class="x-night__copy">
-              <p class="x-night__quote">Different rooms. <span class="x-grad-text">Same couch.</span></p>
-              <p class="x-night__small">No screen-sharing lag, no counting down '3, 2, 1, play'.</p>
-            </figcaption>
-          </figure>
         </section>
 
         <section class="x-sec" id="faq" aria-labelledby="faq-title">
@@ -798,7 +753,7 @@
               <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download>Add to Chrome — it's free</a>
               <button class="x-btn x-btn--ghost" type="button" id="x-join-toggle" aria-expanded="false" aria-controls="x-join">Join a party</button>
             </div>
-            <p><span class="x-ver">Version 1.7.0</span></p>
+            <p><span class="x-ver">Version 1.7.1</span></p>
             <form class="x-join" id="x-join" hidden novalidate>
               <input id="x-join-input" aria-label="Full invite link" type="url" inputmode="url" placeholder="Paste the full invite link" autocomplete="off" spellcheck="false" />
               <button class="x-btn x-btn--primary" type="submit">Join</button>

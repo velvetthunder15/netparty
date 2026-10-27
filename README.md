@@ -249,7 +249,7 @@ No Teleparty or REA code is included; NetParty is an original implementation.
 - **Profile pictures**: emoji avatars on a soft circle (random one to start), in the popup and the panel,
   shown in the people list and next to chat messages, updated live.
 - **Emoji picker** in the chat bar (inserts at the cursor, recently used row, Esc closes).
-- **🎉 Reactions** float over everyone's video (rate limited to 6 per 3 s), customisable.
+- **🎉 Reactions** float over everyone's video (hover 🎉 for the tray; each click sends one, rate limited to 12 per 3 s), customisable.
 - **GIFs** via KLIPY (server-side key; add `KLIPY_KEY`), suggested from the current title, "Powered by KLIPY".
 - **Links** in chat are clickable; **chat text size** Small / Medium / Large.
 - Protocol additions are optional fields and new message types (`avatar`, `react`, chat `gif`), so 1.5

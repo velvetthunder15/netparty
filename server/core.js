@@ -20,7 +20,7 @@ const RESTORE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // a saved party older than this 
 export const PURGE_AGE_MS = RESTORE_MAX_AGE_MS - 15 * 60 * 1000; // saved parties idle this long are deleted (sweeps run every 15 min)
 const MAX_SEATS = 200;
 const limits = {
-  react: [6, 3000], // reactions per connection per window
+  react: [12, 3000], // reactions per connection per window (tapping 🎉 repeatedly sends several)
   chat: [20, 10_000],
   profile: [10, 10_000],
 };

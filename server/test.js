@@ -267,15 +267,15 @@ ok("host-only control lock");
   assert.deepEqual(Object.keys(r.data).sort(), ["ct", "from", "ts"]);
   assert.equal(r.data.from, a.pid);
   assert.deepEqual(await open(KEY, snap.roomId, "react", a.pid, r.data.ct), { e: "😂" });
-  for (let i = 0; i < 5; i++) await a.req("react", { ct: await sealAs(a, "react", { e: "🥰" }) });
-  await assert.rejects(a.req("react", { ct: r1 }), /Slow down/); // 7th within 3 s
-  for (let i = 0; i < 5; i++) await b.next("react");
+  for (let i = 0; i < 11; i++) await a.req("react", { ct: await sealAs(a, "react", { e: "🥰" }) });
+  await assert.rejects(a.req("react", { ct: r1 }), /Slow down/); // 13th within 3 s
+  for (let i = 0; i < 11; i++) await b.next("react");
   assert.equal(await a.next("react").catch(() => null), null); // sender doesn't get its own back
   await b.req("react", { ct: await sealAs(b, "react", { e: "💀" }) }); // the limit is per connection
   await a.next("react");
   const h = (await b.req("join", { e2ee: 1, roomId: snap.roomId, cid: b.cid })).history;
   assert.ok(!h.some((x) => x.kind === "react"), "reactions are not kept");
-  ok("encrypted reactions: relayed to others, size-checked, rate limited (6 per 3 s), not in history");
+  ok("encrypted reactions: relayed to others, size-checked, rate limited (12 per 3 s), not in history");
 }
 
 // ---- voice: A joins first, B joins and gets A as a peer to call; signaling is encrypted

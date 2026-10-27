@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Watch Netflix, JioHotstar and YouTube in sync with friends, with end-to-end encrypted chat, voice, GIFs and reactions.",
   "minimum_chrome_version": "116",
   "action": {

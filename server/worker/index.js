@@ -11,7 +11,6 @@ import siteHeroCss from "./site/hark-hero.css";
 import siteJs from "./site/hark.js.txt";
 import imgSpace from "./site/still-space.jpg";
 import imgNeon from "./site/still-neon.jpg";
-import imgFriends from "./site/friends.jpg";
 import imgJio from "./site/jiohotstar-star.png";
 import svgNetflix from "./site/netflix.svg";
 import svgYoutube from "./site/youtube.svg";
@@ -27,7 +26,6 @@ const SITE = {
   "/hark.js": [siteJs, "text/javascript; charset=utf-8"],
   "/still-space.jpg": [imgSpace, "image/jpeg"],
   "/still-neon.jpg": [imgNeon, "image/jpeg"],
-  "/friends.jpg": [imgFriends, "image/jpeg"],
   "/jiohotstar-star.png": [imgJio, "image/png"],
   "/netflix.svg": [svgNetflix, "image/svg+xml"],
   "/youtube.svg": [svgYoutube, "image/svg+xml"],

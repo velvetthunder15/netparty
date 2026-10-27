@@ -1704,11 +1704,33 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           }, editing ? "Done" : svg(ICON.edit)),
         );
       }
+      // hover 🎉 to open the tray; it stays open while the pointer is on the button or the
+      // tray, and closes shortly after it leaves both (unless it was opened by a click or
+      // is being edited). Each click on an emoji sends that one emoji.
+      let hoverTimer = 0, pinned = false;
+      const cancelHide = () => (clearTimeout(hoverTimer), (hoverTimer = 0));
+      const hoverOpen = () => {
+        cancelHide();
+        if (pops.current === node && node) return;
+        if (pops.current) return; // another picker is open: don't steal it on hover
+        editing = false;
+        pinned = false;
+        openTray();
+      };
+      const hoverLeave = () => {
+        cancelHide();
+        hoverTimer = setTimeout(() => {
+          hoverTimer = 0;
+          if (!pinned && !editing && node && pops.current === node) pops.close();
+        }, 350);
+      };
       function openTray() {
         if (!node) {
           row = el("div", { class: "np-react-row" });
           node = popEl("np-react-pop", "Reactions", row);
-          node.addEventListener("np-close", () => reactBtn.classList.remove("np-on"));
+          node.addEventListener("np-close", () => (reactBtn.classList.remove("np-on"), (pinned = false), cancelHide()));
+          node.addEventListener("pointerenter", cancelHide);
+          node.addEventListener("pointerleave", (e) => e.pointerType === "mouse" && hoverLeave());
           panel.append(node);
         }
         draw();
@@ -1718,8 +1740,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       function send(e) {
         const now = Date.now();
         while (sent.length && now - sent[0] > 3000) sent.shift();
-        if (sent.length >= 6) {
-          // same limit as the server: 6 every 3 seconds
+        if (sent.length >= 12) {
+          // same limit as the server: 12 every 3 seconds
           row.animate([{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }], 220);
           return;
         }
@@ -1743,13 +1765,22 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           list = next;
           draw();
           chrome.storage.sync.set({ reactions: next }).catch(() => {});
+          pinned = true; // reopened after picking a replacement: stay open until clicked away
           openTray();
         },
         toggle() {
-          if (pops.current === node && node) return pops.close();
+          cancelHide();
+          // a click while hover already opened it pins it open instead of closing it
+          if (pops.current === node && node) {
+            if (!pinned) return void (pinned = true);
+            return pops.close();
+          }
           editing = false;
+          pinned = true;
           openTray();
         },
+        hoverOpen,
+        hoverLeave,
       };
     })();
 
@@ -2097,6 +2128,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       emojiBtn = el("button", { type: "button", class: "np-tool", title: "Emoji", "aria-label": "Emoji", "aria-expanded": "false", onclick: () => emoji.toggle() }, svg(ICON.smile));
       gifBtn = el("button", { type: "button", class: "np-tool np-tool-gif", title: "Send a GIF", "aria-label": "GIFs", "aria-expanded": "false", onclick: () => gif.toggle() }, "GIF");
       reactBtn = el("button", { type: "button", class: "np-tool np-emo", title: "React on everyone's screen", "aria-label": "Reactions", "aria-expanded": "false", onclick: () => reactions.toggle() }, "🎉");
+      reactBtn.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && reactions.hoverOpen());
+      reactBtn.addEventListener("pointerleave", (e) => e.pointerType === "mouse" && reactions.hoverLeave());
       fontBtn = el("button", { type: "button", class: "np-tool np-tool-font", onclick: cycleFont }, "Aa");
       for (const b of [emojiBtn, gifBtn, reactBtn, fontBtn]) keepFocus(b);
       composer = el(

@@ -94,7 +94,22 @@ await gp.locator(".np-chat").click({ position: { x: 20, y: 20 } });
 check("click elsewhere in the panel closes the picker", !(await gp.locator(".np-emoji-pop").isVisible()));
 check("no site hotkeys fired while typing", (await gp.evaluate(() => window.__hotkeys)) === 0, String(await gp.evaluate(() => window.__hotkeys)));
 
-// ---- reactions
+// ---- reactions: hover 🎉 opens the tray, leaving closes it; each click sends exactly one
+await hp.locator('.np-tool[aria-label="Reactions"]').hover();
+check("hovering 🎉 opens the reaction tray", !!(await until(() => hp.locator(".np-react-pop").isVisible(), 1500, 50)));
+await hp.mouse.move(5, 5);
+await sleep(700);
+check("moving the mouse away closes the tray", !(await hp.locator(".np-react-pop").isVisible()));
+await hp.locator('.np-tool[aria-label="Reactions"]').hover();
+await until(() => hp.locator(".np-react-pop").isVisible(), 1500, 50);
+await hp.locator('.np-react-btn[data-emoji="😱"]').hover();
+await sleep(500);
+check("tray stays open while hovering it", await hp.locator(".np-react-pop").isVisible());
+for (let i = 0; i < 3; i++) await hp.locator('.np-react-btn[data-emoji="😱"]').click();
+await sleep(600);
+const one = await shadow(gp, (r) => { const f = [...r.querySelectorAll(".np-fly")].map((x) => x.textContent); return { scream: f.filter((x) => x === "😱").length, other: f.filter((x) => x !== "😱").length }; });
+check("three clicks on one emoji send exactly three of it, nothing else", one.scream === 3 && one.other === 0, JSON.stringify(one));
+await sleep(3800);
 await hp.locator('.np-tool[aria-label="Reactions"]').click();
 const tray = await shadow(hp, (r) => { return [...r.querySelectorAll(".np-react-btn")].map((b) => b.textContent).join(" "); });
 check("tray has the 5 default reactions", tray === "😂 😭 💀 🥰 😱", tray);
@@ -109,10 +124,10 @@ check("reaction stays over the video, not the chat column", flyX.right <= flyX.p
 check("sender sees it too", !!(await shadow(hp, (r) => { return r.querySelector(".np-fly"); })));
 await sleep(3500);
 check("reaction removed after its animation", (await shadow(gp, (r) => { return r.querySelectorAll(".np-fly").length; })) === 0);
-for (let i = 0; i < 9; i++) await hp.locator('.np-react-btn[data-emoji="💀"]').click({ delay: 0 });
+for (let i = 0; i < 16; i++) await hp.locator('.np-react-btn[data-emoji="💀"]').click({ delay: 0 });
 await sleep(400);
 const nSkull = await shadow(gp, (r) => { return [...r.querySelectorAll(".np-fly")].filter((f) => f.textContent === "💀").length; });
-check("rate limit: at most 6 reactions per 3 s", nSkull >= 1 && nSkull <= 6, String(nSkull));
+check("rate limit: at most 12 reactions per 3 s", nSkull >= 6 && nSkull <= 12, String(nSkull));
 // edit a slot
 await hp.locator(".np-react-edit").click();
 await hp.locator('.np-react-btn[data-emoji="😭"]').click();
