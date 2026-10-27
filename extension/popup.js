@@ -18,11 +18,18 @@ async function toTab(msg) {
   }
 }
 
-// accepts a party code, an invite link (…/j/<code>) or a watch link with ?npParty=<code>
-function parseCode(s) {
+// The full invite link (…/j/<code>#k=<key>) or a watch link (…?npParty=<code>#npKey=<key>):
+// the code says which party, the key (in the #fragment) unlocks its end-to-end encrypted chat.
+// A bare code has no key.
+const NEED_LINK = "Paste the full invite link — the code alone can't unlock the encrypted chat.";
+function parseInvite(s) {
   s = String(s || "").trim();
-  const m = s.match(/\/j\/([a-z0-9]{4,16})/i) || s.match(/[?&]npParty=([a-z0-9]{4,16})/i) || s.match(/^([a-z0-9]{4,16})$/i);
-  return m ? m[1].toLowerCase() : null;
+  const m = s.match(/\/j\/([a-z0-9]{4,16})(?=[/?#]|$)/i) || s.match(/[?&]npParty=([a-z0-9]{4,16})(?=[&#]|$)/i) || s.match(/^([a-z0-9]{4,16})$/i);
+  if (!m) return null;
+  const hash = s.includes("#") ? s.slice(s.indexOf("#") + 1) : "";
+  const k = hash.split("&").map((p) => p.match(/^(?:k|npKey)=(.*)$/)).find(Boolean);
+  const key = k && /^[A-Za-z0-9_-]{43}$/.test(k[1]) ? k[1] : null;
+  return { code: m[1].toLowerCase(), key };
 }
 
 async function refresh() {
@@ -79,10 +86,11 @@ $("create").onclick = async () => {
   }
 };
 $("join").onclick = async () => {
-  const code = parseCode($("code").value);
-  if (!code) return setError("That doesn't look like a NetParty link or code.");
+  const inv = parseInvite($("code").value);
+  if (!inv) return setError("That doesn't look like a NetParty invite link.");
+  if (!inv.key) return setError(NEED_LINK);
   await saveName();
-  run({ cmd: "join", roomId: code }, $("join"));
+  run({ cmd: "join", roomId: inv.code, key: inv.key }, $("join"));
 };
 $("code").addEventListener("keydown", (e) => e.key === "Enter" && $("join").click());
 $("leave").onclick = () => run({ cmd: "leave" });

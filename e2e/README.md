@@ -7,10 +7,13 @@ API (`http://127.0.0.1:8444`) and mock KLIPY media host (`static.klipy.com`), an
 
 | Script | Checks |
 | --- | --- |
-| `run.mjs` | split-screen layout, start party → invite page → join → chat via Enter and Send → pause/seek sync, reloads |
-| `lifecycle.mjs` | Start a NetParty button, next episode keeps the party, leaving ends/leaves it (`HOT=1` for JioHotstar) |
-| `features.mjs` | avatars, emoji picker, 🎉 reactions (rate limit, edit, fullscreen), text size, links, GIFs (no key → unavailable; mock KLIPY → search/chips/attribution/send), popup. `CSP=strict` makes the fake Netflix send `img-src 'self' blob:` so GIFs go through the blob: fallback |
-| `youtube.mjs` | YouTube start button, invite → join, sync, ads, video change, dock geometry (default/theater/fullscreen), leaving |
+| `run.mjs` | split-screen layout, start party → invite page (key in `#k=`, host named by the page) → join → chat via Enter and Send → pause/seek sync, reloads (decrypted history survives); WebSocket frames recorded by a proxy contain no names, messages or key |
+| `lifecycle.mjs` | Start a NetParty button, next episode keeps the party (chat still decrypts), leaving ends/leaves it (`HOT=1` for JioHotstar) |
+| `features.mjs` | avatars, emoji picker, 🎉 reactions (rate limit, edit, fullscreen), text size, links, GIFs (no key → unavailable; mock KLIPY → search/chips/attribution/send), popup, voice over encrypted signaling, reload keeps decryption, bare code / missing / malformed / wrong key messages, and a leak audit of every WebSocket frame (names, pictures, messages, GIF URLs, reactions, SDP/ICE, key, cids). `CSP=strict` makes the fake Netflix send `img-src 'self' blob:` so GIFs go through the blob: fallback |
+| `youtube.mjs` | YouTube start button, invite → join (key in the fragment, stripped from the URL), encrypted chat, sync, ads, video change, dock geometry (default/theater/fullscreen), leaving |
+
+`lib.mjs` has `tap(port, target)`: a recording WebSocket/HTTP proxy in front of the server, so the suites can check
+exactly what the server receives and sends.
 
 ```bash
 cd e2e && npm i playwright

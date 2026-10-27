@@ -98,6 +98,167 @@
     return n;
   };
 
+  // --------------------------------------------- end-to-end encryption
+  // Party chat (text, GIFs), reactions, names, pictures and voice-call setup are encrypted here
+  // with the party's room key: 256-bit AES-GCM from WebCrypto, made by the host's browser. The key
+  // travels only in the invite link's #fragment and lives in the participants' browsers (session
+  // storage of the extension, per tab). The server sees ciphertext only.
+  // Ciphertext: base64url(0x01 | 12-byte random IV | AES-GCM ciphertext + tag). The plaintext is
+  // JSON, padded with spaces to a multiple of 64 bytes. Additional data binds each ciphertext to
+  // the party, the kind of message and the sender's public id, so the server can't replay it into
+  // another party, pass it off as another kind, or re-attribute it to someone else.
+  const E2E = {
+    NEED_LINK: "Paste the full invite link — the code alone can't unlock the encrypted chat.",
+    BAD_KEY: "Can't decrypt messages — check your invite link (ask for the full link again).",
+    OLD_ROOM: "This party was started with an older NetParty that doesn't encrypt chat. Ask the host to update NetParty and start a new party.",
+    OLD_SERVER: "This party server doesn't support encrypted chat. Update the server, or use the default (wss://netparty.tech).",
+  };
+  // same limits as the server (server/core.js): ciphertext length for chat / profile / reaction / signal
+  const ctChars = (n) => Math.ceil(((1 + 12 + 16 + n) * 4) / 3);
+  const pad64 = (n) => Math.ceil(n / 64) * 64;
+  const CT_MAX = { chat: ctChars(pad64(500 * 6 + 64)), profile: ctChars(pad64(24 * 2 * 6 + 16 * 6 + 64)), react: ctChars(pad64(16 * 6 + 32)), signal: 32768 };
+  const e2e = (() => {
+    const enc = new TextEncoder();
+    const b64u = (bytes) => {
+      let s = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    };
+    const unb64u = (s) => {
+      if (typeof s !== "string" || !/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) return null;
+      try {
+        const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4));
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+      } catch {
+        return null;
+      }
+    };
+    // 43 base64url characters that decode to exactly 32 bytes (and re-encode the same way)
+    const validKey = (s) => {
+      if (typeof s !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(s)) return false;
+      const b = unb64u(s);
+      return !!b && b.length === 32 && b64u(b) === s;
+    };
+    const importKey = (s) => crypto.subtle.importKey("raw", unb64u(s), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    const aad = (room, kind, pid) => enc.encode(`netparty/e2ee/v1|${room}|${kind}|${pid}`);
+    let cur = null; // { room, keyStr, key: CryptoKey }
+    async function sealWith(key, room, kind, pid, obj) {
+      const json = enc.encode(JSON.stringify(obj));
+      const pt = new Uint8Array(Math.max(64, pad64(json.length))).fill(0x20);
+      pt.set(json);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad(room, kind, pid), tagLength: 128 }, key, pt));
+      const out = new Uint8Array(13 + ct.length);
+      out[0] = 1;
+      out.set(iv, 1);
+      out.set(ct, 13);
+      return b64u(out);
+    }
+    async function openWith(key, room, kind, pid, s) {
+      const b = unb64u(s);
+      if (!key || !b || b.length < 13 + 16 || b[0] !== 1) return null;
+      try {
+        const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b.subarray(1, 13), additionalData: aad(room, kind, pid), tagLength: 128 }, key, b.subarray(13));
+        const v = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(pt));
+        return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+      } catch {
+        return null;
+      }
+    }
+    const CHECK = { check: "netparty" };
+    return {
+      genKey: () => b64u(crypto.getRandomValues(new Uint8Array(32))),
+      validKey,
+      get ready() {
+        return !!cur?.room;
+      },
+      get keyStr() {
+        return cur?.keyStr || null;
+      },
+      async use(room, keyStr) {
+        if (!validKey(keyStr)) throw new Error(E2E.NEED_LINK);
+        cur = { room, keyStr, key: await importKey(keyStr) };
+      },
+      setRoom(room) {
+        if (cur) cur.room = room;
+      },
+      clear() {
+        cur = null;
+      },
+      // encrypted known value the host stores with the party: lets a guest's browser tell
+      // whether its invite key is the party's key before joining
+      makeCheck: () => sealWith(cur.key, "", "check", "", CHECK),
+      async checkKey(keyStr, kc) {
+        if (!validKey(keyStr) || typeof kc !== "string") return false;
+        const v = await openWith(await importKey(keyStr), "", "check", "", kc);
+        return v?.check === CHECK.check;
+      },
+      seal: (kind, pid, obj) => sealWith(cur.key, cur.room, kind, pid, obj),
+      open: (kind, pid, s) => (cur?.room ? openWith(cur.key, cur.room, kind, pid, s) : Promise.resolve(null)),
+    };
+  })();
+
+  // ---- checks on decrypted content (the server can't see it, so it can't check it any more)
+  const AVATAR_LIST = globalThis.NP_EMOJI?.avatars || [];
+  const segmenter = Intl.Segmenter ? new Intl.Segmenter("en", { granularity: "grapheme" }) : null;
+  function isSingleEmoji(s, maxUnits = 16) {
+    if (typeof s !== "string" || !s || s.length > maxUnits) return false;
+    if (!/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(s)) return false;
+    if (/[\p{L}\p{N}\p{P}\p{Z}\p{Cc}<>`$^|~=+]/u.test(s)) return false;
+    if (segmenter) {
+      let n = 0;
+      for (const _ of segmenter.segment(s)) if (++n > 1) return false;
+    }
+    return true;
+  }
+  const cleanAvatar = (a) => (AVATAR_LIST.includes(a) || isSingleEmoji(a, 8) ? a : null);
+  // names: no control or invisible direction characters, one line, at most 24 characters
+  const cleanName = (s) =>
+    typeof s === "string" ? [...s.replace(/[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu, "").replace(/\s+/g, " ").trim()].slice(0, 24).join("") : "";
+  // KLIPY media hosts (same list as KLIPY_MEDIA_HOSTS in server/core.js)
+  const GIF_HOSTS = ["static.klipy.com", "static1.klipy.com", "static2.klipy.com"];
+  function isKlipyMediaUrl(s) {
+    if (typeof s !== "string" || s.length > 600) return false;
+    let u;
+    try {
+      u = new URL(s);
+    } catch {
+      return false;
+    }
+    return u.protocol === "https:" && !u.username && !u.password && !u.port && GIF_HOSTS.includes(u.hostname) && u.href === s;
+  }
+  const dim = (n) => (Number.isInteger(n) && n > 0 && n <= 4096 ? n : null);
+  // decrypted chat payload -> { text } or { gif: { url, w, h } }, or null if it isn't valid
+  function cleanChat(p) {
+    if (p?.t === "gif") return isKlipyMediaUrl(p.url) ? { gif: { url: p.url, w: dim(p.w), h: dim(p.h) } } : null;
+    if (p?.t === "text" && typeof p.text === "string") {
+      const text = p.text.trim().slice(0, 500);
+      return text ? { text } : null;
+    }
+    return null;
+  }
+  const cleanProfile = (p) => ({ name: cleanName(p?.name) || "Guest", avatar: cleanAvatar(p?.avatar) });
+
+  // room keys for this tab (kept by the background in chrome.storage.session)
+  const keys = {
+    async get(code) {
+      const g = window.__netpartyInviteKey;
+      if (g && g.code === code && e2e.validKey(g.key)) return g.key;
+      const r = await chrome.runtime.sendMessage({ cmd: "roomKey", op: "get", code }).catch(() => null);
+      return e2e.validKey(r?.key) ? r.key : null;
+    },
+    async set(code, key) {
+      const r = await chrome.runtime.sendMessage({ cmd: "roomKey", op: "set", code, key }).catch(() => null);
+      if (!r?.ok) throw new Error("Couldn't keep the party key in this browser.");
+    },
+    async del(code) {
+      if (window.__netpartyInviteKey?.code === code) window.__netpartyInviteKey = null;
+      await chrome.runtime.sendMessage({ cmd: "roomKey", op: "del", code }).catch(() => {});
+    },
+  };
+
   // ------------------------------------------------- page-context bridge
   const bridge = (() => {
     // YouTube: a plain HTML5 <video> in #movie_player, driven straight from here. (No page
@@ -337,7 +498,9 @@
     hostId: null,
     hostOnly: false,
     members: [],
-    state: null, // { playing, position, at (server ms), videoId }
+    state: null, // { playing, position, at (server ms), videoId, by }
+    profiles: new Map(), // pid -> { name, avatar } (decrypted)
+    profileCt: new Map(), // pid -> the ciphertext it came from
     name: "Guest",
     avatar: null,
     serverUrl: "wss://netparty.tech",
@@ -364,11 +527,12 @@
     if (area !== "sync") return;
     if (ch.name) {
       party.name = ch.name.newValue || "Guest";
-      if (party.roomId) net.request("rename", { name: party.name }).catch(() => {});
+      sendProfile();
+      ui.refreshNames();
     }
     if (ch.avatar) {
       party.avatar = ch.avatar.newValue || null;
-      if (party.roomId && party.avatar) net.request("avatar", { avatar: party.avatar }).catch(() => {});
+      sendProfile();
       ui.render();
     }
     if (ch.chatFont) ui.setFont(ch.chatFont.newValue);
@@ -382,17 +546,43 @@
     await clock.sync();
   }
 
-  // Stable id for this browser tab: survives reloads and episode changes, so the server
-  // gives us our seat (and host role) back instead of treating us as a new person.
+  // Private reconnect secret for this browser tab (128 random bits): survives reloads and
+  // episode changes, so the server gives us our seat (and host role) back instead of treating
+  // us as a new person. Only ever sent to the server, which never shows it to anyone; other
+  // people see our public member id (party.me) instead.
   const TAB_ID = (() => {
     let id = sessionStorage.getItem("netpartyCid");
-    if (!/^[a-z0-9]{16}$/.test(id || "")) {
-      const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
-      id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => abc[b % 36]).join("");
+    if (!/^[0-9a-f]{32}$/.test(id || "")) {
+      id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
       sessionStorage.setItem("netpartyCid", id);
     }
     return id;
   })();
+
+  // Server messages are handled one at a time, in order (decrypting is asynchronous).
+  let inboundQ = Promise.resolve();
+  const inbound = (fn) => {
+    const p = inboundQ.then(fn);
+    inboundQ = p.catch((e) => console.error("[NetParty]", e?.name || e));
+    return p;
+  };
+
+  // our encrypted { name, avatar }, sent after every join and whenever it changes
+  async function sendProfile() {
+    if (!party.roomId || !party.me || !e2e.ready) return;
+    const mine = { name: cleanName(party.name) || "Guest", avatar: cleanAvatar(party.avatar) };
+    party.profiles.set(party.me, mine);
+    try {
+      const ct = await e2e.seal("profile", party.me, mine);
+      if (ct.length > CT_MAX.profile) return;
+      await net.request("profile", { ct });
+    } catch {}
+  }
+  // the party's info from a peek/join/create reply: is it encrypted, and is our key its key?
+  async function verifyParty(info, key) {
+    if (!info?.e2ee) throw new Error(info?.roomId && !("kc" in info) ? E2E.OLD_SERVER : E2E.OLD_ROOM);
+    if (!(await e2e.checkKey(key, info.kc))) throw new Error(E2E.BAD_KEY);
+  }
 
   async function createParty() {
     const vid = videoIdFromUrl();
@@ -404,33 +594,64 @@
     }
     await ensureConnected();
     const st = (await bridge.status()) || { position: 0, playing: false };
+    // a fresh room key, made here; it never leaves this browser except in the invite link
+    const key = e2e.genKey();
+    await e2e.use(null, key);
     const snap = await net.request("create", {
-      name: party.name,
-      avatar: party.avatar,
+      e2ee: 1,
       cid: TAB_ID,
+      kc: await e2e.makeCheck(),
       videoId: vid,
       playing: st.playing,
       position: st.position,
       at: clock.serverNow(),
     });
-    onJoined(snap);
-    ui.system("Party started. Share the invite link with friends.");
+    try {
+      if (!snap?.e2ee || typeof snap.roomId !== "string") throw new Error(E2E.OLD_SERVER);
+      e2e.setRoom(snap.roomId);
+      await keys.set(snap.roomId, key);
+      await inbound(() => onJoined(snap));
+    } catch (e) {
+      net.request("end", {}, 3000).catch(() => {});
+      e2e.clear();
+      throw e;
+    }
+    ui.system("Party started. Chat is end-to-end encrypted: share the full invite link with friends.");
     return snap;
   }
 
   async function joinParty(roomId) {
+    const key = await keys.get(roomId);
+    if (!key) throw new Error(E2E.NEED_LINK);
     await ensureConnected();
+    // which title, and is our key the party's key? (checked before joining, so a wrong
+    // link never shows up as a member)
+    let info;
+    try {
+      info = await net.request("peek", { roomId, e2ee: 1 });
+      await verifyParty(info, key);
+    } catch (e) {
+      if (e.message === E2E.BAD_KEY) keys.del(roomId);
+      throw e;
+    }
+    await keys.set(info.roomId, key);
     if (!videoIdFromUrl()) {
       // not on a player yet (browse page): go to the party's title; the invite code
-      // rides along in the URL and the join happens there
-      const info = await net.request("peek", { roomId });
+      // rides along in the URL (the key stays in this tab's extension storage) and the join happens there
       if (!info.videoId) throw new Error("The host hasn't opened a title yet.");
       net.stop();
       location.href = watchUrl(info.videoId, info.roomId);
       return info;
     }
-    const snap = await net.request("join", { roomId, name: party.name, avatar: party.avatar, cid: TAB_ID });
-    onJoined(snap);
+    await e2e.use(info.roomId, key);
+    const snap = await net.request("join", { roomId, e2ee: 1, cid: TAB_ID });
+    try {
+      await inbound(() => onJoined(snap, key));
+    } catch (e) {
+      net.request("leave", {}, 3000).catch(() => {});
+      e2e.clear();
+      throw e;
+    }
     if (!snap.returning) ui.system("You joined the party.");
     await applyRemote(snap.state, "join");
     // came back after an episode change with voice on: reconnect voice too
@@ -451,10 +672,15 @@
   }
 
   function resetParty() {
+    if (party.roomId) keys.del(party.roomId);
     party.roomId = null;
+    party.me = null;
     party.hostId = null;
     party.members = [];
     party.state = null;
+    party.profiles.clear();
+    party.profileCt.clear();
+    e2e.clear();
     net.stop();
     for (const k of ["netpartyRoom", "netpartyVoice", "netpartyPanel"]) sessionStorage.removeItem(k);
     ui.hide();
@@ -483,15 +709,70 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     notice.t = setTimeout(() => box.classList.remove("s"), 5000);
   }
 
-  function onJoined(snap) {
+  // decrypt the encrypted profiles we don't have yet ([pid, ct] pairs)
+  let decryptWarned = false;
+  let replaying = false; // true while onJoined decrypts the history (the warning waits for it)
+  let seenCt = new Set();
+  function cantDecrypt() {
+    if (decryptWarned) return;
+    decryptWarned = true;
+    if (!replaying) ui.system("Can't decrypt some messages — check your invite link. They're hidden.");
+  }
+  async function absorbProfiles(pairs) {
+    let changed = false;
+    for (const [pid, ct] of pairs) {
+      if (typeof pid !== "string" || typeof ct !== "string" || party.profileCt.get(pid) === ct) continue;
+      party.profileCt.set(pid, ct);
+      const p = await e2e.open("profile", pid, ct);
+      if (!p) {
+        cantDecrypt();
+        continue;
+      }
+      if (pid !== party.me) party.profiles.set(pid, cleanProfile(p));
+      changed = true;
+    }
+    return changed;
+  }
+  // a history entry or live line -> what the UI shows, or null (undecryptable / invalid)
+  async function decodeLine(h) {
+    if (h?.kind === "system" || h?.event) return h.event === "join" || h.event === "leave" ? { kind: "system", event: h.event, id: String(h.id), ts: h.ts } : null;
+    if (typeof h?.from !== "string") return null;
+    const p = await e2e.open("chat", h.from, h.ct);
+    if (!p) {
+      cantDecrypt();
+      return null;
+    }
+    const c = cleanChat(p);
+    return c && { kind: "chat", id: h.from, ts: h.ts, ...c };
+  }
+
+  // A create/join/rejoin reply: the party, its members and history (decrypted here). Runs in
+  // the inbound queue so live messages that follow it are shown after the history.
+  async function onJoined(snap, key = e2e.keyStr) {
+    if (!snap?.e2ee) throw new Error(E2E.OLD_SERVER);
+    if (!(await e2e.checkKey(key, snap.kc))) throw new Error(E2E.BAD_KEY);
     party.roomId = snap.roomId;
+    party.me = snap.you;
     party.hostId = snap.hostId;
     party.hostOnly = snap.hostOnly;
-    party.members = snap.members;
+    party.members = Array.isArray(snap.members) ? snap.members : [];
     party.state = snap.state;
     party.error = null;
+    decryptWarned = false;
     sessionStorage.setItem("netpartyRoom", snap.roomId);
-    ui.loadHistory(snap.history || []);
+    replaying = true;
+    let lines;
+    try {
+      await absorbProfiles([...Object.entries(snap.profiles || {}), ...party.members.map((m) => [m.id, m.profile])]);
+      const hist = Array.isArray(snap.history) ? snap.history : [];
+      seenCt = new Set(hist.map((h) => h?.ct).filter(Boolean));
+      lines = (await Promise.all(hist.map(decodeLine))).filter(Boolean);
+    } finally {
+      replaying = false;
+    }
+    ui.loadHistory(lines);
+    if (decryptWarned) ui.system("Can't decrypt some messages — check your invite link. They're hidden.");
+    sendProfile();
     // keep the chat open/closed the way it was before a reload
     if (sessionStorage.getItem("netpartyPanel") === "closed") ui.mount();
     else ui.show();
@@ -501,7 +782,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   // Invite links go to the party server's join page, which tells friends without the
   // extension how to get it and sends everyone else straight to the right title.
   const joinPageBase = () => party.serverUrl.replace(/^ws(s?):\/\//, "http$1://").replace(/\/+$/, "");
-  const inviteLink = () => (party.roomId ? `${joinPageBase()}/j/${party.roomId}` : null);
+  // the room key rides in the #fragment, which browsers never send to any server
+  const inviteLink = () => (party.roomId && e2e.keyStr ? `${joinPageBase()}/j/${party.roomId}#k=${e2e.keyStr}` : null);
   const directLink = () =>
     party.roomId && party.state?.videoId ? watchUrl(party.state.videoId, party.roomId) : null;
 
@@ -885,62 +1167,81 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   if (IS_YT) document.addEventListener("yt-navigate-finish", () => setTimeout(watchPlayer, 50));
 
   // ---------------------------------------------------- server messages
-  net.on(async (msg) => {
+  // display name for a public member id (from that member's decrypted profile)
+  const nameOf = (pid) => (pid && pid === party.me ? cleanName(party.name) || "Guest" : party.profiles.get(pid)?.name || "Someone");
+  net.on((msg) => {
+    inbound(() => onServer(msg));
+  });
+  async function onServer(msg) {
     switch (msg.type) {
-      case "welcome":
-        party.me = msg.data.userId;
-        break;
       case "state":
         party.state = msg.data;
-        if (msg.data.reason && msg.data.byName) {
+        if (msg.data.reason && msg.data.by) {
           const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : "changed the episode" }[msg.data.reason];
-          if (what) ui.system(`${msg.data.byName} ${what}`);
+          if (what) ui.system(`${nameOf(msg.data.by)} ${what}`);
         }
         applyRemote(msg.data, "remote");
         break;
       case "members":
+        if (!party.roomId || !Array.isArray(msg.data.members)) break;
         party.members = msg.data.members;
         party.hostId = msg.data.hostId;
+        if (await absorbProfiles(party.members.map((m) => [m.id, m.profile]))) ui.refreshNames();
         ui.render();
         break;
       case "settings":
         party.hostOnly = msg.data.hostOnly;
         ui.render();
         break;
-      case "chat":
-        ui.chat(msg.data);
+      case "chat": {
+        if (!party.roomId) break;
+        const line = await decodeLine(msg.data);
+        // the same ciphertext twice (a replay) is shown once
+        if (line && !seenCt.has(msg.data.ct)) {
+          seenCt.add(msg.data.ct);
+          ui.chat(line);
+        }
         break;
-      case "react":
-        ui.float(msg.data.emoji);
+      }
+      case "react": {
+        if (!party.roomId || typeof msg.data.from !== "string") break;
+        const p = await e2e.open("react", msg.data.from, msg.data.ct);
+        if (p && isSingleEmoji(p.e, 16)) ui.float(p.e);
         break;
-      case "ended":
+      }
+      case "ended": {
+        const who = nameOf(msg.data.by);
         await voice.leave().catch(() => {});
         resetParty();
-        notice(`${msg.data.byName} ended the party.`);
+        notice(`${who} ended the party.`);
         break;
-      case "system":
-        ui.system(msg.data.text);
+      }
+      case "system": {
+        if (!party.roomId) break;
+        const line = await decodeLine(msg.data);
+        if (line) ui.sysEvent(line.event, line.id);
         break;
+      }
       case "voice":
         voice.onVoiceEvent(msg.data);
         break;
       case "signal":
-        voice.onSignal(msg.data.from, msg.data.payload);
+        await voice.onSignal(msg.data.from, msg.data.ct);
         break;
       case "_closed":
-        ui.system("Connection lost. Reconnecting…");
+        if (party.roomId) ui.system("Connection lost. Reconnecting…");
         break;
       case "_open":
-        // reconnect: rejoin the same party with a fresh socket
+        // reconnect: rejoin the same party with a fresh socket (our cid gets our seat back)
         if (party.roomId && party.me) {
           const room = party.roomId;
           try {
             await clock.sync(3);
-            const snap = await net.request("join", { roomId: room, name: party.name, avatar: party.avatar, cid: TAB_ID });
-            onJoined(snap);
+            const snap = await net.request("join", { roomId: room, e2ee: 1, cid: TAB_ID });
+            await onJoined(snap); // already in the inbound queue
             ui.system("Reconnected.");
             applyRemote(snap.state, "rejoin");
-            if (voice.active) voice.rejoin();
+            if (voice.active) voice.rejoin().catch(() => {});
           } catch (e) {
             if (/not found|ended/i.test(e.message)) {
               resetParty();
@@ -953,7 +1254,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         ui.system("Still reconnecting… (check your internet)");
         break;
     }
-  });
+  }
 
   // --------------------------------------------------------- voice chat
   const voice = (() => {
@@ -961,6 +1262,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
     const peers = new Map(); // id -> { pc, audio, pendingIce: [] }
     const peerState = new Map(); // id -> { muted, speaking }
+    const rxQ = new Map(); // id -> chain of incoming signals being handled
     let muted = false;
     let speaking = false;
     let meter = null;
@@ -979,14 +1281,14 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       const audio = new Audio();
       audio.autoplay = true;
       audio.volume = volume;
-      const entry = { pc, audio, pendingIce: [] };
+      const entry = { pc, audio, pendingIce: [], sendQ: Promise.resolve() };
       peers.set(id, entry);
       localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
       pc.ontrack = (e) => {
         audio.srcObject = e.streams[0];
         audio.play().catch(() => ui.system("Click anywhere on the page to hear voice chat."));
       };
-      pc.onicecandidate = (e) => e.candidate && net.request("signal", { to: id, payload: { ice: e.candidate } }).catch(() => {});
+      pc.onicecandidate = (e) => e.candidate && signal(entry, id, { ice: e.candidate.toJSON() }).catch(() => {});
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "failed") {
           ui.system("Voice link to " + nameOf(id) + " failed (network may block peer-to-peer; add a TURN server).");
@@ -1007,11 +1309,24 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       peerState.delete(id);
     }
 
+    // WebRTC setup (SDP and ICE candidates, which contain IP addresses) is encrypted with the
+    // room key too, so the server only relays it. Sent one after another, in order, per peer.
+    function signal(entry, to, payload) {
+      const run = async () => {
+        const ct = await e2e.seal("signal>" + to, party.me, payload);
+        if (ct.length > CT_MAX.signal) throw new Error("signal too big");
+        await net.request("signal", { to, ct });
+      };
+      const p = entry.sendQ.then(run);
+      entry.sendQ = p.catch(() => {});
+      return p;
+    }
+
     async function callPeer(id) {
-      const { pc } = makePeer(id);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await net.request("signal", { to: id, payload: { sdp: pc.localDescription } });
+      const entry = makePeer(id);
+      const offer = await entry.pc.createOffer();
+      await entry.pc.setLocalDescription(offer);
+      await signal(entry, id, { sdp: entry.pc.localDescription.toJSON() });
     }
 
     function startMeter() {
@@ -1042,9 +1357,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       meter = { ctx, iv };
     }
 
-    const nameOf = (id) => party.members.find((m) => m.id === id)?.name || "someone";
-
-    return {
+    const api = {
       get active() {
         return active;
       },
@@ -1124,29 +1437,40 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         }
         ui.render();
       },
-      async onSignal(from, payload) {
-        if (!active) return;
-        let entry = peers.get(from);
-        if (payload.sdp) {
-          if (payload.sdp.type === "offer") {
-            if (entry) closePeer(from);
-            entry = makePeer(from);
-            await entry.pc.setRemoteDescription(payload.sdp);
-            const answer = await entry.pc.createAnswer();
-            await entry.pc.setLocalDescription(answer);
-            await net.request("signal", { to: from, payload: { sdp: entry.pc.localDescription } });
-          } else if (entry) {
-            await entry.pc.setRemoteDescription(payload.sdp);
-          }
-          for (const c of entry?.pendingIce.splice(0) || []) await entry.pc.addIceCandidate(c).catch(() => {});
-        } else if (payload.ice) {
-          if (!entry || !entry.pc.remoteDescription) {
-            if (!entry) return;
-            entry.pendingIce.push(payload.ice);
-          } else await entry.pc.addIceCandidate(payload.ice).catch(() => {});
-        }
+      // decrypted in the inbound queue (keeps their order), then handled per peer without
+      // holding up chat
+      async onSignal(from, ct) {
+        if (!active || typeof from !== "string") return;
+        const payload = await e2e.open("signal>" + party.me, from, ct);
+        if (!payload || !active) return;
+        const p = (rxQ.get(from) || Promise.resolve()).then(() => handleSignal(from, payload)).catch((e) => log("signal", e?.name));
+        rxQ.set(from, p);
+        p.finally(() => rxQ.get(from) === p && rxQ.delete(from));
       },
     };
+    async function handleSignal(from, payload) {
+      if (!active) return;
+      let entry = peers.get(from);
+      if (payload.sdp) {
+        if (payload.sdp.type === "offer") {
+          if (entry) closePeer(from);
+          entry = makePeer(from);
+          await entry.pc.setRemoteDescription(payload.sdp);
+          const answer = await entry.pc.createAnswer();
+          await entry.pc.setLocalDescription(answer);
+          await signal(entry, from, { sdp: entry.pc.localDescription.toJSON() });
+        } else if (entry) {
+          await entry.pc.setRemoteDescription(payload.sdp);
+        }
+        for (const c of entry?.pendingIce.splice(0) || []) await entry.pc.addIceCandidate(c).catch(() => {});
+      } else if (payload.ice) {
+        if (!entry || !entry.pc.remoteDescription) {
+          if (!entry) return;
+          entry.pendingIce.push(payload.ice);
+        } else await entry.pc.addIceCandidate(payload.ice).catch(() => {});
+      }
+    }
+    return api;
   })();
 
   // ------------------------------------------------------------------ UI
@@ -1161,8 +1485,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     let peopleSig = "";
 
     const hue = (id) => [...String(id)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
-    // members without a picture (1.5 clients) get a stable one from their id
-    const avatarOf = (m) => m?.avatar || E.avatars[hue(m?.id || m?.name || "?") % E.avatars.length];
+    // a member's picture (from their decrypted profile); none yet: a stable one from their id
+    const picOf = (pid) =>
+      (pid === party.me ? cleanAvatar(party.avatar) : party.profiles.get(pid)?.avatar) || E.avatars[hue(pid || "?") % E.avatars.length];
     // SVG icons are built node by node: some sites (YouTube) enforce Trusted Types, so no innerHTML
     const SVG_NS = "http://www.w3.org/2000/svg";
     const svg = (markup) => {
@@ -1211,8 +1536,15 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       input.value = "";
       lastSel = null;
       updateSend();
-      net.request("chat", { text }).catch((err) => system("Message not sent: " + err.message));
+      sendLine({ t: "text", text: text.slice(0, 500) }).catch((err) => system("Message not sent: " + err.message));
       input.focus();
+    }
+    // chat text or GIF, encrypted for the party
+    async function sendLine(payload) {
+      if (!party.roomId || !party.me || !e2e.ready) throw new Error("Not in a party.");
+      const ct = await e2e.seal("chat", party.me, payload);
+      if (ct.length > CT_MAX.chat) throw new Error("Too long.");
+      await net.request("chat", { ct });
     }
     const updateSend = () => (sendBtn.disabled = !input.value.trim());
 
@@ -1393,7 +1725,11 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         }
         sent.push(now);
         float(e);
-        net.request("react", { emoji: e }).catch(() => {});
+        if (party.me && e2e.ready && isSingleEmoji(e, 16))
+          e2e
+            .seal("react", party.me, { e })
+            .then((ct) => net.request("react", { ct }))
+            .catch(() => {});
       }
       return {
         set(v) {
@@ -1440,8 +1776,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
 
     // ---- GIFs (KLIPY, through our server; the API key stays there)
-    // KLIPY media hosts (same list as KLIPY_MEDIA_HOSTS in server/core.js)
-    const GIF_HOSTS = ["static.klipy.com", "static1.klipy.com", "static2.klipy.com"];
+    // search results: images only from KLIPY's media hosts (GIF_HOSTS)
     const gifUrlOk = (u) => {
       try {
         const x = new URL(u);
@@ -1597,7 +1932,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       const more = () => run(query, next);
       function sendGif(r) {
         pops.close();
-        net.request("chat", { gif: { url: r.url, w: r.w || undefined, h: r.h || undefined } }).catch((e) => system("GIF not sent: " + e.message));
+        if (!isKlipyMediaUrl(r.url)) return system("GIF not sent: not a KLIPY image.");
+        sendLine({ t: "gif", url: r.url, w: dim(r.w) || undefined, h: dim(r.h) || undefined }).catch((e) => system("GIF not sent: " + e.message));
         input.focus();
       }
       return {
@@ -1961,7 +2297,7 @@ html.np-docked [data-np-shrink] {
         .map((m) => {
           const isMe = m.id === party.me;
           const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
-          return [m.id, m.name, isMe ? party.avatar || m.avatar : m.avatar, m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking].join(":");
+          return [m.id, nameOf(m.id), picOf(m.id), m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking, info.connected].join(":");
         })
         .join("|");
       if (pSig !== peopleSig) {
@@ -1971,24 +2307,22 @@ html.np-docked [data-np-shrink] {
             const isMe = m.id === party.me;
             const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
             const inVoice = isMe ? voice.active : !!m.inVoice;
-            const pic = isMe ? party.avatar || avatarOf(m) : avatarOf(m);
+            const pic = picOf(m.id);
             const avatar = el("div", { class: "np-avatar np-emo", style: `--h:${hue(m.id)}` }, el("span", { class: "np-avatar-pic" }, pic));
             if (m.host) avatar.append(el("span", { class: "np-crown", title: "Host" }, svg(ICON.crown)));
             if (inVoice) avatar.append(el("span", { class: "np-mic" + (info.muted ? " np-off" : ""), title: info.muted ? "Muted" : "In voice" }, svg(info.muted ? ICON.micOff : ICON.mic)));
-            const label = m.name + (m.host ? " (host)" : "");
+            const label = nameOf(m.id) + (m.host ? " (host)" : "");
             const tile = isMe
               ? el("button", { type: "button", class: "np-person np-me", title: "You · change your picture", "aria-label": "Change your picture", onclick: (e) => avatarPicker.toggle(e.currentTarget) })
               : el("div", { class: "np-person", title: label });
             tile.classList.toggle("np-speaking", inVoice && info.speaking && !info.muted);
-            tile.append(avatar, el("div", { class: "np-pname" }, isMe ? "You" : m.name));
+            if (!isMe && inVoice && voice.active) tile.dataset.link = info.connected ? "connected" : "connecting";
+            tile.append(avatar, el("div", { class: "np-pname" }, isMe ? "You" : nameOf(m.id)));
             return tile;
           }),
         );
-        // pictures on chat lines follow profile changes
-        for (const m of party.members) {
-          const pic = m.id === party.me ? party.avatar || avatarOf(m) : avatarOf(m);
-          for (const n of chatEl.querySelectorAll(`.np-mav[data-uid="${CSS.escape(m.id)}"]`)) if (n.textContent !== pic) n.textContent = pic;
-        }
+        // names and pictures on chat lines follow profile changes
+        refreshNames();
       }
 
       const inVoiceCount = party.members.filter((m) => (m.id === party.me ? voice.active : m.inVoice)).length;
@@ -2033,31 +2367,33 @@ html.np-docked [data-np-shrink] {
       if (nearBottom || !open) chatEl.scrollTop = chatEl.scrollHeight;
     }
 
+    // d: { id (sender pid), ts, text } or { id, ts, gif: { url, w, h } } (decrypted and checked)
     function chat(d, replay = false) {
-      const mine = d.id === party.me || (!!d.cid && d.cid === TAB_ID);
+      const mine = d.id === party.me;
       const time = new Date(d.ts || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
       const text = String(d.text || "");
+      const who = nameOf(d.id);
       let body;
-      if (d.gif && gifUrlOk(d.gif.url)) {
+      if (d.gif && isKlipyMediaUrl(d.gif.url)) {
         // fit inside 200×200, keep the aspect ratio (space is reserved before it loads)
         const w = d.gif.w || 200, h = d.gif.h || 150, k = Math.min(1, 200 / w, 200 / h);
-        const img = el("img", { class: "np-gif", alt: "GIF from " + d.name, width: String(Math.round(w * k)), height: String(Math.round(h * k)) });
+        const img = el("img", { class: "np-gif", alt: "GIF from " + who, width: String(Math.round(w * k)), height: String(Math.round(h * k)) });
         img.addEventListener("load", () => nearBottomScroll());
         media.load(img, d.gif.url);
         body = el("div", { class: "np-bubble np-bubble-gif" }, img, el("span", { class: "np-time" }, time));
-      } else body = el("div", { class: "np-bubble" }, ...linkify(text), el("span", { class: "np-time" }, time));
-      const pic = mine ? party.avatar || avatarOf(d) : d.avatar || avatarOf(d);
+      } else if (text) body = el("div", { class: "np-bubble" }, ...linkify(text), el("span", { class: "np-time" }, time));
+      else return;
       addLine(
         el(
           "div",
           { class: "np-msg" + (mine ? " np-mine" : "") },
-          mine ? "" : el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, pic),
-          el("div", { class: "np-mcol" }, mine ? "" : el("div", { class: "np-author", style: `--h:${hue(d.id)}` }, d.name), body),
+          mine ? "" : el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
+          el("div", { class: "np-mcol" }, mine ? "" : el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), body),
         ),
       );
       if (!open && !mine && !replay) {
         unread++;
-        toast(d.name, d.gif ? "sent a GIF" : text);
+        toast(who, d.gif ? "sent a GIF" : text);
         render();
       }
     }
@@ -2068,12 +2404,28 @@ html.np-docked [data-np-shrink] {
     function system(text) {
       addLine(el("div", { class: "np-sys" }, text));
     }
-    // everything said in the party so far (the server keeps the last 150 lines)
+    // "<name> joined / left", named from the member's decrypted profile (updates if it arrives later)
+    function sysEvent(event, pid) {
+      addLine(el("div", { class: "np-sys" }, el("span", { class: "np-who", "data-uid": pid }, nameOf(pid)), event === "join" ? " joined" : " left"));
+    }
+    function refreshNames() {
+      if (!chatEl) return;
+      for (const n of chatEl.querySelectorAll(".np-author[data-uid], .np-who[data-uid]")) {
+        const v = nameOf(n.dataset.uid);
+        if (n.textContent !== v) n.textContent = v;
+      }
+      for (const n of chatEl.querySelectorAll(".np-mav[data-uid]")) {
+        const v = picOf(n.dataset.uid);
+        if (n.textContent !== v) n.textContent = v;
+      }
+    }
+    // everything said in the party so far (the server keeps the last 150 lines, encrypted)
     function loadHistory(list) {
       if (!host) build();
       media.release(chatEl);
       chatEl.replaceChildren();
-      for (const h of list) h.kind === "chat" ? chat(h, true) : system(h.text);
+      system("🔒 Chat is end-to-end encrypted. Only people with the invite link can read it.");
+      for (const h of list) h.kind === "chat" ? chat(h, true) : sysEvent(h.event, h.id);
       chatEl.scrollTop = chatEl.scrollHeight;
     }
 
@@ -2091,6 +2443,12 @@ html.np-docked [data-np-shrink] {
       render,
       chat,
       system,
+      sysEvent,
+      refreshNames: () => {
+        refreshNames();
+        peopleSig = "";
+        render();
+      },
       loadHistory,
       float,
       setFont,
@@ -2112,7 +2470,7 @@ html.np-docked [data-np-shrink] {
               site: SITE_NAME,
               onWatchPage: !!videoIdFromUrl(),
               roomId: party.roomId,
-              members: party.members.map((m) => m.name),
+              members: party.members.map((m) => nameOf(m.id)),
               invite: inviteLink(),
               hostOnly: party.hostOnly,
               isHost: party.me === party.hostId,
@@ -2122,9 +2480,15 @@ html.np-docked [data-np-shrink] {
           case "create":
             await createParty();
             return { ok: true, invite: inviteLink() };
-          case "join":
-            await joinParty(String(msg.roomId || "").trim().toLowerCase());
+          case "join": {
+            // from the popup: the full invite link's code and key
+            const code = String(msg.roomId || "").trim().toLowerCase();
+            if (!/^[a-z0-9]{4,16}$/.test(code)) throw new Error("That doesn't look like a NetParty invite link.");
+            if (!e2e.validKey(msg.key)) throw new Error(E2E.NEED_LINK);
+            await keys.set(code, msg.key);
+            await joinParty(code);
             return { ok: true };
+          }
           case "leave":
             await leaveParty({ end: true });
             return { ok: true };
@@ -2163,8 +2527,9 @@ html.np-docked [data-np-shrink] {
       } else {
         // we left the title with a full page load: close out the party properly
         await ensureConnected();
-        const snap = await net.request("join", { roomId: room, name: party.name, avatar: party.avatar, cid: TAB_ID });
+        const snap = await net.request("join", { roomId: room, e2ee: 1, cid: TAB_ID });
         party.roomId = snap.roomId;
+        party.me = snap.you;
         party.hostId = snap.hostId;
         const host = party.me === party.hostId;
         await leaveParty({ end: true, reason: host ? "You left the title, so the party ended." : "You left the party." });

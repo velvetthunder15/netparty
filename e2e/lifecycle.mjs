@@ -85,6 +85,11 @@ const nextPath = HOT ? "/in/shows/fake-show/1260000002/ep-2/1260000099/watch" : 
 await hp.evaluate((p) => window.__go(p), nextPath);
 const followed = await until(async () => gp.url().includes(HOT ? "1260000099" : "67890") && (await people(gp)).length === 2, 20000);
 check("next episode keeps party and guest follows", !!followed, gp.url());
+// chat still decrypts on both sides after the episode change (the key survived the navigation)
+const bub = (p) => p.evaluate(() => [...(document.getElementById("netparty-root")?.shadowRoot?.querySelectorAll(".np-bubble") || [])].map((n) => n.firstChild.textContent));
+await hp.evaluate(() => { const r = document.getElementById("netparty-root").shadowRoot; r.querySelector(".np-input").value = "episode two!"; r.querySelector(".np-send").disabled = false; r.querySelector(".np-send").click(); });
+check("chat after the episode change reaches the guest (still decrypting)", !!(await until(async () => (await bub(gp)).includes("episode two!"), 8000)), JSON.stringify(await bub(gp)));
+check("no key left in either address bar", !/npKey/.test(gp.url() + hp.url()));
 const hs2 = await status(H, hp);
 check("host still in same party after episode change", hs2.roomId === room && hs2.isHost);
 
@@ -120,7 +125,9 @@ await gp.screenshot({ path: (HOT ? "hs" : "nf") + "-ended.png" });
 
 // 6. joining an ended party: clear message, no stuck "reconnecting"
 await gp.goto(hst.invite.replace(/\/j\/.*/, "/j/" + room));
-await hp.goto(HOT ? "https://www.hotstar.com/in/movies/fake-movie/1260000001/watch?npParty=" + room : "https://www.netflix.com/watch/12345?npParty=" + room);
+// the full (stale) link, key included: the party is gone, so "ended", not a key problem
+const KEY = (hst.invite.match(/#k=([\w-]{43})$/) || [])[1];
+await hp.goto((HOT ? "https://www.hotstar.com/in/movies/fake-movie/1260000001/watch?npParty=" + room : "https://www.netflix.com/watch/12345?npParty=" + room) + "#npKey=" + KEY);
 const n6 = await until(async () => /ended/.test(await noticeText(hp)) && (await noticeText(hp)), 25000);
 check("stale invite shows 'party ended' notice", !!n6, n6 || "");
 

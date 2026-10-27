@@ -38,10 +38,10 @@ await gp.goto(hst.invite);
 const inviteText = await gp.textContent("body");
 check("invite page names YouTube", /Join on YouTube/.test(inviteText) && !/Netflix/.test(inviteText));
 const joinHref = await gp.getAttribute("a.btn", "href");
-check("invite links to the YouTube watch page", /^https:\/\/www\.youtube\.com\/watch\?v=aaaaaaaaaaa&npParty=/.test(joinHref), joinHref);
+check("invite links to the YouTube watch page, key in its #fragment", /^https:\/\/www\.youtube\.com\/watch\?v=aaaaaaaaaaa&npParty=[a-z0-9]+#npKey=[\w-]{43}$/.test(joinHref) && joinHref.endsWith(hst.invite.split("#k=")[1]), joinHref);
 await Promise.all([gp.waitForNavigation(), gp.click("a.btn")]);
 check("guest joins", !!(await until(async () => (await people(gp)).length === 2, 20000)));
-check("invite code removed from the address bar", !/npParty/.test(gp.url()) && /v=aaaaaaaaaaa/.test(gp.url()), gp.url());
+check("invite code and key removed from the address bar", !/npParty|npKey/.test(gp.url()) && /v=aaaaaaaaaaa/.test(gp.url()), gp.url());
 
 // 3. playback sync through the HTML5 <video> in #movie_player
 await hp.evaluate(() => document.querySelector("#movie_player video").pause());
@@ -55,6 +55,7 @@ await gp.locator(".np-input").click();
 await gp.keyboard.type("k j l f m  ok");
 await gp.keyboard.press("Enter");
 check("YouTube hotkeys don't fire while typing in chat", (await gp.evaluate(() => window.__hotkeys)) === 0, String(await gp.evaluate(() => window.__hotkeys)));
+check("encrypted chat works on YouTube (host reads it, with the guest's name)", !!(await until(() => shadow(hp, (r) => { return [...r.querySelectorAll(".np-msg")].some((m) => m.querySelector(".np-author")?.textContent === "Rahul" && m.querySelector(".np-bubble").firstChild.textContent === "k j l f m  ok"); }), 6000)));
 
 // 4. ads: the guest gets an ad
 await gp.evaluate(() => window.__ad(true));

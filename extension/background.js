@@ -103,9 +103,54 @@ async function gifMedia(url) {
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return { dataUrl: `data:${type.split(";")[0]};base64,${btoa(bin)}` };
 }
+// ---- room keys (end-to-end encryption). Each tab's party key is kept in chrome.storage.session:
+// in memory only (never written to disk, never synced to Google, gone when the browser closes),
+// and out of reach of the streaming site's own scripts. Keyed by tab and party code, so reloads,
+// episode changes and reconnects keep it; deleted when the party ends, the tab leaves it or closes.
+const KEY_RE = /^[A-Za-z0-9_-]{43}$/;
+const CODE_RE = /^[a-z0-9]{4,16}$/;
+const keyName = (tabId, code) => `rk:${tabId}:${code}`;
+async function roomKey(msg, tabId) {
+  const code = String(msg.code || "");
+  if (!CODE_RE.test(code)) return { error: "bad code" };
+  const k = keyName(tabId, code);
+  if (msg.op === "set") {
+    if (!KEY_RE.test(String(msg.key || ""))) return { error: "bad key" };
+    await chrome.storage.session.set({ [k]: msg.key });
+    return { ok: true };
+  }
+  if (msg.op === "get") return { key: (await chrome.storage.session.get(k))[k] || null };
+  if (msg.op === "del") {
+    await chrome.storage.session.remove(k);
+    return { ok: true };
+  }
+  return { error: "bad op" };
+}
+async function tabKeys(tabId) {
+  const all = await chrome.storage.session.get(null);
+  return Object.keys(all).filter((k) => k.startsWith(`rk:${tabId}:`)).map((k) => [k, all[k]]);
+}
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const ks = await tabKeys(tabId);
+  if (ks.length) await chrome.storage.session.remove(ks.map(([k]) => k));
+});
+// a tab swapped for a prerendered one gets a new id: its keys move with it
+chrome.tabs.onReplaced.addListener(async (added, removed) => {
+  const ks = await tabKeys(removed);
+  if (!ks.length) return;
+  await chrome.storage.session.set(Object.fromEntries(ks.map(([k, v]) => [k.replace(`rk:${removed}:`, `rk:${added}:`), v])));
+  await chrome.storage.session.remove(ks.map(([k]) => k));
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // only our own content scripts and pages
   if (sender.id !== chrome.runtime.id) return;
+  if (msg?.cmd === "roomKey") {
+    // content scripts only: the key belongs to the tab it came from
+    if (!sender.tab || !Number.isInteger(sender.tab.id)) return sendResponse({ error: "no tab" });
+    roomKey(msg, sender.tab.id).then(sendResponse, () => sendResponse({ error: "storage" }));
+    return true;
+  }
   if (msg?.cmd === "gifs") {
     gifSearch(msg).then(sendResponse);
     return true;

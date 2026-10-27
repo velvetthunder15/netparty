@@ -18,6 +18,7 @@
   .muted { color: #8E89A6; font-size: 14px; }
   ul { padding-left: 20px; }
   li { margin: 6px 0; }
+  code { background: #1A1726; padding: 1px 5px; border-radius: 5px; }
   footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid #221F33; color: #8E89A6; font-size: 13px; }
 </style>
 </head>
@@ -26,27 +27,31 @@
   <a class="top" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#B05CFF"/></linearGradient></defs><path d="M4 6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-7l-5 4v-4.3A4 4 0 0 1 4 14z" fill="url(#g)" opacity=".55"/><path d="M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z" fill="url(#g)"/><path d="M17 14.5v7l6-3.5z" fill="#fff"/></svg>NetParty</a>
 
   <h1>Privacy Policy</h1>
-  <p class="muted">Last updated 27 October 2026</p>
+  <p class="muted">Last updated 27 October 2026 (end-to-end encrypted chat)</p>
 
   <p>NetParty is a free browser extension that lets friends watch a video together in sync, with text and voice chat, GIFs and emoji reactions. It works on Netflix, JioHotstar and YouTube. It is run by Chirag Rasane. This policy explains what the extension and its sync server handle, and why.</p>
 
   <h2>No accounts, no tracking</h2>
   <p>NetParty has no sign-up and no accounts. It has no analytics, advertising or tracking code, and we never sell or share your data.</p>
 
+  <h2>End-to-end encryption</h2>
+  <p>Party chat is end-to-end encrypted. When a party starts, the host's browser creates a random 256-bit key. The key is part of the invite link, after the <code>#</code> (browsers never send that part of a link to any server), and is kept only in the browsers of the people in the party, for that tab, until they leave. Chat messages, GIFs, reactions, display names and profile pictures, and the setup messages for voice calls, are encrypted with this key (AES-256-GCM) before they leave your browser. Our sync server only ever receives, relays and stores the encrypted form, and cannot read it. Anyone who has the full invite link can join the party and read its chat, so share the link only with people you want there.</p>
+  <p>The sync server can still see what it needs to run the party: the party code, a random member ID for each person, when messages are sent and roughly how large they are (sizes are rounded up), playback state (play, pause, position, and the ID of the video being watched, which the invite page also uses), how many people are in the party, and connection data such as IP addresses.</p>
+
   <h2>What the extension handles</h2>
   <ul>
-    <li><strong>Display name and picture.</strong> The name you choose and your profile picture (an emoji you pick, such as 🐼 or 🍕), shown to others in your party. Both are stored in your browser and sent to the sync server while you're in a party.</li>
-    <li><strong>Chat messages.</strong> What you type or send in the party chat (text, emoji, links and GIFs), relayed to everyone in that party.</li>
-    <li><strong>Reactions.</strong> When you tap a reaction, that emoji, with your name and picture, is relayed to the people in your party so it floats over their video. Reactions are not stored.</li>
-    <li><strong>GIF searches.</strong> When you open the GIF picker, your search terms (suggested from the title you're watching) are sent to our server, which asks <a href="https://klipy.com">KLIPY</a> for matching GIFs. KLIPY receives the search terms from our server, not your name or party. Results are cached on our server's edge for about 10 minutes, without recording who searched. The GIF images themselves load from KLIPY's servers, so KLIPY can see your IP address as any website would, under <a href="https://klipy.com/support/privacy-policy">its own privacy policy</a>. A GIF you send is shared in the party chat as a link to KLIPY's image.</li>
-    <li><strong>Party and playback state.</strong> The party code, the ID of what's playing (a Netflix, JioHotstar or YouTube video ID), and play, pause and seek events with timestamps, so everyone stays in sync.</li>
-    <li><strong>Voice chat.</strong> Voice runs peer to peer between party members over WebRTC. The server only passes the connection setup messages that let browsers find each other. Your audio is not sent to or recorded by our server. Microphone access is requested only when you turn voice on.</li>
-    <li><strong>Local settings.</strong> Your name, picture, chat text size, chosen reactions, recently used emoji, server setting and party state are kept in your browser's extension storage and session storage.</li>
+    <li><strong>Display name and picture.</strong> The name you choose and your profile picture (an emoji you pick, such as 🐼 or 🍕), shown to others in your party. Both are stored in your browser and sent to the people in your party end-to-end encrypted; the sync server only passes on the encrypted form.</li>
+    <li><strong>Chat messages.</strong> What you type or send in the party chat (text, emoji, links and GIFs), end-to-end encrypted and relayed by the sync server to everyone in that party.</li>
+    <li><strong>Reactions.</strong> When you tap a reaction, that emoji is end-to-end encrypted and relayed to the people in your party so it floats over their video. Reactions are not stored.</li>
+    <li><strong>GIF searches.</strong> When you open the GIF picker, your search terms (suggested from the title you're watching) are sent to our server, which asks <a href="https://klipy.com">KLIPY</a> for matching GIFs. Searches can't be end-to-end encrypted, because KLIPY has to read them to find GIFs. KLIPY receives the search terms from our server, not your name or party, and our server doesn't log them. Results are cached on our server's edge for about 10 minutes, without recording who searched. The GIF images themselves load from KLIPY's servers, so KLIPY can see your IP address as any website would, under <a href="https://klipy.com/support/privacy-policy">its own privacy policy</a>. A GIF you send is shared in the (encrypted) party chat as a link to KLIPY's image.</li>
+    <li><strong>Party and playback state.</strong> The party code, the ID of what's playing (a Netflix, JioHotstar or YouTube video ID), and play, pause and seek events with timestamps, so everyone stays in sync. These are not encrypted: the server needs them to keep everyone in sync and to send invited friends to the right title.</li>
+    <li><strong>Voice chat.</strong> Voice runs peer to peer between party members over WebRTC, which encrypts the audio. The server only passes on the connection setup messages that let browsers find each other, and those are end-to-end encrypted too, so the server can't read the network addresses inside them. Your audio is not sent to or recorded by our server. Microphone access is requested only when you turn voice on.</li>
+    <li><strong>Local settings.</strong> Your name, picture, chat text size, chosen reactions and server setting are kept in your browser's extension storage (which your browser may sync to your own account if you use browser sync); recently used emoji and party state stay on your device. A party's encryption key is kept only in your browser's memory for that tab, never written to disk or synced, and is deleted when the party ends or you leave it, and at the latest when you close the tab or the browser.</li>
   </ul>
   <p>NetParty does not read your streaming account details, passwords, payment information or viewing history. It runs only on the supported sites: Netflix, JioHotstar and YouTube.</p>
 
   <h2>How long we keep it</h2>
-  <p>A party, with its member names and pictures and up to its last 150 chat messages, is kept on the sync server while it's active, so people who reload can rejoin. It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours. Basic request logs kept by our hosting provider follow its standard retention.</p>
+  <p>While a party is active, the sync server keeps its encrypted data so people who reload can rejoin: the members' encrypted names and pictures and the party's last 150 chat lines (encrypted messages, and notes of who joined or left). It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours (our hosting provider's point-in-time recovery can keep encrypted copies of the storage for up to 30 days; nobody can read them without the party's key). Basic request logs kept by our hosting provider follow its standard retention; they never contain chat content.</p>
 
   <h2>Where it's processed</h2>
   <p>The sync server runs on Cloudflare Workers. Cloudflare processes connection data, such as IP addresses, to deliver the service under its own privacy policy.</p>

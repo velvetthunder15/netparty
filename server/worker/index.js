@@ -1,6 +1,6 @@
 // NetParty sync server on Cloudflare Workers. All WebSocket connections go to one
 // Durable Object ("hub"), which runs the same room logic as the Node server.
-import { createHub, defaultIceServers, joinPage } from "../core.js";
+import { createHub, defaultIceServers, joinPage, joinPageHeaders } from "../core.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "../gifs.js";
 import extensionZip from "./public/netparty-extension.zip";
 // landing site (copied from the Hark-built page) bundled into the Worker
@@ -14,6 +14,7 @@ import imgNeon from "./site/still-neon.jpg";
 import imgFriends from "./site/friends.jpg";
 
 const HTML = "text/html; charset=utf-8";
+const MAINTAIN_MS = 15 * 60 * 1000;
 const SITE = {
   "/": [siteIndex, HTML],
   "/index.html": [siteIndex, HTML],
@@ -32,15 +33,36 @@ export class PartyHub {
     this.env = env;
     // parties are mirrored to Durable Object storage so a restart (deploys, Cloudflare
     // moving the object) doesn't lose them; clients reconnect and rejoin on their own
+    // (only encrypted chat, profiles and key checks are stored; see core.js). An alarm every
+    // 15 minutes deletes parties that have been idle for nearly 6 hours.
     const kv = state.storage;
+    this.kv = kv;
     this.hub = createHub({
       iceServers: defaultIceServers(env),
       store: {
         get: (id) => kv.get("room:" + id),
-        put: (id, obj) => kv.put("room:" + id, obj),
+        put: async (id, obj) => {
+          await kv.put("room:" + id, obj);
+          await this.ensureAlarm();
+        },
         del: (id) => kv.delete("room:" + id),
+        list: async () => [...(await kv.list({ prefix: "room:" }))].map(([k, v]) => [k.slice(5), v]),
       },
     });
+    this.ensureAlarm().catch(() => {});
+  }
+
+  async ensureAlarm() {
+    if (this.alarmSet) return;
+    this.alarmSet = true;
+    if ((await this.kv.getAlarm()) == null) await this.kv.setAlarm(Date.now() + MAINTAIN_MS);
+  }
+
+  async alarm() {
+    this.alarmSet = false;
+    await this.hub.maintain();
+    const left = await this.kv.list({ prefix: "room:", limit: 1 });
+    if (left.size || this.hub.rooms.size) await this.ensureAlarm();
   }
 
   async fetch(request) {
@@ -50,7 +72,7 @@ export class PartyHub {
       const room = await this.hub.findRoom(j[1]);
       return new Response(joinPage(room, j[1], { hasDownload: true }), {
         status: room ? 200 : 404,
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        headers: await joinPageHeaders(),
       });
     }
     const live = url.pathname.match(/^\/live\/([a-z0-9]{4,16})$/i);

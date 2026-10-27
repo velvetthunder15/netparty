@@ -8,9 +8,12 @@ Supported: **Netflix** (`netflix.com/watch/...`), **JioHotstar**
 (`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported).
 
 Features
+- **End-to-end encrypted chat**: messages, GIFs, reactions, names and pictures (and voice-call setup)
+  are encrypted in the browser with a key that lives only in the invite link; the server can't read them
+  (see [End-to-end encryption](#end-to-end-encryption))
 - Playback sync: play, pause, seek, and episode changes follow the party
   (server-clock sync, 1 s seek threshold, drift correction every 3 s)
-- Invite links: `https://netparty.tech/j/<code>` opens an invite page that sends
+- Invite links: `https://netparty.tech/j/<code>#k=<key>` opens an invite page that sends
   friends to the right title (auto-joins) and lets them download the extension while the party is live
 - Split-screen chat: the player shrinks to make room for a docked chat column (nothing covers the
   player controls); hide it to go back to full width
@@ -50,7 +53,7 @@ No server setup needed: the extension uses the hosted server by default.
 | Action | How |
 | --- | --- |
 | Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar) or next to Like under a YouTube video: starts the party. Or, on a playing title, NetParty icon → **Start a party** |
-| Join a party | Open the invite link, or icon → paste the link or code → **Join** |
+| Join a party | Open the invite link, or icon → paste the **full** invite link → **Join** (the code alone can't unlock the encrypted chat) |
 | Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
 | Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
@@ -73,6 +76,9 @@ Tips
 
 - **Nothing happens**: reload the Netflix or JioHotstar tab after installing or updating the extension.
 - **"Party not found"**: the host's party ended or the code is wrong; ask for a fresh link.
+- **"Paste the full invite link"**: the link was cut off before `#k=…` (or only the code was shared). Ask for the whole link.
+- **"Can't decrypt messages — check your invite link"**: the key in the link doesn't belong to that party (a mangled or mixed-up link). Ask for the full link again.
+- **"Update NetParty …"**: you (or a friend) still run 1.6 or older; 1.7 parties are encrypted and need 1.7 on everyone's browser.
 - **No mic prompt / no audio**: click the lock icon in the address bar → allow Microphone for the site, then rejoin voice.
 - **Netflix error after a seek**: reload the tab; the party rejoins automatically.
 - **"GIFs aren't available right now"**: the server has no KLIPY key yet (see GIFs below).
@@ -137,6 +143,50 @@ may fail to connect; add a TURN server with env vars:
 4. Chat panel on the right; **Join voice chat** for voice (allow the mic
    prompt for the site). Use headphones to avoid echo.
 
+## End-to-end encryption
+
+Since 1.7 everything people *say* in a party is end-to-end encrypted. The sync server (and Cloudflare,
+and anyone who could read its storage or logs) only ever handles ciphertext.
+
+How it works
+- **The key.** The host's browser makes a random 256-bit AES-GCM key (WebCrypto) when the party starts.
+  It travels only in the invite link's fragment, `https://netparty.tech/j/<code>#k=<key>` (browsers never
+  send the part after `#` to a server). The invite page reads it with its own script (which may not fetch
+  anything: `connect-src 'none'`, script pinned by hash), checks it against the party's encrypted key
+  check, and passes it on in the watch link's fragment (`…?npParty=<code>#npKey=<key>`). The extension
+  takes it out of the address bar at `document_start`, before the streaming site's scripts run, and keeps it
+  in `chrome.storage.session` for that tab (memory only, not synced, not readable by the site; deleted when
+  the party ends, you leave, or the tab closes). Reloads, episode/video changes and reconnects keep it.
+- **What is encrypted.** Chat text, GIF messages (the KLIPY URL), reactions, display names and pictures (one
+  encrypted "profile" per member), and WebRTC voice setup (SDP and ICE candidates, which contain IP addresses).
+  Each message gets a fresh 96-bit IV; the additional data binds it to the party code, the kind of message and
+  the sender's public member id, so it can't be replayed into another party or passed off as someone else's.
+  Plaintext is padded to 64-byte steps so sizes leak less. Format: `base64url(0x01 | IV | ciphertext+tag)`.
+- **Checks move to the receiver.** The server can't see content, so each browser checks what it decrypts:
+  GIFs must be `https` on KLIPY's media hosts, reactions and pictures must be a single emoji, names at most 24
+  characters with no control characters, text at most 500. Anything else (or anything that fails to decrypt) is
+  dropped. The server still checks shape and size of every ciphertext and rate-limits chat, reactions and profiles.
+- **Join/leave lines** ("Rahul joined") are stored as "member *pid* joined" and named by each browser.
+- **Seats.** Each tab has a private 128-bit reconnect id (`cid`) that only the server sees; everyone else sees
+  a random public member id (`pid`). Knowing someone's pid can't take their seat or the host role.
+- **Joining needs the full link.** A bare code, or a link without a valid key, is refused with
+  "Paste the full invite link — the code alone can't unlock the encrypted chat." A wrong key is caught before
+  joining: "Can't decrypt messages — check your invite link".
+- **Versions.** 1.7 parties are flagged encrypted; 1.6 and older clients get "Update NetParty …" instead of a
+  broken chat, and 1.7 refuses plaintext parties ("ask the host to update").
+
+What the server can still see: the party code; members' random ids and how many there are; when messages,
+reactions and voice-setup messages are sent and roughly how big they are; playback state (playing/paused,
+position, timestamps) and the video id of what's playing (the invite page needs it to send friends to the right
+title), plus who is in voice and muted/speaking; IP addresses and connection times (and Cloudflare's own request
+logs); GIF search terms, which have to go to KLIPY through our `/api/gifs` proxy (not logged; nothing about the
+party or names is sent with them).
+
+Limits: anyone with the full link can join and read the chat, so share it like a key. The panel is drawn inside
+the streaming site's page, so that site's own scripts could in principle read what's on screen. The link
+(with its key) can end up in your browser history, like any link you open. The server is still trusted to relay
+messages honestly (it can't read or forge them, but it could drop or delay them).
+
 ## How it works
 
 - `extension/background.js` – holds the WebSocket per tab (outside Netflix's CSP)
@@ -147,10 +197,11 @@ may fail to connect; add a TURN server with env vars:
 - `extension/page.js` – runs in the site's page: drives Netflix's internal player API
   (setting `video.currentTime` directly triggers Netflix error M7375) and the plain
   HTML5 `<video>` on JioHotstar
-- `server/core.js` – rooms, state relay, chat, avatars, reactions, WebRTC signaling (shared)
+- `server/core.js` – rooms, seats (private cid → public pid), state relay, encrypted chat/profile/reaction
+  relay with size checks and rate limits, encrypted WebRTC signaling relay, invite page (shared)
 - `server/gifs.js` – KLIPY GIF search proxy (shared by Node and the Worker)
 - `server/server.js` – Node transport; `server/worker/` – Cloudflare transport
-- `GET /j/<code>` – invite page; `/j/<code>/netparty.zip` – extension download, only while that party is live
+- `GET /j/<code>` – invite page (reads the key from `#k=` in the browser only); `/j/<code>/netparty.zip` – extension download, only while that party is live
   (Worker bundles it: run `npm run deploy` in `server/`; Node: set `EXTENSION_ZIP=/path/to.zip`)
 - `e2e/` – real-Chromium tests: two browsers, fake Netflix/JioHotstar/YouTube pages, a mock KLIPY;
   `run.mjs` (invite → join → chat → sync), `lifecycle.mjs`, `features.mjs` (avatars, emoji, reactions,
@@ -203,3 +254,15 @@ No Teleparty or REA code is included; NetParty is an original implementation.
 - **Links** in chat are clickable; **chat text size** Small / Medium / Large.
 - Protocol additions are optional fields and new message types (`avatar`, `react`, chat `gif`), so 1.5
   clients keep working in the same party (they see "GIF" for a GIF and no reactions).
+
+## v1.7.0
+
+- **End-to-end encrypted chat** (see [End-to-end encryption](#end-to-end-encryption)): messages, GIFs, reactions,
+  names, pictures and voice setup are encrypted with a per-party key that lives only in the invite link and the
+  participants' browsers. Invite links now look like `https://netparty.tech/j/<code>#k=<key>`; **share the full
+  link** (a bare code no longer works). 1.6 clients are asked to update.
+- **Security fix:** chat history no longer exposes anyone's reconnect id. Members are identified by a random
+  public id; the private 128-bit per-tab id only ever goes to the server, so nobody can reclaim someone else's
+  seat or the host role.
+- The server stores only ciphertext, and an idle saved party is deleted within 6 hours (checked every 15 min).
+- The invite page names who invited you by decrypting it in your browser, and refuses links without a valid key.

@@ -2,7 +2,7 @@
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import fs from "node:fs";
-import { createHub, defaultIceServers, joinPage } from "./core.js";
+import { createHub, defaultIceServers, joinPage, joinPageHeaders } from "./core.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "./gifs.js";
 
 const PORT = Number(process.env.PORT || 8787);
@@ -58,7 +58,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "application/zip", "content-disposition": 'attachment; filename="netparty.zip"' });
       return fs.createReadStream(ZIP).pipe(res);
     }
-    res.writeHead(room ? 200 : 404, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.writeHead(room ? 200 : 404, await joinPageHeaders());
     return res.end(joinPage(room, j[1], { hasDownload: !!ZIP }));
   }
   if (req.url === "/health") {
@@ -89,7 +89,7 @@ setInterval(() => {
     ws.ping();
   }
 }, 30_000).unref();
-setInterval(() => hub.sweep(), 30_000).unref();
+setInterval(() => hub.maintain().catch(() => {}), 30_000).unref();
 
 server.listen(PORT, () => console.log(`NetParty server listening on :${PORT}`));
 

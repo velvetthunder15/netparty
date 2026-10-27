@@ -2,12 +2,17 @@
 // chat text size, links, GIFs (unavailable without a key; then a mock KLIPY via a second
 // local server; with CSP=strict the fake Netflix blocks KLIPY images so the blob: path is used).
 import { spawn } from "node:child_process";
-import { launch, shadow, until, status, people, check, summary, out, sleep, SERVER } from "./lib.mjs";
+// 1.7: everything goes through a recording proxy (tap) in front of the server, and at the end no
+// WebSocket frame may contain a name, picture, message, GIF link, reaction, SDP/ICE, the room key
+// or someone else's cid. Also: voice over encrypted signaling, reload keeps decryption, bare code /
+// missing / malformed / wrong key are refused with clear messages.
+import { launch, shadow, until, status, people, check, summary, out, sleep, SERVER, tap, leaks, keyOf, noticeText } from "./lib.mjs";
 const STRICT = process.env.CSP === "strict";
 const SITE = "https://www.netflix.com/watch/12345";
+const T = tap(8790, 8787);
 
-const H = await launch("/tmp/pw-fh", { name: "Chirag", avatar: "🦊" });
-const G = await launch("/tmp/pw-fg", { name: "Rahul", avatar: "🐼" });
+const H = await launch("/tmp/pw-fh", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url } });
+const G = await launch("/tmp/pw-fg", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url } });
 const hp = await H.ctx.newPage(), gp = await G.ctx.newPage();
 const errors = [];
 for (const [p, n] of [[hp, "host"], [gp, "guest"]]) {
@@ -24,9 +29,16 @@ const created = await H.sw.evaluate(async (url) => {
   return chrome.tabs.sendMessage(t.id, { cmd: "create" });
 }, SITE);
 check("party created", !!created?.invite, JSON.stringify(created));
+const KEY = keyOf(created.invite);
+check("invite link carries the room key in its #fragment", !!KEY && created.invite.startsWith(T.url.replace("ws:", "http:") + "/j/"), created.invite);
+const ROOM = created.invite.match(/\/j\/([a-z0-9]+)/)[1];
 await gp.goto(created.invite);
+check("invite page names the host (decrypted in the page)", !!(await until(async () => /^Chirag invited you/.test((await gp.textContent("h1")).trim()), 5000)), await gp.textContent("h1"));
+check("Join button carries the key to the watch page's #fragment", (await gp.getAttribute("a.btn", "href")) === `https://www.netflix.com/watch/12345?npParty=${ROOM}#npKey=${KEY}`, await gp.getAttribute("a.btn", "href"));
 await Promise.all([gp.waitForNavigation(), gp.click("a.btn")]);
 check("guest joined", !!(await until(async () => (await people(gp)).length === 2, 20000)));
+check("key and code taken out of the guest's address bar", !/npKey|npParty/.test(gp.url()) && !gp.url().includes(KEY), gp.url());
+check("the site's own scripts can't find the key in the page's storage", !(await gp.evaluate((k) => JSON.stringify({ ...sessionStorage, ...localStorage }).includes(k), KEY)));
 
 // ---- avatars
 const pics = (p) => shadow(p, (r) => { return [...r.querySelectorAll(".np-person")].map((n) => n.querySelector(".np-pname").textContent + "=" + n.querySelector(".np-avatar-pic").textContent); });
@@ -224,7 +236,81 @@ check("popup has no horizontal overflow", popW.sw <= popW.w, JSON.stringify(popW
 await pop.screenshot({ path: "popup-16.png", fullPage: true });
 await hp.screenshot({ path: STRICT ? "host-16-strict.png" : "host-16.png" });
 
+// ---- voice over encrypted signaling
+await shadow(gp, (r) => { r.querySelector(".np-join-voice").click(); });
+await sleep(500);
+await shadow(hp, (r) => { r.querySelector(".np-join-voice").click(); });
+const linked = (p) => shadow(p, (r) => { return [...r.querySelectorAll(".np-person[data-link]")].map((n) => n.dataset.link).join(); });
+const vOk = await until(async () => (await linked(hp)) === "connected" && (await linked(gp)) === "connected", 20000);
+check("voice connects peer to peer with encrypted signaling", !!vOk, JSON.stringify([await linked(hp), await linked(gp)]));
+const sig = T.frames.filter((f) => f.dir === "up" && f.text.includes('"type":"signal"'));
+check("signaling went through the server as ciphertext only", sig.length >= 2 && sig.every((f) => { const d = JSON.parse(f.text).data; return Object.keys(d).sort().join() === "ct,to"; }), String(sig.length));
+await shadow(hp, (r) => { r.querySelector(".np-hang")?.click(); });
+await shadow(gp, (r) => { r.querySelector(".np-hang")?.click(); });
+
+// ---- reload keeps decryption (the guest's socket goes back to the tap; 8789 was for the GIF API only)
+await G.sw.evaluate((u) => chrome.storage.sync.set({ serverUrl: u }), T.url);
+await gp.reload();
+const afterReload = await until(() => shadow(gp, (r) => { const t = [...r.querySelectorAll(".np-bubble")].map((n) => n.textContent).join("|"); const au = [...r.querySelectorAll(".np-author")].map((n) => n.textContent); return t.includes("hello panda") && t.includes("hi from the panda") && au.includes("Chirag") && r.querySelectorAll(".np-gif").length >= 1 && { au: au.slice(0, 2), n: r.querySelectorAll(".np-bubble").length }; }), 20000);
+check("guest reload: history decrypts again (names, messages, GIF)", !!afterReload, JSON.stringify(afterReload));
+check("still 2 in the party after reload", (await people(gp)).length === 2 && (await people(hp)).length === 2);
+await gp.locator(".np-toggle").click(); // the chat was hidden before the reload, and stays so
+await gp.locator(".np-input").click();
+await gp.keyboard.type("after reload PLAINTEXT-MARKER-e2e");
+await gp.keyboard.press("Enter");
+check("chat works after reload", !!(await until(async () => (await mav(hp)).some((x) => x.endsWith("after reload PLAINTEXT-MARKER-e2e")))));
+
+// ---- invite links without (the right) key
+const X = await launch("/tmp/pw-fx", { name: "Eve Intruder", avatar: "🐸", extra: { serverUrl: T.url } });
+const xp = await X.ctx.newPage();
+xp.on("pageerror", (e) => errors.push("x: " + e.message));
+const OTHER = KEY.slice(0, 40) + (KEY.slice(40) === "AAA" ? "BAA" : "AAA");
+const inviteBase = created.invite.split("#")[0];
+await xp.goto(inviteBase);
+check("invite page without a key: says the link is incomplete, no Join button", /missing the key/.test(await xp.textContent("#warn")) && !(await xp.$("a.btn")), await xp.textContent("#warn"));
+await xp.goto(inviteBase + "#k=" + OTHER); // same page, new #fragment: the page starts over by itself
+await xp.waitForLoadState("load");
+check("invite page with a wrong key: can't decrypt, no Join button", !!(await until(async () => /Can't decrypt/.test((await xp.textContent("#warn")) || ""), 5000)) && !(await xp.$("a.btn")), await xp.textContent("#warn"));
+check("…and doesn't show who invited you", !/Chirag/.test(await xp.textContent("h1")));
+await xp.goto("about:blank");
+await xp.goto(inviteBase + "#k=" + OTHER);
+check("fresh visit with a wrong key: same", !!(await until(async () => /Can't decrypt/.test((await xp.textContent("#warn")) || ""), 5000)) && !(await xp.$("a.btn")));
+await xp.goto(created.invite);
+check("…and the right key in that tab works (Join button shown)", !!(await until(async () => (await xp.locator("a.btn:not([hidden])").count().catch(() => 0)) === 1, 5000)));
+await xp.goto(`${SITE}?npParty=${ROOM}`);
+const nCode = await until(async () => /Paste the full invite link/.test(await noticeText(xp)) && (await noticeText(xp)), 20000);
+check("watch link with just the code: 'paste the full invite link'", !!nCode, nCode || (await noticeText(xp)));
+await xp.goto(`${SITE}?npParty=${ROOM}#npKey=abc`);
+const nBad = await until(async () => /Paste the full invite link/.test(await noticeText(xp)) && (await noticeText(xp)), 20000);
+check("malformed key: same message", !!nBad, nBad || "");
+await xp.goto(`${SITE}?npParty=${ROOM}#npKey=${OTHER}`);
+const nWrong = await until(async () => /Can't decrypt messages — check your invite link/.test(await noticeText(xp)) && (await noticeText(xp)), 20000);
+check("wrong key: 'Can't decrypt messages — check your invite link'", !!nWrong, nWrong || (await noticeText(xp)));
+check("…the wrong key is taken out of the address bar too", !/npKey/.test(xp.url()), xp.url());
+check("…and that browser never joined (host still sees 2)", (await people(hp)).length === 2 && !(await status(X, xp)).roomId);
+const xid = X.sw.url().split("/")[2];
+const xpop = await X.ctx.newPage();
+await xpop.goto(`chrome-extension://${xid}/popup.html`);
+await xpop.waitForTimeout(500);
+const popJoin = async (v) => { await xpop.evaluate((x) => { document.getElementById("vIdle").classList.remove("hidden"); document.getElementById("code").value = x; document.getElementById("error").textContent = ""; document.getElementById("join").click(); }, v); await sleep(300); return xpop.textContent("#error"); };
+check("popup: bare code → 'paste the full invite link'", /Paste the full invite link — the code alone can't unlock the encrypted chat/.test(await popJoin(ROOM)));
+check("popup: invite link without the key → same", /Paste the full invite link/.test(await popJoin(inviteBase)));
+check("popup: placeholder asks for the full link", (await xpop.getAttribute("#code", "placeholder")) === "Paste the full invite link");
+await X.ctx.close();
+
+// ---- what the server saw
+const cids = [await hp.evaluate(() => sessionStorage.getItem("netpartyCid")), await gp.evaluate(() => sessionStorage.getItem("netpartyCid"))];
+check("cids are 128-bit random hex", cids.every((c) => /^[0-9a-f]{32}$/.test(c || "")), JSON.stringify(cids));
+check("the tap saw the party's traffic", T.frames.filter((f) => f.text.includes('"type":"chat"') && f.text.includes('"ct":"')).length >= 6, String(T.frames.length));
+const secret = ["Chirag", "Rahul", "Eve Intruder", "🦊", "🐼", "🐸", "🍕", "🐙", "hi from the panda", "hello panda", "so good", "🦄", "example.com", "www.test.org", "onerror", "static.klipy.com", "klipy", "/test/", "😂", "💀", "🥰", "🔥", "😱", "PLAINTEXT-MARKER", "candidate", "a=fingerprint", "v=0", "Fake Movie", KEY, OTHER];
+check("no WebSocket frame contains names, pictures, messages, links, GIF URLs, reactions, SDP/ICE, title or the key", leaks(T.frames, secret).length === 0, JSON.stringify(leaks(T.frames, secret)));
+check("no cid ever sent to a browser", leaks(T.frames.filter((f) => f.dir === "down"), cids).length === 0);
+check("no plaintext fields in any frame", !T.frames.some((f) => /"(name|text|emoji|avatar|payload|byName|gif)":/.test(f.text)), T.frames.find((f) => /"(name|text|emoji|avatar|payload|byName|gif)":/.test(f.text))?.text.slice(0, 160));
+const srvLog = (await import("node:fs")).readFileSync("/tmp/np-server.log", "utf8");
+check("server log has none of it either", leaks([{ text: srvLog }], secret).length === 0, JSON.stringify(leaks([{ text: srvLog }], secret)));
+
 check("no script errors on the pages", errors.length === 0, errors.join(" | "));
+T.close();
 srv.kill();
 const f = summary("FEATURE");
 await H.ctx.close();
