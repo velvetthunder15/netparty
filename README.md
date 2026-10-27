@@ -266,3 +266,7 @@ No Teleparty or REA code is included; NetParty is an original implementation.
   seat or the host role.
 - The server stores only ciphertext, and an idle saved party is deleted within 6 hours (checked every 15 min).
 - The invite page names who invited you by decrypting it in your browser, and refuses links without a valid key.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Netflix, JioHotstar and YouTube are trademarks of their owners; NetParty is not affiliated with them.

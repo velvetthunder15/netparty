@@ -10,8 +10,11 @@
     "build:zip": "cd ../extension && rm -f ../server/worker/public/netparty-extension.zip && mkdir -p ../server/worker/public && zip -qr ../server/worker/public/netparty-extension.zip . -x '.*'",
     "deploy": "npm run build:zip && cd worker && npx wrangler deploy"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "ws": "^8.18.0"
-  }
+  },
+  "license": "MIT"
 }
