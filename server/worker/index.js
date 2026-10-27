@@ -15,6 +15,9 @@ import imgJio from "./site/jiohotstar-star.png";
 import svgNetflix from "./site/netflix.svg";
 import svgYoutube from "./site/youtube.svg";
 import imgOg from "./site/og.jpg";
+import imgIcon512 from "./site/icon-512.png";
+import imgFavicon48 from "./site/favicon-48.png";
+import imgAppleTouch from "./site/apple-touch-icon.png";
 
 const HTML = "text/html; charset=utf-8";
 // link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
@@ -24,12 +27,66 @@ const OG_TAGS = `<meta property="og:image" content="https://netparty.tech/og.jpg
 <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://netparty.tech/og.jpg" />
 `;
 const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/i, OG_TAGS + "</head>"));
-const siteIndexOg = withOg(siteIndex);
+
+// SEO layer, applied at load so a recopy of the Hark build keeps it: keyword title and
+// description, canonical, robots, icons, alt text, and JSON-LD built from the visible FAQ.
+const SEO_TITLE = "NetParty: Free Watch Party for Netflix, JioHotstar & YouTube";
+const SEO_DESC = "Watch Netflix, JioHotstar and YouTube together in perfect sync. Free watch party extension with encrypted chat, voice chat and reactions. No sign-up.";
+const stripTags = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+function withSeo(html) {
+  const faq = [...html.matchAll(/<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/gi)]
+    .map((m) => ({ "@type": "Question", name: stripTags(m[1]), acceptedAnswer: { "@type": "Answer", text: stripTags(m[2]) } }));
+  const graph = [
+    { "@type": "WebSite", "@id": "https://netparty.tech/#website", url: "https://netparty.tech/", name: "NetParty", inLanguage: "en" },
+    { "@type": "Organization", "@id": "https://netparty.tech/#org", name: "NetParty", url: "https://netparty.tech/",
+      logo: "https://netparty.tech/icon-512.png", email: "support@netparty.tech", sameAs: ["https://github.com/velvetthunder15/netparty"] },
+    { "@type": "SoftwareApplication", name: "NetParty", url: "https://netparty.tech/", description: SEO_DESC,
+      applicationCategory: "BrowserApplication", operatingSystem: "Windows, macOS, Linux, ChromeOS",
+      image: "https://netparty.tech/og.jpg", publisher: { "@id": "https://netparty.tech/#org" },
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      featureList: "Synced play, pause and seek; end-to-end encrypted chat; voice chat; emoji reactions; GIFs; host controls",
+      license: "https://opensource.org/licenses/MIT" },
+  ];
+  if (faq.length) graph.push({ "@type": "FAQPage", mainEntity: faq });
+  const ld = JSON.stringify({ "@context": "https://schema.org", "@graph": graph }).replace(/</g, "\\u003c");
+  const head = `<link rel="canonical" href="https://netparty.tech/" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta property="og:site_name" content="NetParty" /><meta property="og:locale" content="en_US" />
+<meta name="twitter:title" content="${SEO_TITLE}" /><meta name="twitter:description" content="${SEO_DESC}" />
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<script type="application/ld+json">${ld}</script>
+`;
+  return html
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${SEO_TITLE}</title>`)
+    .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${SEO_DESC}" />`)
+    .replace(/<meta property="og:title"[^>]*>/i, `<meta property="og:title" content="${SEO_TITLE}" />`)
+    .replace('<img src="netflix.svg" alt=""', '<img src="netflix.svg" alt="Netflix"')
+    .replace('<img src="jiohotstar-star.png" alt=""', '<img src="jiohotstar-star.png" alt="JioHotstar"')
+    .replace('<img src="youtube.svg" alt=""', '<img src="youtube.svg" alt="YouTube"')
+    .replace('<img src="still-neon.jpg" alt=""', '<img src="still-neon.jpg" alt="Friends chatting beside a synced video in NetParty"')
+    .replace(/<\/head>/i, head + "</head>");
+}
+const withPrivacySeo = (html) => /rel="canonical"/.test(html) ? html : html.replace(/<\/head>/i,
+  `<link rel="canonical" href="https://netparty.tech/privacy" /><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />\n</head>`);
+const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n\nSitemap: https://netparty.tech/sitemap.xml\n";
+const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://netparty.tech/</loc><lastmod>2026-10-27</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-10-27</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+</urlset>
+`;
+const siteIndexOg = withSeo(withOg(siteIndex));
 const MAINTAIN_MS = 15 * 60 * 1000;
 const SITE = {
   "/": [siteIndexOg, HTML],
-  "/index.html": [siteIndexOg, HTML],
-  "/privacy": [sitePrivacy, HTML],
+  "/privacy": [withPrivacySeo(sitePrivacy), HTML],
+  "/robots.txt": [ROBOTS, "text/plain; charset=utf-8"],
+  "/sitemap.xml": [SITEMAP, "application/xml; charset=utf-8"],
+  "/icon-512.png": [imgIcon512, "image/png"],
+  "/favicon-48.png": [imgFavicon48, "image/png"],
+  "/favicon.ico": [imgFavicon48, "image/png"],
+  "/apple-touch-icon.png": [imgAppleTouch, "image/png"],
   "/hark.css": [siteCss, "text/css; charset=utf-8"],
   "/hark-hero.css": [siteHeroCss, "text/css; charset=utf-8"],
   "/hark.js": [siteJs, "text/javascript; charset=utf-8"],
@@ -188,6 +245,8 @@ export default {
       return Response.redirect("https://netparty.tech" + url.pathname + url.search, 301);
     const isWs = request.headers.get("Upgrade") === "websocket";
     if (!isWs && url.pathname.startsWith("/api/gifs/")) return gifs(request, env, ctx, url);
+    if (!isWs && (url.pathname === "/index.html" || url.pathname === "/privacy.html" || url.pathname === "/privacy/"))
+      return Response.redirect("https://netparty.tech" + (url.pathname === "/index.html" ? "/" : "/privacy") + url.search, 301);
     if (!isWs && (request.method === "GET" || request.method === "HEAD")) {
       const page = SITE[url.pathname];
       if (page) {

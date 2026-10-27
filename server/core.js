@@ -695,6 +695,7 @@ export async function joinPageHeaders() {
     "content-security-policy": cspCache,
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow",
   };
 }
 
