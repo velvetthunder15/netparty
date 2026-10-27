@@ -1,5 +1,5 @@
-// NetParty content script (Netflix + JioHotstar). Owns: the party connection, clock sync,
-// playback sync, text chat, voice chat (WebRTC mesh) and the in-page overlay.
+// NetParty content script (Netflix, JioHotstar, YouTube). Owns: the party connection, clock sync,
+// playback sync, text chat (emoji, GIFs, links), reactions, voice chat (WebRTC mesh) and the in-page overlay.
 (() => {
   if (window.__netpartyLoaded) return;
   window.__netpartyLoaded = true;
@@ -16,11 +16,18 @@
     const s = [...arr].sort((a, b) => a - b);
     return s.length ? s[Math.floor(s.length / 2)] : 0;
   };
-  // ---- platforms. A party's videoId is the Netflix title id ("81234567") or
-  // "hs:" + the JioHotstar watch path ("hs:/in/shows/<show>/<id>/<ep>/<id>/watch").
+  // ---- platforms. A party's videoId is the Netflix title id ("81234567"),
+  // "hs:" + the JioHotstar watch path ("hs:/in/shows/<show>/<id>/<ep>/<id>/watch"),
+  // or "yt:" + the YouTube video id ("yt:dQw4w9WgXcQ", from /watch?v=…).
   const IS_HOTSTAR = /(^|\.)(jio)?hotstar\.com$/.test(location.hostname);
-  const SITE_NAME = IS_HOTSTAR ? "JioHotstar" : "Netflix";
+  const IS_YT = /(^|\.)youtube\.com$/.test(location.hostname);
+  const SITE_NAME = IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : "Netflix";
   const videoIdFromUrl = () => {
+    if (IS_YT) {
+      if (location.pathname !== "/watch") return null; // Shorts, live chat pop-outs etc. aren't supported
+      const v = new URLSearchParams(location.search).get("v");
+      return v && /^[\w-]{11}$/.test(v) ? "yt:" + v : null;
+    }
     if (!IS_HOTSTAR) return (location.pathname.match(/^\/watch\/(\d+)/) || [])[1] || null;
     const path = location.pathname.replace(/\/+$/, "");
     return /\/\d{5,}\/watch$/.test(path) ? "hs:" + path : null;
@@ -28,9 +35,43 @@
   // compare by content id so slug or language-prefix differences don't matter
   const videoKey = (v) => (v && v.startsWith("hs:") ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1] : v);
   const sameVideo = (a, b) => videoKey(a) === videoKey(b);
-  const watchUrl = (videoId, roomId) =>
-    (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) +
-    `?npParty=${roomId}`;
+  const watchUrl = (videoId, roomId) => {
+    if (videoId.startsWith("yt:"))
+      return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId.slice(3))}&npParty=${roomId}`;
+    return (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) + `?npParty=${roomId}`;
+  };
+  // YouTube plays ads in the main player: no sync while one is on screen
+  const adPlaying = () => {
+    if (!IS_YT) return false;
+    if (document.querySelector("#movie_player.ad-showing, #movie_player.ad-interrupting")) return true;
+    const ads = document.querySelector("#movie_player .video-ads");
+    return !!ads && [...ads.children].some((c) => c.getBoundingClientRect().height > 0);
+  };
+  // what's playing, for GIF suggestions ("relevant to the film")
+  const titleCache = { vid: null, title: "" };
+  function readTitle() {
+    let t = "";
+    if (IS_YT) {
+      t = document.querySelector("ytd-watch-metadata h1, h1.ytd-watch-metadata, #above-the-fold #title h1")?.textContent || "";
+      if (!t.trim()) t = document.title.replace(/^\(\d+\)\s*/, "").replace(/\s*-\s*YouTube\s*$/i, "");
+    } else if (IS_HOTSTAR) {
+      t = document.querySelector('meta[property="og:title"]')?.content || document.title || "";
+      t = t.split(/\s[|–-]\s/)[0].replace(/^watch\s+/i, "").replace(/\s+(full\s+)?(movie|episode|season\s*\d*)?\s*online.*$/i, "");
+      if (/^(jio)?hotstar$/i.test(t.trim())) t = "";
+    } else {
+      const box = document.querySelector('[data-uia="video-title"]');
+      t = box?.querySelector("h4")?.textContent || box?.textContent || "";
+      if (!t.trim() && !/^netflix$/i.test(document.title.trim())) t = document.title.replace(/\s*[-|]\s*Netflix\s*$/i, "");
+    }
+    return t.replace(/\s+/g, " ").trim().slice(0, 60);
+  }
+  const currentTitle = () => {
+    const vid = videoIdFromUrl();
+    if (titleCache.vid !== vid) Object.assign(titleCache, { vid, title: "" });
+    const t = readTitle();
+    if (t) titleCache.title = t; // Netflix only shows the title while the controls are up
+    return titleCache.title;
+  };
   // the main player <video>: skip tiny previews/ads by preferring the largest one on screen
   const mainVideo = () => {
     const vids = [...document.querySelectorAll("video")];
@@ -59,6 +100,32 @@
 
   // ------------------------------------------------- page-context bridge
   const bridge = (() => {
+    // YouTube: a plain HTML5 <video> in #movie_player, driven straight from here. (No page
+    // script needed, which matters because youtube.com enforces a nonce-based script-src.)
+    if (IS_YT) {
+      const v = () => document.querySelector("#movie_player video.html5-main-video") || document.querySelector("#movie_player video") || mainVideo();
+      const status = () => {
+        const x = v();
+        if (!x) return null;
+        return {
+          position: Math.round((x.currentTime || 0) * 1000),
+          playing: !x.paused,
+          buffering: x.readyState < 3 && !x.paused,
+          duration: Math.round((x.duration || 0) * 1000),
+        };
+      };
+      return {
+        status: async () => status(),
+        seek: async (position) => {
+          const x = v();
+          if (x) x.currentTime = Math.max(0, position) / 1000;
+        },
+        play: async () => {
+          await v()?.play()?.catch(() => {});
+        },
+        pause: async () => v()?.pause(),
+      };
+    }
     let seq = 0;
     const pending = new Map();
     const s = document.createElement("script");
@@ -272,6 +339,7 @@
     members: [],
     state: null, // { playing, position, at (server ms), videoId }
     name: "Guest",
+    avatar: null,
     serverUrl: "wss://netparty.tech",
     error: null,
   };
@@ -284,16 +352,27 @@
     st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) : 0);
 
   async function loadPrefs() {
-    const p = await chrome.storage.sync.get(["serverUrl", "name"]);
+    const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions"]);
     party.serverUrl = p.serverUrl || party.serverUrl;
     party.name = p.name || party.name;
+    party.avatar = p.avatar || null;
+    ui.setFont(p.chatFont);
+    ui.setReactions(p.reactions);
   }
 
-  chrome.storage.onChanged.addListener((ch) => {
+  chrome.storage.onChanged.addListener((ch, area) => {
+    if (area !== "sync") return;
     if (ch.name) {
       party.name = ch.name.newValue || "Guest";
       if (party.roomId) net.request("rename", { name: party.name }).catch(() => {});
     }
+    if (ch.avatar) {
+      party.avatar = ch.avatar.newValue || null;
+      if (party.roomId && party.avatar) net.request("avatar", { avatar: party.avatar }).catch(() => {});
+      ui.render();
+    }
+    if (ch.chatFont) ui.setFont(ch.chatFont.newValue);
+    if (ch.reactions) ui.setReactions(ch.reactions.newValue);
     if (ch.serverUrl) party.serverUrl = ch.serverUrl.newValue;
   });
 
@@ -317,11 +396,17 @@
 
   async function createParty() {
     const vid = videoIdFromUrl();
-    if (!vid) throw new Error(`Open a ${SITE_NAME} title and press play first, then start the party.`);
+    if (!vid) throw new Error(IS_YT ? "Open a YouTube video first, then start the party." : `Open a ${SITE_NAME} title and press play first, then start the party.`);
+    if (adPlaying()) {
+      // start from the video itself, not from wherever the ad is
+      notice("The party starts as soon as the ad is over.");
+      for (let t = 0; t < 180000 && adPlaying(); t += 500) await sleep(500);
+    }
     await ensureConnected();
     const st = (await bridge.status()) || { position: 0, playing: false };
     const snap = await net.request("create", {
       name: party.name,
+      avatar: party.avatar,
       cid: TAB_ID,
       videoId: vid,
       playing: st.playing,
@@ -344,7 +429,7 @@
       location.href = watchUrl(info.videoId, info.roomId);
       return info;
     }
-    const snap = await net.request("join", { roomId, name: party.name, cid: TAB_ID });
+    const snap = await net.request("join", { roomId, name: party.name, avatar: party.avatar, cid: TAB_ID });
     onJoined(snap);
     if (!snap.returning) ui.system("You joined the party.");
     await applyRemote(snap.state, "join");
@@ -435,25 +520,30 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       location.href = watchUrl(st.videoId, party.roomId);
       return;
     }
+    if (adPlaying()) return; // YouTube ad on screen: catch up when it ends (see adWatch)
     const cur = await bridge.status();
     if (!cur) return; // player not ready yet; watchPlayer() re-applies once it is
-    suppressUntil = Date.now() + SUPPRESS_MS;
+    if (adPlaying()) return;
+    suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
     const target = expectedPosition(st);
     if (Math.abs(target - cur.position) >= SEEK_THRESHOLD_MS) await bridge.seek(target);
     if (st.playing && !cur.playing) await bridge.play();
     if (!st.playing && cur.playing) await bridge.pause();
-    suppressUntil = Date.now() + SUPPRESS_MS;
+    suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
     log("applied remote", reason, st);
   }
 
   let sendTimer = null;
   function onLocalPlayerEvent(kind) {
-    if (!party.roomId || Date.now() < suppressUntil) return;
+    if (IS_YT) adWatch(); // an ad that just ended: the resume events below are YouTube's, not ours
+    if (!party.roomId || Date.now() < suppressUntil || adPlaying()) return;
     // coalesce bursts (Netflix fires pause+seeked+play when scrubbing)
     clearTimeout(sendTimer);
     sendTimer = setTimeout(async () => {
+      if (IS_YT) adWatch();
+      if (Date.now() < suppressUntil || adPlaying()) return; // an ad started, or a remote action is being applied
       const st = await bridge.status();
-      if (!st || !party.roomId || !Number.isFinite(st.position) || !videoIdFromUrl()) return;
+      if (!st || !party.roomId || !Number.isFinite(st.position) || !videoIdFromUrl() || adPlaying()) return;
       if (!canControl()) {
         ui.system("Only the host can control playback.");
         return applyRemote(party.state, "revert");
@@ -475,7 +565,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   // periodic drift correction
   setInterval(async () => {
     if (!party.roomId || !party.state || !party.state.playing) return;
-    if (Date.now() < suppressUntil || Date.now() - lastLocalAction < 4000) return;
+    if (Date.now() < suppressUntil || Date.now() - lastLocalAction < 4000 || adPlaying()) return;
     const cur = await bridge.status();
     if (!cur || cur.buffering) return;
     const drift = cur.position - expectedPosition(party.state);
@@ -485,7 +575,24 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
   }, 3000);
 
-  // attach to the <video> element and follow Netflix's SPA navigation
+  // YouTube ads: while one plays this viewer neither sends nor applies sync; when it
+  // ends they jump back to where the party is.
+  let adWas = false;
+  function adWatch() {
+    const ad = !!party.roomId && adPlaying();
+    if (ad === adWas) return;
+    adWas = ad;
+    if (ad) ui.system("Ad playing. You'll catch up with the party when it ends.");
+    else if (party.roomId && party.state) {
+      // the player fires play/seeked as the video resumes; those are not this viewer's choices
+      suppressUntil = Math.max(suppressUntil, Date.now() + 2500);
+      setTimeout(() => party.roomId && party.state && applyRemote(party.state, "ad-end"), 400);
+    }
+    ui.render();
+  }
+  if (IS_YT) setInterval(adWatch, 500);
+
+  // attach to the <video> element and follow the sites' SPA navigation
   let lastVideoId = videoIdFromUrl();
   function watchPlayer() {
     // episode change first, so a newly attached player syncs to the NEW episode
@@ -502,7 +609,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           party.state = prev; // retry on the next check
           lastVideoId = null;
         });
-        ui.system("Moved the party to a new episode.");
+        ui.system(IS_YT ? "Moved the party to a new video." : "Moved the party to a new episode.");
       }
     }
     const v = mainVideo();
@@ -514,7 +621,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       if (party.roomId && party.state) setTimeout(() => party.roomId && party.state && applyRemote(party.state, "attach"), 800);
     }
     partyLifecycle(vid);
-    if (!vid && !party.roomId) startButtons.inject();
+    if (!party.roomId && (IS_YT ? !!vid : !vid)) startButtons.inject();
+    else if (IS_YT && party.roomId) startButtons.clear();
+    if (IS_YT) adWatch();
+    if (vid) currentTitle();
     ui.mount();
     ui.dockCheck();
   }
@@ -631,7 +741,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       icon.setAttribute("viewBox", "0 0 24 24");
       icon.setAttribute("width", "1.2em");
       icon.setAttribute("height", "1.2em");
-      icon.innerHTML = '<path fill="currentColor" d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1a4.2 4.2 0 0 1 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/>';
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("fill", "currentColor");
+      path.setAttribute("d", "M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1a4.2 4.2 0 0 1 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z");
+      icon.append(path);
       b.append(icon, el("span", {}, "Start a NetParty"));
       const go = (e) => {
         e.preventDefault();
@@ -729,10 +842,25 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       });
       place(c, btn);
     }
+    function youtube() {
+      // already on the watch page: the button sits in the actions row under the video
+      // (before Like/Share) and starts the party right away
+      if (!videoIdFromUrl() || document.querySelector(`[${MARK}]`)) return;
+      const row = [...document.querySelectorAll("ytd-watch-metadata #top-level-buttons-computed, #above-the-fold #top-level-buttons-computed, #top-level-buttons-computed")].find(
+        (n) => n.getBoundingClientRect().width > 0,
+      );
+      if (!row) return;
+      const like = [...row.querySelectorAll("button")].find((b) => visible(b)) || row;
+      const btn = makeButton(like, () => setTimeout(watchPlayer, 0));
+      const gap = parseFloat(getComputedStyle(row).columnGap);
+      if (!(gap > 0)) btn.style.marginRight = "8px"; // the row has no gap of its own
+      if (parseFloat(getComputedStyle(like).borderRadius) < 4) btn.style.borderRadius = "18px";
+      row.prepend(btn);
+    }
     return {
       inject() {
         try {
-          IS_HOTSTAR ? hotstar() : netflix();
+          IS_YT ? youtube() : IS_HOTSTAR ? hotstar() : netflix();
         } catch (e) {
           console.warn("[NetParty] start button", e);
         }
@@ -753,6 +881,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }, 300);
   }).observe(document.documentElement, { childList: true, subtree: true });
   setInterval(watchPlayer, 2000);
+  // YouTube's SPA announces each finished navigation (another video, autoplay, back to home)
+  if (IS_YT) document.addEventListener("yt-navigate-finish", () => setTimeout(watchPlayer, 50));
 
   // ---------------------------------------------------- server messages
   net.on(async (msg) => {
@@ -763,7 +893,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       case "state":
         party.state = msg.data;
         if (msg.data.reason && msg.data.byName) {
-          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: "changed the episode" }[msg.data.reason];
+          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : "changed the episode" }[msg.data.reason];
           if (what) ui.system(`${msg.data.byName} ${what}`);
         }
         applyRemote(msg.data, "remote");
@@ -779,6 +909,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         break;
       case "chat":
         ui.chat(msg.data);
+        break;
+      case "react":
+        ui.float(msg.data.emoji);
         break;
       case "ended":
         await voice.leave().catch(() => {});
@@ -803,7 +936,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           const room = party.roomId;
           try {
             await clock.sync(3);
-            const snap = await net.request("join", { roomId: room, name: party.name, cid: TAB_ID });
+            const snap = await net.request("join", { roomId: room, name: party.name, avatar: party.avatar, cid: TAB_ID });
             onJoined(snap);
             ui.system("Reconnected.");
             applyRemote(snap.state, "rejoin");
@@ -1019,25 +1152,28 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   // ------------------------------------------------------------------ UI
   // Lives in a shadow root so the streaming site's CSS can't break it.
   const ui = (() => {
+    const E = globalThis.NP_EMOJI || { avatars: ["🙂"], reactions: ["😂", "😭", "💀", "🥰", "😱"], categories: [] };
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
+    let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn;
     let open = false;
     let unread = 0;
     let toastTimer = 0;
     let peopleSig = "";
 
-    const initials = (name) =>
-      name
-        .split(/\s+/)
-        .map((w) => w[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase() || "?";
     const hue = (id) => [...String(id)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
-    const svg = (d) => {
-      const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    // members without a picture (1.5 clients) get a stable one from their id
+    const avatarOf = (m) => m?.avatar || E.avatars[hue(m?.id || m?.name || "?") % E.avatars.length];
+    // SVG icons are built node by node: some sites (YouTube) enforce Trusted Types, so no innerHTML
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const svg = (markup) => {
+      const s = document.createElementNS(SVG_NS, "svg");
       s.setAttribute("viewBox", "0 0 24 24");
       s.setAttribute("aria-hidden", "true");
-      s.innerHTML = d;
+      for (const [, tag, attrs] of markup.matchAll(/<(\w+)([^>]*?)\/>/g)) {
+        const n = document.createElementNS(SVG_NS, tag);
+        for (const [, k, v] of attrs.matchAll(/([\w-]+)="([^"]*)"/g)) n.setAttribute(k, v);
+        s.append(n);
+      }
       return s;
     };
     const ICON = {
@@ -1049,14 +1185,31 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       micOff: '<path fill="currentColor" d="M15 10.6V6a3 3 0 0 0-5.9-.8zM19 12h-2a5 5 0 0 1-.6 2.3l1.5 1.5A7 7 0 0 0 19 12zM4.3 3 3 4.3l6 6V12a3 3 0 0 0 4.5 2.6l1.6 1.6A5 5 0 0 1 7 12H5a7 7 0 0 0 6 6.9V21h2v-2.1a7 7 0 0 0 3.6-1.5l3.1 3.1 1.3-1.3z"/>',
       phoneOff: '<path fill="currentColor" d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.4-1.7 1-2.4 1.6-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 12.8a1 1 0 0 1 0-1.4C3.4 8.5 7.5 7 12 7s8.6 1.5 11.7 4.4a1 1 0 0 1 0 1.4L21 15.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.6-1.5-1.2-2.4-1.6-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/>',
       crown: '<path fill="currentColor" d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/>',
+      smile: '<path fill="none" stroke="currentColor" stroke-width="2" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 14.5a5 5 0 0 0 8 0"/><path fill="currentColor" d="M9 8.5a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6zm6 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>',
+      edit: '<path fill="currentColor" d="M3 17.2V21h3.8L17.8 9.9l-3.7-3.7zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7z"/>',
+      clock: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4v5l3 2"/>',
     };
     const iconBtn = (icon, title, onclick, cls = "") =>
-      el("button", { class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
+      el("button", { type: "button", class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
 
+    // ---------------------------------------------------------- composer
+    let lastSel = null; // caret position in the chat box, kept while a picker has focus
+    function rememberSel() {
+      if (input && shadow?.activeElement === input) lastSel = [input.selectionStart, input.selectionEnd];
+    }
+    function insertAtCursor(text) {
+      const [a, b] = lastSel || [input.value.length, input.value.length];
+      if (input.value.length - (b - a) + text.length > 500) return;
+      input.setRangeText(text, a, b, "end");
+      lastSel = [input.selectionStart, input.selectionEnd];
+      updateSend();
+      input.focus();
+    }
     function sendChat() {
       const text = input.value.trim();
       if (!text) return;
       input.value = "";
+      lastSel = null;
       updateSend();
       net.request("chat", { text }).catch((err) => system("Message not sent: " + err.message));
       input.focus();
@@ -1065,12 +1218,500 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
     // keys typed in the panel arrive here first (early.js), before the site's hotkeys
     window.__netpartyKey = (e) => {
-      if (e.isComposing) return;
-      if (e.key === "Enter" && !e.shiftKey && shadow.activeElement === input) {
+      if (e.isComposing || !shadow) return;
+      const active = shadow.activeElement;
+      if (e.key === "Enter" && !e.shiftKey && active === input) {
         e.preventDefault();
         sendChat();
-      } else if (e.key === "Escape") hide();
+      } else if (e.key === "Enter" && active === gif.inputEl) {
+        e.preventDefault();
+        gif.searchNow();
+      } else if (e.key === "Escape") {
+        if (pops.current) {
+          e.preventDefault();
+          pops.close();
+          input.focus();
+        } else hide();
+      }
     };
+
+    // ---------------------------------------------------------- popovers
+    // One open at a time, anchored inside the panel. They close on Esc, on the button
+    // that opened them, and on any click outside them (in the panel or on the page).
+    const pops = {
+      current: null,
+      opener: null,
+      open(node, opener, place = "bottom") {
+        if (this.current === node) return this.close();
+        this.close();
+        this.current = node;
+        this.opener = opener;
+        node.classList.add("np-pop-open");
+        if (place === "bottom") {
+          node.style.top = "";
+          node.style.bottom = composer.offsetHeight + 6 + "px";
+        } else {
+          node.style.bottom = "";
+          node.style.top = place + "px";
+        }
+        opener?.setAttribute("aria-expanded", "true");
+      },
+      close() {
+        const node = this.current;
+        if (!node) return;
+        node.classList.remove("np-pop-open");
+        this.opener?.setAttribute("aria-expanded", "false");
+        this.current = this.opener = null;
+        node.dispatchEvent(new Event("np-close"));
+      },
+      outside(path) {
+        if (!this.current) return;
+        if (path.includes(this.current) || (this.opener && path.includes(this.opener))) return;
+        this.close();
+      },
+    };
+    const popEl = (cls, label, ...kids) => el("div", { class: "np-pop " + cls, role: "dialog", "aria-label": label }, ...kids);
+    // picker buttons keep the caret in the chat box
+    const keepFocus = (b) => (b.addEventListener("mousedown", (e) => e.preventDefault()), b);
+
+    // ---- emoji picker
+    const emoji = (() => {
+      let node, body, recentSec, recentGrid, mode = null; // mode: null (insert) or { slot }
+      let recent = [];
+      chrome.storage.local.get("recentEmoji").then((r) => (recent = Array.isArray(r.recentEmoji) ? r.recentEmoji.slice(0, 16) : [])).catch(() => {});
+      const btn = (e) =>
+        keepFocus(el("button", { type: "button", class: "np-emo-btn np-emo", title: e, "aria-label": e, "data-emoji": e, onclick: () => pick(e) }, e));
+      function pick(e) {
+        recent = [e, ...recent.filter((x) => x !== e)].slice(0, 16);
+        chrome.storage.local.set({ recentEmoji: recent }).catch(() => {});
+        if (mode) {
+          const slot = mode.slot;
+          pops.close();
+          reactions.replace(slot, e);
+          return;
+        }
+        insertAtCursor(e);
+        fillRecent();
+      }
+      function fillRecent() {
+        if (!recentGrid) return;
+        recentGrid.replaceChildren(...recent.map(btn));
+        recentSec.hidden = !recent.length;
+      }
+      function build() {
+        body = el("div", { class: "np-emo-body" });
+        const tabs = el("div", { class: "np-emo-tabs", role: "tablist" });
+        const section = (id, label, list) => {
+          const grid = el("div", { class: "np-emo-grid" }, ...list.map(btn));
+          const sec = el("section", { class: "np-emo-sec", "data-cat": id }, el("div", { class: "np-emo-label" }, label), grid);
+          return [sec, grid];
+        };
+        [recentSec, recentGrid] = section("recent", "Recently used", []);
+        body.append(recentSec);
+        const tab = (id, icon, label) =>
+          keepFocus(
+            el("button", {
+              type: "button", class: "np-emo-tab np-emo", title: label, "aria-label": label,
+              onclick: () => {
+                const sec = body.querySelector(`[data-cat="${id}"]`);
+                if (sec && !sec.hidden) body.scrollTop = sec.offsetTop - body.offsetTop;
+              },
+            }, icon),
+          );
+        tabs.append(tab("recent", "🕘", "Recently used"));
+        for (const c of E.categories) {
+          body.append(section(c.id, c.label, c.list)[0]);
+          tabs.append(tab(c.id, c.icon, c.label));
+        }
+        node = popEl("np-emoji-pop", "Emoji", tabs, body);
+        node.addEventListener("np-close", () => {
+          mode = null;
+          node.classList.remove("np-replace");
+          emojiBtn.classList.remove("np-on");
+          reactBtn.classList.remove("np-on");
+        });
+        panel.append(node);
+      }
+      return {
+        // forSlot: pick a replacement for that 🎉 tray slot instead of typing the emoji
+        toggle(forSlot = null) {
+          if (!node) build();
+          fillRecent();
+          const want = forSlot === null ? null : { slot: forSlot };
+          if (pops.current === node && !want && !mode) return pops.close();
+          pops.close();
+          pops.open(node, want ? reactBtn : emojiBtn);
+          mode = want;
+          node.classList.toggle("np-replace", !!mode);
+          node.setAttribute("aria-label", mode ? "Pick a reaction" : "Emoji");
+          (mode ? reactBtn : emojiBtn).classList.add("np-on");
+          body.scrollTop = 0;
+        },
+      };
+    })();
+
+    // ---- 🎉 reactions: tray of 5 (editable), floating emoji over the video for everyone
+    const reactions = (() => {
+      let list = E.reactions.slice();
+      let node, row, editing = false;
+      const sent = [];
+      function draw() {
+        if (!row) return;
+        row.replaceChildren(
+          ...list.map((e, i) =>
+            el("button", {
+              type: "button", class: "np-react-btn np-emo", "data-emoji": e,
+              title: editing ? `Replace ${e}` : `React ${e}`, "aria-label": editing ? `Replace ${e}` : `React ${e}`,
+              onclick: () => (editing ? emoji.toggle(i) : send(e)),
+            }, e),
+          ),
+          el("button", {
+            type: "button", class: "np-react-edit" + (editing ? " np-on" : ""), title: editing ? "Done" : "Change these reactions",
+            "aria-label": editing ? "Done editing reactions" : "Change these reactions", "aria-pressed": String(editing),
+            onclick: () => ((editing = !editing), draw()),
+          }, editing ? "Done" : svg(ICON.edit)),
+        );
+      }
+      function openTray() {
+        if (!node) {
+          row = el("div", { class: "np-react-row" });
+          node = popEl("np-react-pop", "Reactions", row);
+          node.addEventListener("np-close", () => reactBtn.classList.remove("np-on"));
+          panel.append(node);
+        }
+        draw();
+        if (pops.current !== node) pops.open(node, reactBtn);
+        reactBtn.classList.add("np-on");
+      }
+      function send(e) {
+        const now = Date.now();
+        while (sent.length && now - sent[0] > 3000) sent.shift();
+        if (sent.length >= 6) {
+          // same limit as the server: 6 every 3 seconds
+          row.animate([{ transform: "translateX(0)" }, { transform: "translateX(-4px)" }, { transform: "translateX(4px)" }, { transform: "translateX(0)" }], 220);
+          return;
+        }
+        sent.push(now);
+        float(e);
+        net.request("react", { emoji: e }).catch(() => {});
+      }
+      return {
+        set(v) {
+          if (Array.isArray(v) && v.length === 5 && v.every((x) => typeof x === "string" && x && x.length <= 16)) list = v.slice();
+          else list = E.reactions.slice();
+          draw();
+        },
+        replace(i, e) {
+          const next = list.slice();
+          next[i] = e;
+          list = next;
+          draw();
+          chrome.storage.sync.set({ reactions: next }).catch(() => {});
+          openTray();
+        },
+        toggle() {
+          if (pops.current === node && node) return pops.close();
+          editing = false;
+          openTray();
+        },
+      };
+    })();
+
+    // floating reaction: rises from the bottom of the video area with a little wobble
+    function float(e) {
+      if (!host) build();
+      if (typeof e !== "string" || !e || e.length > 16 || !party.roomId) return;
+      while (floatLayer.childElementCount > 40) floatLayer.firstElementChild.remove();
+      const n = el("span", { class: "np-fly np-emo", "aria-hidden": "true" }, e);
+      const right = Math.random() < 0.7;
+      n.style.left = (right ? 62 + Math.random() * 28 : 6 + Math.random() * 24) + "%";
+      floatLayer.append(n);
+      const dur = 2600 + Math.random() * 900;
+      const amp = 10 + Math.random() * 16, dir = Math.random() < 0.5 ? -1 : 1;
+      const rise = Math.round(innerHeight * (0.55 + Math.random() * 0.2));
+      const frames = [0, 0.15, 0.35, 0.55, 0.75, 1].map((t) => ({
+        offset: t,
+        transform: `translate(${Math.round(dir * amp * Math.sin(t * Math.PI * 3))}px, ${-Math.round(rise * t)}px) scale(${t < 0.15 ? 0.6 + t * 4 : 1.2 - t * 0.25})`,
+        opacity: t === 0 ? 0 : t < 0.7 ? 1 : t === 1 ? 0 : 0.8,
+      }));
+      const a = n.animate(frames, { duration: dur, easing: "cubic-bezier(.3,.6,.5,1)", fill: "forwards" });
+      a.onfinish = a.oncancel = () => n.remove();
+      setTimeout(() => n.remove(), dur + 500); // in case animations are paused (background tab)
+    }
+
+    // ---- GIFs (KLIPY, through our server; the API key stays there)
+    // KLIPY media hosts (same list as KLIPY_MEDIA_HOSTS in server/core.js)
+    const GIF_HOSTS = ["static.klipy.com", "static1.klipy.com", "static2.klipy.com"];
+    const gifUrlOk = (u) => {
+      try {
+        const x = new URL(u);
+        return x.protocol === "https:" && GIF_HOSTS.includes(x.hostname);
+      } catch {
+        return false;
+      }
+    };
+    // Images load straight from KLIPY. If the site's CSP blocks that, they're fetched by
+    // the background worker and shown from a blob: URL instead (data: if blob: is blocked too).
+    const media = (() => {
+      let mode = "direct"; // -> "blob" -> "data" -> "none" as the page's CSP turns out stricter
+      const blobs = new Set();
+      async function viaBackground(img, url) {
+        const r = await chrome.runtime.sendMessage({ cmd: "gifMedia", url }).catch(() => null);
+        if (!r?.dataUrl || !img.isConnected) return false;
+        if (mode === "blob") {
+          // decode by hand: fetch("data:…") would be subject to the page's connect-src
+          const [head, b64] = r.dataUrl.split(",");
+          const bin = atob(b64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const b = URL.createObjectURL(new Blob([bytes], { type: (head.match(/^data:([^;,]+)/) || [])[1] || "image/gif" }));
+          blobs.add(b);
+          img.dataset.blob = b;
+          img.src = b;
+        } else img.src = r.dataUrl;
+        return true;
+      }
+      function load(img, url) {
+        img.decoding = "async";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        img.alt = img.alt || "GIF";
+        let step = mode;
+        const tryStep = () => {
+          if (step === "direct") img.src = url;
+          else if (step === "blob" || step === "data") {
+            if (mode === "direct") mode = step;
+            viaBackground(img, url).then((ok) => !ok && fail());
+          } else img.classList.add("np-broken");
+        };
+        const fail = () => {
+          const order = ["direct", "blob", "data", "none"];
+          step = order[order.indexOf(step) + 1] || "none";
+          if (["blob", "data", "none"].indexOf(step) > ["blob", "data", "none"].indexOf(mode)) mode = step;
+          tryStep();
+        };
+        img.addEventListener("error", () => {
+          if (img.dataset.blob) {
+            URL.revokeObjectURL(img.dataset.blob);
+            blobs.delete(img.dataset.blob);
+            delete img.dataset.blob;
+          }
+          fail();
+        });
+        tryStep();
+      }
+      function release(rootNode) {
+        for (const i of rootNode.querySelectorAll?.("img[data-blob]") || []) {
+          URL.revokeObjectURL(i.dataset.blob);
+          blobs.delete(i.dataset.blob);
+        }
+      }
+      return { load, release, get mode() { return mode; } };
+    })();
+
+    const gif = (() => {
+      let node, inputEl, chips, grid, statusEl, state = "unknown", next = "", query = "", seq = 0, loading = false, timer = 0, autoTitle = "";
+      const api = (kind, q = "", pos = "") =>
+        chrome.runtime.sendMessage({ cmd: "gifs", server: party.serverUrl, kind, q, pos }).catch(() => ({ status: 0, body: null }));
+      function setState(s) {
+        state = s;
+        const off = s === "off";
+        gifBtn.classList.toggle("np-disabled", off);
+        gifBtn.setAttribute("aria-disabled", String(off));
+        gifBtn.title = off ? "GIFs aren't available right now" : "Send a GIF";
+      }
+      async function probe() {
+        const r = await api("trending");
+        setState(r?.status === 200 ? "ok" : r?.status === 503 || r?.body?.error === "gifs_unavailable" ? "off" : state === "ok" ? "ok" : "off");
+        return state;
+      }
+      function status(text) {
+        statusEl.textContent = text || "";
+        statusEl.hidden = !text;
+      }
+      function build() {
+        inputEl = el("input", { class: "np-gif-input", type: "search", placeholder: "Search KLIPY", "aria-label": "Search GIFs", maxlength: "100", autocomplete: "off" });
+        inputEl.addEventListener("input", () => {
+          clearTimeout(timer);
+          timer = setTimeout(searchNow, 350);
+        });
+        chips = el("div", { class: "np-chips" });
+        grid = el("div", { class: "np-gif-grid" });
+        statusEl = el("div", { class: "np-gif-status", role: "status" });
+        const scroller = el("div", { class: "np-gif-scroll" }, grid, statusEl);
+        scroller.addEventListener("scroll", () => {
+          if (next && !loading && scroller.scrollTop + scroller.clientHeight > scroller.scrollHeight - 120) more();
+        });
+        node = popEl("np-gif-pop", "GIFs", el("div", { class: "np-gif-head" }, inputEl), chips, scroller, el("div", { class: "np-klipy" }, "Powered by KLIPY"));
+        node.addEventListener("np-close", () => gifBtn.classList.remove("np-on"));
+        panel.append(node);
+      }
+      function drawChips() {
+        const t = currentTitle();
+        const words = [...new Set([t, "reaction", "lol", "omg", "popcorn"].filter(Boolean))];
+        chips.replaceChildren(
+          ...words.map((w) =>
+            el("button", { type: "button", class: "np-chip" + (w === query ? " np-on" : ""), title: `GIFs for “${w}”`, onclick: () => ((inputEl.value = w), searchNow()) }, w),
+          ),
+        );
+      }
+      function addResults(list) {
+        for (const r of list) {
+          if (!gifUrlOk(r.url)) continue;
+          const img = el("img", { class: "np-gif-thumb", alt: r.title || "GIF" });
+          if (r.w && r.h) img.style.aspectRatio = `${r.w} / ${r.h}`;
+          media.load(img, gifUrlOk(r.preview) ? r.preview : r.url);
+          grid.append(el("button", { type: "button", class: "np-gif-cell", title: r.title || "Send this GIF", "aria-label": "Send GIF" + (r.title ? ": " + r.title : ""), onclick: () => sendGif(r) }, img));
+        }
+      }
+      async function run(q, pos) {
+        const my = ++seq;
+        loading = true;
+        if (!pos) status("Loading GIFs…");
+        const r = await api(q ? "search" : "trending", q, pos);
+        if (my !== seq) return;
+        loading = false;
+        if (r?.status !== 200 || !Array.isArray(r.body?.results)) {
+          if (r?.status === 503) setState("off");
+          if (!pos) grid.replaceChildren();
+          status(r?.status === 503 ? "GIFs aren't available right now." : r?.status === 429 ? "Too many searches. Try again in a minute." : "Couldn't load GIFs. Try again.");
+          return;
+        }
+        setState("ok");
+        if (!pos) {
+          media.release(grid);
+          grid.replaceChildren();
+        }
+        addResults(r.body.results);
+        next = r.body.next || "";
+        status(grid.childElementCount ? "" : `No GIFs for “${q}”.`);
+      }
+      function searchNow() {
+        clearTimeout(timer);
+        query = inputEl.value.replace(/\s+/g, " ").trim().slice(0, 100);
+        next = "";
+        drawChips();
+        grid.parentElement.scrollTop = 0;
+        run(query, "");
+      }
+      const more = () => run(query, next);
+      function sendGif(r) {
+        pops.close();
+        net.request("chat", { gif: { url: r.url, w: r.w || undefined, h: r.h || undefined } }).catch((e) => system("GIF not sent: " + e.message));
+        input.focus();
+      }
+      return {
+        get inputEl() {
+          return inputEl;
+        },
+        probe,
+        searchNow: () => node && searchNow(),
+        async toggle() {
+          if (!node) build();
+          if (pops.current === node) return pops.close();
+          pops.open(node, gifBtn);
+          gifBtn.classList.add("np-on");
+          if (state !== "ok") await probe(); // e.g. the server got its KLIPY key since
+          if (pops.current !== node) return;
+          if (state === "off") {
+            grid.replaceChildren();
+            chips.replaceChildren();
+            inputEl.disabled = true;
+            return status("GIFs aren't available right now.");
+          }
+          inputEl.disabled = false;
+          // suggest GIFs for what's on screen (and follow it to the next title)
+          const t = currentTitle();
+          if (t && (!inputEl.value || inputEl.value === autoTitle) && t !== inputEl.value) {
+            inputEl.value = autoTitle = t;
+          }
+          if (!grid.childElementCount || inputEl.value.replace(/\s+/g, " ").trim() !== query) searchNow();
+          else drawChips();
+          setTimeout(() => inputEl.focus(), 30);
+        },
+      };
+    })();
+
+    // ---- your profile picture (also in the popup)
+    const avatarPicker = (() => {
+      let node;
+      return {
+        toggle(anchor) {
+          if (!node) {
+            node = popEl(
+              "np-avatar-pop",
+              "Your picture",
+              el("div", { class: "np-pop-title" }, "Your picture"),
+              el(
+                "div",
+                { class: "np-avatar-grid" },
+                ...E.avatars.map((a) =>
+                  el("button", {
+                    type: "button", class: "np-avatar-opt np-emo", title: a, "aria-label": "Use " + a, "data-avatar": a,
+                    onclick: () => {
+                      pops.close();
+                      party.avatar = a; // the storage listener tells the server
+                      chrome.storage.sync.set({ avatar: a }).catch(() => {});
+                      peopleSig = "";
+                      render();
+                    },
+                  }, a),
+                ),
+              ),
+            );
+            panel.append(node);
+          }
+          for (const b of node.querySelectorAll(".np-avatar-opt")) b.classList.toggle("np-on", b.dataset.avatar === party.avatar);
+          pops.open(node, anchor, peopleEl.offsetTop + peopleEl.offsetHeight);
+        },
+      };
+    })();
+
+    // ---- chat text size
+    const FONTS = { s: [12, "Small"], m: [14, "Medium"], l: [16, "Large"] };
+    let font = "m";
+    function setFont(f) {
+      font = FONTS[f] ? f : "m";
+      if (!root) return;
+      root.style.setProperty("--np-fs", FONTS[font][0] + "px");
+      root.dataset.font = font;
+      fontBtn.title = `Chat text size: ${FONTS[font][1]} (click to change)`;
+      fontBtn.setAttribute("aria-label", fontBtn.title);
+    }
+    const cycleFont = () => {
+      const next = { s: "m", m: "l", l: "s" }[font];
+      setFont(next);
+      chrome.storage.sync.set({ chatFont: next }).catch(() => {});
+    };
+
+    // ---- links in chat: real <a> nodes built from text (never innerHTML with user text)
+    const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
+    function linkify(text) {
+      const out = [];
+      let last = 0;
+      for (const m of text.matchAll(URL_RE)) {
+        let raw = m[0];
+        // trailing punctuation belongs to the sentence, not the link (keep balanced brackets)
+        for (;;) {
+          const ch = raw.at(-1);
+          if (/[.,!?;:'"*]/.test(ch)) raw = raw.slice(0, -1);
+          else if (ch === ")" && (raw.match(/\)/g) || []).length > (raw.match(/\(/g) || []).length) raw = raw.slice(0, -1);
+          else if (ch === "]" && (raw.match(/\]/g) || []).length > (raw.match(/\[/g) || []).length) raw = raw.slice(0, -1);
+          else break;
+        }
+        let href = null;
+        try {
+          const u = new URL(/^www\./i.test(raw) ? "https://" + raw : raw);
+          if ((u.protocol === "http:" || u.protocol === "https:") && u.hostname.includes(".")) href = u.href;
+        } catch {}
+        if (!href || raw.length < 5) continue;
+        if (m.index > last) out.push(text.slice(last, m.index));
+        out.push(el("a", { class: "np-a", href, target: "_blank", rel: "noopener noreferrer nofollow", title: href }, raw));
+        last = m.index + raw.length;
+      }
+      if (last < text.length) out.push(text.slice(last));
+      return out;
+    }
 
     function build() {
       host = el("div", { id: "netparty-root" });
@@ -1078,14 +1719,16 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       shadow.append(el("link", { rel: "stylesheet", href: chrome.runtime.getURL("overlay.css") }));
 
       badge = el("span", { class: "np-badge" });
-      toggleBtn = el("button", { class: "np-toggle", title: "Party chat (NetParty)", onclick: () => (open ? hide() : show()) }, svg(ICON.chat), badge);
+      toggleBtn = el("button", { type: "button", class: "np-toggle", title: "Party chat (NetParty)", "aria-label": "Party chat (NetParty)", onclick: () => (open ? hide() : show()) }, svg(ICON.chat), badge);
       toastEl = el("div", { class: "np-toast", onclick: show });
+      floatLayer = el("div", { class: "np-float", "aria-hidden": "true" });
 
       codeEl = el("span", { class: "np-code" });
       metaEl = el("div", { class: "np-meta" });
       const copyBtn = el(
         "button",
         {
+          type: "button",
           class: "np-pill",
           onclick: async () => {
             const link = inviteLink();
@@ -1107,17 +1750,30 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
       peopleEl = el("div", { class: "np-people" });
       voiceBox = el("div", { class: "np-voice" });
-      chatEl = el("div", { class: "np-chat", role: "log" });
+      chatEl = el("div", { class: "np-chat", role: "log", "aria-live": "polite" });
 
-      input = el("input", { class: "np-input", type: "text", placeholder: "Message the party…", maxlength: "500", autocomplete: "off" });
+      input = el("input", { class: "np-input", type: "text", placeholder: "Message the party…", "aria-label": "Message the party", maxlength: "500", autocomplete: "off" });
       input.addEventListener("input", updateSend);
+      for (const t of ["keyup", "mouseup", "select", "input", "blur"]) input.addEventListener(t, rememberSel);
       sendBtn = iconBtn(ICON.send, "Send (Enter)", sendChat, "np-send");
+      sendBtn.type = "submit";
       sendBtn.disabled = true;
-      const composer = el("form", { class: "np-composer", onsubmit: (e) => (e.preventDefault(), sendChat()) }, input, sendBtn);
+      emojiBtn = el("button", { type: "button", class: "np-tool", title: "Emoji", "aria-label": "Emoji", "aria-expanded": "false", onclick: () => emoji.toggle() }, svg(ICON.smile));
+      gifBtn = el("button", { type: "button", class: "np-tool np-tool-gif", title: "Send a GIF", "aria-label": "GIFs", "aria-expanded": "false", onclick: () => gif.toggle() }, "GIF");
+      reactBtn = el("button", { type: "button", class: "np-tool np-emo", title: "React on everyone's screen", "aria-label": "Reactions", "aria-expanded": "false", onclick: () => reactions.toggle() }, "🎉");
+      fontBtn = el("button", { type: "button", class: "np-tool np-tool-font", onclick: cycleFont }, "Aa");
+      for (const b of [emojiBtn, gifBtn, reactBtn, fontBtn]) keepFocus(b);
+      composer = el(
+        "form",
+        { class: "np-composer", onsubmit: (e) => (e.preventDefault(), sendChat()) },
+        el("div", { class: "np-tools" }, emojiBtn, gifBtn, reactBtn, el("span", { class: "np-grow" }), fontBtn),
+        el("div", { class: "np-row" }, input, sendBtn),
+      );
 
       const leaveBtn = el(
         "button",
         {
+          type: "button",
           class: "np-link-btn",
           onclick: () => {
             const isHost = party.me === party.hostId;
@@ -1129,7 +1785,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
       panel = el(
         "aside",
-        { class: "np-panel" },
+        { class: "np-panel", "aria-label": "NetParty chat" },
         head,
         el("div", { class: "np-actions" }, copyBtn, leaveBtn),
         el("div", { class: "np-section-label" }, "Watching"),
@@ -1141,8 +1797,12 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       // keep clicks and scrolls inside the panel from reaching the player
       for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"])
         panel.addEventListener(evt, (e) => e.stopPropagation());
-      root = el("div", { class: "np-root" }, toggleBtn, toastEl, panel);
+      root = el("div", { class: "np-root" }, floatLayer, toggleBtn, toastEl, panel);
       shadow.append(root);
+      setFont(font);
+      reactions.set(reactionPref);
+      shadow.addEventListener("pointerdown", (e) => pops.outside(e.composedPath()), true);
+      document.addEventListener("pointerdown", (e) => !e.composedPath().includes(host) && pops.close(), true);
       document.addEventListener("fullscreenchange", () => {
         mount();
         dockCheck(true);
@@ -1163,10 +1823,10 @@ html.np-docked [data-np-shrink] {
 }`;
       (document.head || document.documentElement).append(pageStyle);
     }
-    // Narrow exactly ONE element: the site's player box. The site then lays out the
-    // video and its controls inside the smaller box itself, so nothing is cropped.
-    // (Forcing widths on the <video> or its inner wrappers fights the player's own
-    // sizing and crops the picture.)
+    // Narrow exactly the site's player box (on YouTube: the watch page and its top bar).
+    // The site then lays out the video and its controls inside the smaller box itself,
+    // so nothing is cropped. (Forcing widths on the <video> or its inner wrappers fights
+    // the player's own sizing and crops the picture.)
     const PLAYER_BOX = {
       netflix: [".sizing-wrapper", ".watch-video--player-view", ".watch-video", "[data-uia=player]"],
       hotstar: [],
@@ -1185,14 +1845,30 @@ html.np-docked [data-np-shrink] {
         const r = n.getBoundingClientRect();
         const wide = n.hasAttribute("data-np-shrink") || (r.width >= innerWidth - 2 && r.left <= 1);
         if (wide) box = n;
+        // a fixed-position box ignores its ancestors' width, so narrowing above it does nothing
+        if (wide && getComputedStyle(n).position === "fixed") break;
       }
       return box;
     }
-    function markShrinkTargets() {
+    function shrinkTargets() {
+      if (IS_YT) {
+        // ytd-watch-flexy holds the player in every mode (default, theater, and fullscreen,
+        // where YouTube fullscreens <ytd-app>); the fixed top bar is narrowed separately
+        const flexy = document.querySelector("ytd-watch-flexy");
+        const fs = document.fullscreenElement;
+        if (flexy && flexy.getBoundingClientRect().width > 0 && (!fs || fs.contains(flexy)))
+          return [flexy, document.querySelector("#masthead-container")].filter(Boolean);
+      }
       const box = playerBox();
-      if (!box || box.hasAttribute("data-np-shrink")) return;
-      for (const old of document.querySelectorAll("[data-np-shrink]")) old.removeAttribute("data-np-shrink");
-      box.setAttribute("data-np-shrink", "");
+      return box ? [box] : [];
+    }
+    function markShrinkTargets() {
+      const want = shrinkTargets();
+      if (!want.length) return;
+      const cur = [...document.querySelectorAll("[data-np-shrink]")];
+      if (want.length === cur.length && want.every((n) => cur.includes(n))) return;
+      for (const old of cur) if (!want.includes(old)) old.removeAttribute("data-np-shrink");
+      for (const n of want) n.setAttribute("data-np-shrink", "");
       requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
     }
     function dockCheck(force) {
@@ -1226,10 +1902,12 @@ html.np-docked [data-np-shrink] {
       if (!party.roomId && open) {
         open = false;
         root.classList.remove("np-open");
+        pops.close();
         dockCheck();
       }
     }
 
+    let gifProbed = false;
     function show() {
       open = true;
       sessionStorage.setItem("netpartyPanel", "open");
@@ -1240,11 +1918,16 @@ html.np-docked [data-np-shrink] {
       peopleSig = voiceBox.dataset.sig = "";
       render();
       dockCheck();
+      if (!gifProbed && party.roomId) {
+        gifProbed = true;
+        gif.probe();
+      }
       setTimeout(() => input.focus(), 50);
     }
     function hide() {
       open = false;
       if (party.roomId) sessionStorage.setItem("netpartyPanel", "closed");
+      pops.close();
       root?.classList.remove("np-open");
       render();
       if (host) dockCheck();
@@ -1258,42 +1941,54 @@ html.np-docked [data-np-shrink] {
       toastTimer = setTimeout(() => toastEl.classList.remove("np-show"), 4000);
     }
 
+    const metaText = () => {
+      const st = party.state;
+      if (!st) return "";
+      if (adPlaying()) return "Waiting for ad to finish…";
+      return `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`;
+    };
+
     function render() {
       if (!host) return;
       mount();
       badge.textContent = unread > 9 ? "9+" : unread ? String(unread) : "";
       badge.style.display = unread ? "" : "none";
       codeEl.textContent = party.roomId ? "· " + party.roomId : "";
-      const st = party.state;
-      metaEl.textContent = st
-        ? `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`
-        : "";
+      metaEl.textContent = metaText();
+      metaEl.classList.toggle("np-ad", adPlaying());
 
       const pSig = party.members
         .map((m) => {
           const isMe = m.id === party.me;
           const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
-          return [m.id, m.name, m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking].join(":");
+          return [m.id, m.name, isMe ? party.avatar || m.avatar : m.avatar, m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking].join(":");
         })
         .join("|");
       if (pSig !== peopleSig) {
-      peopleSig = pSig;
-      peopleEl.replaceChildren(
-        ...party.members.map((m) => {
-          const isMe = m.id === party.me;
-          const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
-          const inVoice = isMe ? voice.active : !!m.inVoice;
-          const avatar = el("div", { class: "np-avatar", style: `--h:${hue(m.id)}` }, initials(m.name));
-          if (m.host) avatar.append(el("span", { class: "np-crown", title: "Host" }, svg(ICON.crown)));
-          if (inVoice) avatar.append(el("span", { class: "np-mic" + (info.muted ? " np-off" : ""), title: info.muted ? "Muted" : "In voice" }, svg(info.muted ? ICON.micOff : ICON.mic)));
-          return el(
-            "div",
-            { class: "np-person" + (inVoice && info.speaking && !info.muted ? " np-speaking" : ""), title: m.name + (m.host ? " (host)" : "") },
-            avatar,
-            el("div", { class: "np-pname" }, isMe ? "You" : m.name),
-          );
-        }),
-      );
+        peopleSig = pSig;
+        peopleEl.replaceChildren(
+          ...party.members.map((m) => {
+            const isMe = m.id === party.me;
+            const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
+            const inVoice = isMe ? voice.active : !!m.inVoice;
+            const pic = isMe ? party.avatar || avatarOf(m) : avatarOf(m);
+            const avatar = el("div", { class: "np-avatar np-emo", style: `--h:${hue(m.id)}` }, el("span", { class: "np-avatar-pic" }, pic));
+            if (m.host) avatar.append(el("span", { class: "np-crown", title: "Host" }, svg(ICON.crown)));
+            if (inVoice) avatar.append(el("span", { class: "np-mic" + (info.muted ? " np-off" : ""), title: info.muted ? "Muted" : "In voice" }, svg(info.muted ? ICON.micOff : ICON.mic)));
+            const label = m.name + (m.host ? " (host)" : "");
+            const tile = isMe
+              ? el("button", { type: "button", class: "np-person np-me", title: "You · change your picture", "aria-label": "Change your picture", onclick: (e) => avatarPicker.toggle(e.currentTarget) })
+              : el("div", { class: "np-person", title: label });
+            tile.classList.toggle("np-speaking", inVoice && info.speaking && !info.muted);
+            tile.append(avatar, el("div", { class: "np-pname" }, isMe ? "You" : m.name));
+            return tile;
+          }),
+        );
+        // pictures on chat lines follow profile changes
+        for (const m of party.members) {
+          const pic = m.id === party.me ? party.avatar || avatarOf(m) : avatarOf(m);
+          for (const n of chatEl.querySelectorAll(`.np-mav[data-uid="${CSS.escape(m.id)}"]`)) if (n.textContent !== pic) n.textContent = pic;
+        }
       }
 
       const inVoiceCount = party.members.filter((m) => (m.id === party.me ? voice.active : m.inVoice)).length;
@@ -1305,23 +2000,23 @@ html.np-docked [data-np-shrink] {
         voiceBox.replaceChildren(
           el(
             "button",
-            { class: "np-join-voice", onclick: () => voice.join() },
+            { type: "button", class: "np-join-voice", onclick: () => voice.join() },
             svg(ICON.mic),
             el("span", {}, inVoiceCount ? `Join voice · ${inVoiceCount} talking` : "Join voice chat"),
           ),
         );
       } else {
-        const vol = el("input", { type: "range", min: "0", max: "1", step: "0.05", class: "np-vol", title: "Friends' voice volume" });
+        const vol = el("input", { type: "range", min: "0", max: "1", step: "0.05", class: "np-vol", title: "Friends' voice volume", "aria-label": "Friends' voice volume" });
         vol.value = String(voice.volume ?? 1);
         vol.addEventListener("input", () => voice.setVolume(Number(vol.value)));
         voiceBox.replaceChildren(
           el(
             "div",
             { class: "np-voice-bar" },
-            el("button", { class: "np-round" + (voice.muted ? " np-muted" : ""), title: voice.muted ? "Unmute" : "Mute", onclick: () => voice.toggleMute() }, svg(voice.muted ? ICON.micOff : ICON.mic)),
+            el("button", { type: "button", class: "np-round" + (voice.muted ? " np-muted" : ""), title: voice.muted ? "Unmute" : "Mute", "aria-label": voice.muted ? "Unmute" : "Mute", onclick: () => voice.toggleMute() }, svg(voice.muted ? ICON.micOff : ICON.mic)),
             el("div", { class: "np-voice-label" }, voice.muted ? "You're muted" : voice.speaking ? "Speaking…" : "Voice on", el("small", {}, `${inVoiceCount} in voice`)),
             vol,
-            el("button", { class: "np-round np-hang", title: "Leave voice", onclick: () => voice.leave() }, svg(ICON.phoneOff)),
+            el("button", { type: "button", class: "np-round np-hang", title: "Leave voice", "aria-label": "Leave voice", onclick: () => voice.leave() }, svg(ICON.phoneOff)),
           ),
         );
       }
@@ -1331,26 +2026,44 @@ html.np-docked [data-np-shrink] {
       if (!host) build();
       const nearBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
       chatEl.append(node);
-      while (chatEl.childElementCount > 200) chatEl.firstElementChild.remove();
+      while (chatEl.childElementCount > 200) {
+        media.release(chatEl.firstElementChild);
+        chatEl.firstElementChild.remove();
+      }
       if (nearBottom || !open) chatEl.scrollTop = chatEl.scrollHeight;
     }
 
     function chat(d, replay = false) {
       const mine = d.id === party.me || (!!d.cid && d.cid === TAB_ID);
       const time = new Date(d.ts || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const text = String(d.text || "");
+      let body;
+      if (d.gif && gifUrlOk(d.gif.url)) {
+        // fit inside 200×200, keep the aspect ratio (space is reserved before it loads)
+        const w = d.gif.w || 200, h = d.gif.h || 150, k = Math.min(1, 200 / w, 200 / h);
+        const img = el("img", { class: "np-gif", alt: "GIF from " + d.name, width: String(Math.round(w * k)), height: String(Math.round(h * k)) });
+        img.addEventListener("load", () => nearBottomScroll());
+        media.load(img, d.gif.url);
+        body = el("div", { class: "np-bubble np-bubble-gif" }, img, el("span", { class: "np-time" }, time));
+      } else body = el("div", { class: "np-bubble" }, ...linkify(text), el("span", { class: "np-time" }, time));
+      const pic = mine ? party.avatar || avatarOf(d) : d.avatar || avatarOf(d);
       addLine(
         el(
           "div",
           { class: "np-msg" + (mine ? " np-mine" : "") },
-          mine ? "" : el("div", { class: "np-author", style: `--h:${hue(d.id)}` }, d.name),
-          el("div", { class: "np-bubble" }, d.text, el("span", { class: "np-time" }, time)),
+          mine ? "" : el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, pic),
+          el("div", { class: "np-mcol" }, mine ? "" : el("div", { class: "np-author", style: `--h:${hue(d.id)}` }, d.name), body),
         ),
       );
       if (!open && !mine && !replay) {
         unread++;
-        toast(d.name, d.text);
+        toast(d.name, d.gif ? "sent a GIF" : text);
         render();
       }
+    }
+    // keep the newest message in view when a GIF above it finishes loading
+    function nearBottomScroll() {
+      if (chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 260) chatEl.scrollTop = chatEl.scrollHeight;
     }
     function system(text) {
       addLine(el("div", { class: "np-sys" }, text));
@@ -1358,6 +2071,7 @@ html.np-docked [data-np-shrink] {
     // everything said in the party so far (the server keeps the last 150 lines)
     function loadHistory(list) {
       if (!host) build();
+      media.release(chatEl);
       chatEl.replaceChildren();
       for (const h of list) h.kind === "chat" ? chat(h, true) : system(h.text);
       chatEl.scrollTop = chatEl.scrollHeight;
@@ -1366,12 +2080,26 @@ html.np-docked [data-np-shrink] {
     // the only thing that changes every second is the playback clock
     setInterval(() => {
       if (!party.roomId || !open || !metaEl) return;
-      const st = party.state;
-      metaEl.textContent = st
-        ? `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`
-        : "";
+      metaEl.textContent = metaText();
+      metaEl.classList.toggle("np-ad", adPlaying());
     }, 1000);
-    return { mount, show, hide, render, chat, system, loadHistory, dockCheck: () => host && dockCheck() };
+    let reactionPref = null;
+    return {
+      mount,
+      show,
+      hide,
+      render,
+      chat,
+      system,
+      loadHistory,
+      float,
+      setFont,
+      setReactions(v) {
+        reactionPref = v;
+        reactions.set(v);
+      },
+      dockCheck: () => host && dockCheck(),
+    };
   })();
 
   // ------------------------------------------------ popup <-> content API
@@ -1435,7 +2163,7 @@ html.np-docked [data-np-shrink] {
       } else {
         // we left the title with a full page load: close out the party properly
         await ensureConnected();
-        const snap = await net.request("join", { roomId: room, name: party.name, cid: TAB_ID });
+        const snap = await net.request("join", { roomId: room, name: party.name, avatar: party.avatar, cid: TAB_ID });
         party.roomId = snap.roomId;
         party.hostId = snap.hostId;
         const host = party.me === party.hostId;

@@ -3,6 +3,7 @@ import http from "node:http";
 import { WebSocketServer } from "ws";
 import fs from "node:fs";
 import { createHub, defaultIceServers, joinPage } from "./core.js";
+import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "./gifs.js";
 
 const PORT = Number(process.env.PORT || 8787);
 const hub = createHub({ iceServers: defaultIceServers(process.env) });
@@ -11,7 +12,41 @@ const rooms = hub.rooms;
 // optional: serve the extension zip from invite pages (set EXTENSION_ZIP=/path/netparty.zip)
 const ZIP = process.env.EXTENSION_ZIP && fs.existsSync(process.env.EXTENSION_ZIP) ? process.env.EXTENSION_ZIP : null;
 
+// GIF search proxy: KLIPY_KEY (and KLIPY_BASE, for tests) from the environment
+const gifCache = new Map(); // url -> { at, status, body }
+const gifLimit = makeLimiter({ max: 60, windowMs: 60_000 });
+async function gifs(req, res) {
+  const url = new URL(req.url, "http://localhost");
+  const cors = corsHeaders(req.headers.origin);
+  const send = (status, body, extra = {}) => {
+    res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...cors, ...extra });
+    res.end(JSON.stringify(body));
+  };
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, cors);
+    return res.end();
+  }
+  if (req.method !== "GET") return send(405, { error: "method_not_allowed" });
+  const parsed = parseGifRequest(url);
+  if (parsed.error) return send(parsed.status, { error: parsed.error });
+  if (!process.env.KLIPY_KEY) return send(503, { error: "gifs_unavailable" }, { "cache-control": "no-store" });
+  const key = `${parsed.kind}|${parsed.q}|${parsed.pos}`;
+  const hit = gifCache.get(key);
+  if (hit && Date.now() - hit.at < GIF_CACHE_SECONDS * 1000) return send(200, hit.body, { "cache-control": `public, max-age=${GIF_CACHE_SECONDS}` });
+  if (!gifLimit(req.socket.remoteAddress || "?")) return send(429, { error: "rate_limited" }, { "retry-after": "60" });
+  const out = await gifSearch(parsed, { key: process.env.KLIPY_KEY, base: process.env.KLIPY_BASE });
+  if (out.status === 200) {
+    gifCache.set(key, { at: Date.now(), body: out.body });
+    if (gifCache.size > 500) gifCache.delete(gifCache.keys().next().value);
+  }
+  send(out.status, out.body, { "cache-control": out.status === 200 ? `public, max-age=${GIF_CACHE_SECONDS}` : "no-store" });
+}
+
 const server = http.createServer(async (req, res) => {
+  if ((req.url || "").startsWith("/api/gifs/")) return gifs(req, res).catch(() => {
+    if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
+    res.end('{"error":"server_error"}');
+  });
   const j = (req.url || "").match(/^\/j\/([a-z0-9]{4,16})(\/netparty\.zip)?\/?(?:\?.*)?$/i);
   if (j) {
     const room = await hub.findRoom(j[1]);

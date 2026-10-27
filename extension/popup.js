@@ -1,10 +1,12 @@
 const $ = (id) => document.getElementById(id);
 const DEFAULT_SERVER = "wss://netparty.tech";
-const SITE_RE = /^https:\/\/www\.(netflix|hotstar|jiohotstar)\.com\//;
+const SITE_RE = /^https:\/\/www\.(netflix|hotstar|jiohotstar|youtube)\.com\//;
+const E = globalThis.NP_EMOJI;
 let tabId = null;
 
 const view = (name) => {
   for (const v of ["vOff", "vIdle", "vParty"]) $(v).classList.toggle("hidden", v !== name);
+  $("vMe").classList.toggle("hidden", name === "vOff");
 };
 const setError = (t) => ($("error").textContent = t || "");
 
@@ -47,7 +49,9 @@ async function refresh() {
     $("create").disabled = !st.onWatchPage;
     $("startHint").textContent = st.onWatchPage
       ? `Starts a party for what's playing on ${st.site}.`
-      : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
+      : st.site === "YouTube"
+        ? `Open a video on YouTube, or use the "Start a NetParty" button under it.`
+        : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
   }
 }
 
@@ -104,9 +108,88 @@ $("save").onclick = async () => {
   setTimeout(() => ($("save").textContent = "Save"), 1200);
 };
 
+// ---- your picture
+const emojiBtn = (e, cls, onclick, label) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = cls + " emo";
+  b.textContent = e;
+  b.title = label || e;
+  b.setAttribute("aria-label", label || e);
+  b.onclick = onclick;
+  return b;
+};
+function showAvatar(a) {
+  $("avatarBtn").textContent = a || "🙂";
+  for (const b of $("avatarGrid").children) b.setAttribute("aria-selected", String(b.textContent === a));
+}
+$("avatarGrid").append(
+  ...E.avatars.map((a) =>
+    emojiBtn(a, "avatar-opt", async () => {
+      await chrome.storage.sync.set({ avatar: a }); // an open party picks this up straight away
+      showAvatar(a);
+      $("avatarGrid").classList.add("hidden");
+      $("avatarBtn").setAttribute("aria-expanded", "false");
+    }, "Use " + a),
+  ),
+);
+for (const b of $("avatarGrid").children) b.setAttribute("role", "option");
+$("avatarBtn").onclick = () => {
+  const hidden = $("avatarGrid").classList.toggle("hidden");
+  $("avatarBtn").setAttribute("aria-expanded", String(!hidden));
+};
+
+// ---- chat settings: text size, 🎉 reactions
+function showFont(f) {
+  for (const b of document.querySelectorAll("[data-font]")) b.setAttribute("aria-checked", String(b.dataset.font === (f || "m")));
+}
+for (const b of document.querySelectorAll("[data-font]"))
+  b.onclick = async () => {
+    await chrome.storage.sync.set({ chatFont: b.dataset.font });
+    showFont(b.dataset.font);
+  };
+let slots = E.reactions.slice();
+let editing = -1;
+function showSlots() {
+  $("slots").replaceChildren(
+    ...slots.map((e, i) => {
+      const b = emojiBtn(e, "slot" + (i === editing ? " on" : ""), () => {
+        editing = editing === i ? -1 : i;
+        $("slotGrid").classList.toggle("hidden", editing < 0);
+        showSlots();
+      }, `Reaction ${i + 1}: ${e} (click to change)`);
+      return b;
+    }),
+  );
+}
+const reactionChoices = [...new Set(E.categories.flatMap((c) => c.list))];
+$("slotGrid").append(
+  ...reactionChoices.map((e) =>
+    emojiBtn(e, "emoji-opt", async () => {
+      if (editing < 0) return;
+      slots[editing] = e;
+      editing = -1;
+      $("slotGrid").classList.add("hidden");
+      await chrome.storage.sync.set({ reactions: slots });
+      showSlots();
+    }),
+  ),
+);
+$("slotReset").onclick = async () => {
+  slots = E.reactions.slice();
+  editing = -1;
+  $("slotGrid").classList.add("hidden");
+  await chrome.storage.sync.remove("reactions");
+  showSlots();
+};
+
 (async () => {
-  const { name, serverUrl } = await chrome.storage.sync.get(["name", "serverUrl"]);
+  const { name, serverUrl, avatar, chatFont, reactions } = await chrome.storage.sync.get(["name", "serverUrl", "avatar", "chatFont", "reactions"]);
   $("name").value = name && !/^Guest \d+$/.test(name) ? name : "";
   $("server").value = serverUrl || DEFAULT_SERVER;
+  showAvatar(avatar);
+  showFont(chatFont);
+  if (Array.isArray(reactions) && reactions.length === 5) slots = reactions.slice();
+  showSlots();
   refresh();
 })();

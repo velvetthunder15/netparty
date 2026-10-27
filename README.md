@@ -1,10 +1,11 @@
-# NetParty — watch Netflix and JioHotstar together
+# NetParty — watch Netflix, JioHotstar and YouTube together
 
-A Chrome extension + tiny sync server. Everyone in the party needs the extension and
-their own account on the service (Netflix or JioHotstar).
+A Chrome extension + tiny sync server. Everyone in the party needs the extension and,
+for Netflix and JioHotstar, their own account on the service.
 
-Supported: **Netflix** (`netflix.com/watch/...`) and **JioHotstar**
-(`hotstar.com/in/.../watch`, movies, shows and episodes).
+Supported: **Netflix** (`netflix.com/watch/...`), **JioHotstar**
+(`hotstar.com/in/.../watch`, movies, shows and episodes) and **YouTube**
+(`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported).
 
 Features
 - Playback sync: play, pause, seek, and episode changes follow the party
@@ -15,6 +16,15 @@ Features
   player controls); hide it to go back to full width
 - Chat with message bubbles, Send button and Enter to send, unread badge and message previews
   (works in fullscreen; keys typed in chat never reach the site's hotkeys)
+- Profile pictures: pick a cute emoji (🐶 🐼 🦊 🍕 🍩 🍿 …) in the popup or by clicking your picture in the
+  chat panel; it shows next to your messages and in the people list, and updates live for everyone
+- Emoji picker in the chat bar (smileys, gestures, animals, food, activities, symbols, recently used)
+- 🎉 Reactions: tap one of 5 emojis and it floats up over everyone's video (also in fullscreen).
+  Defaults 😂 😭 💀 🥰 😱; change them in the tray (pencil) or the popup's Chat settings
+- GIFs from KLIPY, with the picker pre-filled with what you're watching, plus quick chips
+  (reaction, lol, omg, popcorn). Needs the server's KLIPY key, see "GIFs" below
+- Links in chat are clickable (open in a new tab)
+- Chat text size: Small / Medium / Large (Aa in the chat bar, or the popup's Chat settings)
 - Voice chat: peer-to-peer WebRTC audio, mute, volume, speaking indicator
 - Host-only control lock, host hand-off when the host leaves, auto-reconnect
 
@@ -25,10 +35,11 @@ Features
 2. **Install** in Chrome: open `chrome://extensions`, turn on **Developer mode**,
    click **Load unpacked**, and pick the `extension` folder.
 3. **Pin** NetParty from the puzzle-piece menu.
-4. **Host**: open any title on Netflix or JioHotstar, press play, click NetParty → **Start a party**.
+4. **Host**: open any title on Netflix or JioHotstar (or a YouTube video), press play, click NetParty → **Start a party**
+   (or the **Start a NetParty** button on the page).
    The invite link is copied to your clipboard.
 5. **Invite**: send the link. It opens an invite page: friends without NetParty get a
-   download + 3-step install there, then press **Join on Netflix/JioHotstar** and land on the same title, in sync.
+   download + 3-step install there, then press **Join on Netflix/JioHotstar/YouTube** and land on the same title, in sync.
 6. **Talk**: the chat panel opens on the right; the round purple button reopens it.
    Type and press Enter (or the send arrow). **Join voice chat** and allow the mic to talk.
 
@@ -38,18 +49,22 @@ No server setup needed: the extension uses the hosted server by default.
 
 | Action | How |
 | --- | --- |
-| Start a party | **Start a NetParty** button next to Play / More Info (Netflix) or under Watch (JioHotstar): opens the title and starts the party. Or, on a playing title, NetParty icon → **Start a party** |
+| Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar) or next to Like under a YouTube video: starts the party. Or, on a playing title, NetParty icon → **Start a party** |
 | Join a party | Open the invite link, or icon → paste the link or code → **Join** |
 | Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
 | Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
+| Emoji / GIF / react | Chat bar: 🙂 opens emoji, **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
+| Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Chat settings** |
 | Lock controls | Host: icon → **Only I can play, pause and skip** |
-| Change your name | Icon → **Your name** (before starting or joining) |
+| Change your name or picture | Icon → **You** (the picture opens the picker), or click your own picture in the chat panel |
 | Leave | Exit the title, or **Leave party**. If the host leaves, the party ends for everyone; a guest leaving just leaves. Next episode keeps the party going. |
 
 Tips
 - Everyone needs their own account on a plan that streams that title in their region.
 - JioHotstar: ads on ad-supported plans play separately for each person; after an ad, press play/pause once to resync.
+- YouTube: ads play separately for each person. While yours plays, the panel shows "Waiting for ad to finish"
+  and nothing is synced; when it ends you jump to where the party is. Switching video moves the whole party.
 - Use headphones on voice to avoid echo.
 - If someone drifts, pressing play/pause once resyncs everyone.
 - On strict college or mobile networks voice may not connect; see TURN below.
@@ -60,6 +75,7 @@ Tips
 - **"Party not found"**: the host's party ended or the code is wrong; ask for a fresh link.
 - **No mic prompt / no audio**: click the lock icon in the address bar → allow Microphone for the site, then rejoin voice.
 - **Netflix error after a seek**: reload the tab; the party rejoins automatically.
+- **"GIFs aren't available right now"**: the server has no KLIPY key yet (see GIFs below).
 
 ## 1. The server
 
@@ -78,6 +94,25 @@ npm install
 npm start            # ws://localhost:8787
 npm test             # end-to-end protocol tests
 ```
+
+### GIFs (KLIPY)
+
+GIF search goes through the server so the API key never ships in the extension
+(`GET /api/gifs/search?q=&pos=` and `GET /api/gifs/trending`, cached ~10 min, rate limited per IP,
+`contentfilter=medium`). Tenor's API shut down on 2026-06-30, so NetParty uses
+[KLIPY](https://klipy.com)'s Tenor-compatible API.
+
+1. Get a free API key at https://partner.klipy.com
+2. Add it as a Worker secret: Cloudflare dashboard → **Workers & Pages** → **netparty** → **Settings** →
+   **Variables and Secrets** → **Add** → type **Secret**, name `KLIPY_KEY`, paste the key → **Deploy**
+   (or `cd server/worker && npx wrangler secret put KLIPY_KEY`).
+   Node server: start it with `KLIPY_KEY=... npm start`.
+
+Without a key the endpoints answer `503 {"error":"gifs_unavailable"}` and the extension shows
+"GIFs aren't available right now". GIFs in chat are only accepted from KLIPY's media hosts
+(`static.klipy.com`, `static1.klipy.com`, `static2.klipy.com`). If a site's CSP blocks those
+images in the page, the extension fetches them in its background worker and shows them from a
+`blob:` URL.
 
 For friends on other networks the server must be public over `wss://`. Any Node
 host works (Render, Railway, Fly.io, a VPS behind Caddy/Nginx). Set `PORT` if
@@ -107,15 +142,19 @@ may fail to connect; add a TURN server with env vars:
 - `extension/background.js` – holds the WebSocket per tab (outside Netflix's CSP)
 - `extension/early.js` – runs at page start: keeps the invite code if the site rewrites the URL, and
   routes keys typed in the panel away from the site's hotkeys
-- `extension/content.js` – party logic, clock sync, playback sync, chat, voice, overlay (shadow DOM)
+- `extension/content.js` – party logic, clock sync, playback sync, chat (emoji, GIFs, links), reactions, voice, overlay (shadow DOM)
+- `extension/emoji-data.js` – bundled emoji lists (pictures, picker, default reactions); shared by content script, popup, background
 - `extension/page.js` – runs in the site's page: drives Netflix's internal player API
   (setting `video.currentTime` directly triggers Netflix error M7375) and the plain
   HTML5 `<video>` on JioHotstar
-- `server/core.js` – rooms, state relay, chat, WebRTC signaling (shared)
+- `server/core.js` – rooms, state relay, chat, avatars, reactions, WebRTC signaling (shared)
+- `server/gifs.js` – KLIPY GIF search proxy (shared by Node and the Worker)
 - `server/server.js` – Node transport; `server/worker/` – Cloudflare transport
 - `GET /j/<code>` – invite page; `/j/<code>/netparty.zip` – extension download, only while that party is live
   (Worker bundles it: run `npm run deploy` in `server/`; Node: set `EXTENSION_ZIP=/path/to.zip`)
-- `e2e/` – real-Chromium test: two browsers, fake Netflix/JioHotstar pages, invite → join → chat → sync
+- `e2e/` – real-Chromium tests: two browsers, fake Netflix/JioHotstar/YouTube pages, a mock KLIPY;
+  `run.mjs` (invite → join → chat → sync), `lifecycle.mjs`, `features.mjs` (avatars, emoji, reactions,
+  text size, links, GIFs; `CSP=strict` for a strict image CSP), `youtube.mjs` (start, sync, ads, video change, dock)
 
 Protocol frames: `{ type, reqId?, data }`; replies echo `reqId`.
 Shared state: `{ playing, position (ms), at (server ms), videoId }`.
@@ -123,6 +162,9 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
 
 ## Known limits
 
+- Emoji are drawn by each computer's own emoji font: Apple's emoji on Macs and iPhones, Segoe on
+  Windows, Noto on Android/Linux (no emoji images are bundled).
+- YouTube's real page can change its layout; the split-screen dock narrows `ytd-watch-flexy` and the top bar.
 - Episode changes reload followers' tabs; voice reconnects automatically after.
 - Voice is a mesh: great up to ~6 people in voice, heavier beyond that.
 - Netflix's internal player API is undocumented and can change.
@@ -146,3 +188,18 @@ No Teleparty or REA code is included; NetParty is an original implementation.
 - Leaving the title ends the party: the host exiting (back to browse, another page) closes it for everyone and friends see "<host> ended the party"; a guest exiting just leaves. Nobody gets pulled back into the movie anymore. Going to the next episode stays on a watch page, so the party continues and friends follow.
 - Joining from a browse page sends you to the party's title first.
 - Parties are saved on the server, so a server restart no longer causes "Party not found"; tabs reconnect and rejoin on their own and keep retrying (no more giving up after a few tries).
+
+## v1.6.0
+
+- **YouTube**: watch pages (`youtube.com/watch?v=…`) with a **Start a NetParty** button next to Like,
+  play/pause/seek sync, switching video moves the party, ads pause sync for that viewer ("Waiting for ad
+  to finish") and they catch up afterwards, split-screen dock in default, theater and fullscreen. Invite
+  pages and the popup name the right platform.
+- **Profile pictures**: emoji avatars on a soft circle (random one to start), in the popup and the panel,
+  shown in the people list and next to chat messages, updated live.
+- **Emoji picker** in the chat bar (inserts at the cursor, recently used row, Esc closes).
+- **🎉 Reactions** float over everyone's video (rate limited to 6 per 3 s), customisable.
+- **GIFs** via KLIPY (server-side key; add `KLIPY_KEY`), suggested from the current title, "Powered by KLIPY".
+- **Links** in chat are clickable; **chat text size** Small / Medium / Large.
+- Protocol additions are optional fields and new message types (`avatar`, `react`, chat `gif`), so 1.5
+  clients keep working in the same party (they see "GIF" for a GIF and no reactions).

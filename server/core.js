@@ -5,7 +5,47 @@ const MAX_CHAT = 500;
 const MAX_MEMBERS = 50;
 const HISTORY = 150; // chat + system lines replayed to anyone who (re)joins
 const GRACE_MS = 15_000;
-const RESTORE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // a saved party older than this is not brought back // a dropped connection keeps its seat (and host role) this long
+const RESTORE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // a saved party older than this is not brought back
+const REACT_MAX = 6; // reactions per connection…
+const REACT_WINDOW_MS = 3000; // …per this window
+
+// ---- shared validators (also used by the GIF proxy in gifs.js)
+// Profile pictures are emoji. The picker offers these; any other single emoji
+// (one grapheme, at most 8 UTF-16 units) is accepted too, nothing else is.
+export const AVATARS = [
+  "🐶", "🐱", "🐼", "🦊", "🐨", "🐸", "🐵", "🐧", "🦄", "🐯", "🐰", "🐻", "🐮", "🐷", "🐙", "🦁",
+  "🍕", "🍩", "🍔", "🌮", "🍣", "🧁", "🍉", "🍓", "🍪", "🥑", "🍦", "🍿",
+];
+const segmenter = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("en", { granularity: "grapheme" }) : null;
+export function isSingleEmoji(s, maxUnits = 16) {
+  if (typeof s !== "string" || !s || s.length > maxUnits) return false;
+  // must be a picture (or a flag), with no letters, digits, spaces or markup in it
+  if (!/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(s)) return false;
+  if (/[\p{L}\p{N}\p{P}\p{Z}\p{Cc}<>`$^|~=+]/u.test(s)) return false;
+  if (segmenter) {
+    let n = 0;
+    for (const _ of segmenter.segment(s)) if (++n > 1) return false;
+  }
+  return true;
+}
+export const cleanAvatar = (a) => (AVATARS.includes(a) || isSingleEmoji(a, 8) ? a : null);
+// GIFs in chat may only come from KLIPY's media servers (docs.klipy.com/network-requirements)
+export const KLIPY_MEDIA_HOSTS = ["static.klipy.com", "static1.klipy.com", "static2.klipy.com"];
+export function isKlipyMediaUrl(s) {
+  if (typeof s !== "string" || s.length > 600) return false;
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return false;
+  }
+  return u.protocol === "https:" && !u.username && !u.password && !u.port && KLIPY_MEDIA_HOSTS.includes(u.hostname) && u.href === s;
+}
+function cleanGif(g) {
+  if (!g || typeof g !== "object" || !isKlipyMediaUrl(g.url)) return null;
+  const dim = (n) => (Number.isInteger(n) && n > 0 && n <= 4096 ? n : null);
+  return { url: g.url, w: dim(g.w), h: dim(g.h) };
+}
 
 export function defaultIceServers(env = {}) {
   const ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
@@ -46,7 +86,7 @@ function broadcast(room, msg, exceptId = null) {
 }
 
 function memberList(room) {
-  return [...room.members.values()].map((m) => ({ id: m.id, name: m.name, host: m.id === room.hostId, inVoice: !!m.inVoice }));
+  return [...room.members.values()].map((m) => ({ id: m.id, name: m.name, avatar: m.avatar || null, host: m.id === room.hostId, inVoice: !!m.inVoice }));
 }
 
 function snapshot(room) {
@@ -188,6 +228,7 @@ const handlers = {
     do id = newId(8);
     while (rooms.has(id));
     client.name = cleanName(data?.name);
+    client.avatar = cleanAvatar(data?.avatar);
     client.cid = cleanCid(data?.cid);
     const now = Date.now();
     /** @type {Room} */
@@ -218,6 +259,7 @@ const handlers = {
     if (!room) return reply(null, "Party not found. It may have ended.");
     if (room.members.size >= MAX_MEMBERS) return reply(null, "Party is full.");
     client.name = cleanName(data?.name);
+    client.avatar = cleanAvatar(data?.avatar);
     client.cid = cleanCid(data?.cid);
     const returning = joinRoom(client, room);
     reply({ ...snapshot(room), returning });
@@ -272,12 +314,20 @@ const handlers = {
     reply({ ok: true });
   },
 
+  // text message, or a GIF ({ gif: { url, w, h } }, url on KLIPY's media hosts only).
+  // GIF lines also carry text "GIF" so 1.5 clients show something sensible.
   chat(client, data, reply) {
     const room = client.roomId && rooms.get(client.roomId);
     if (!room) return reply(null, "Not in a party.");
-    const text = String(data?.text || "").trim().slice(0, MAX_CHAT);
+    let gif = null;
+    if (data?.gif !== undefined) {
+      gif = cleanGif(data.gif);
+      if (!gif) return reply(null, "Bad GIF.");
+    }
+    const text = gif ? "GIF" : String(data?.text || "").trim().slice(0, MAX_CHAT);
     if (!text) return reply(null, "Empty message.");
-    const line = { id: client.id, cid: client.cid, name: client.name, text, ts: Date.now() };
+    const line = { id: client.id, cid: client.cid, name: client.name, avatar: client.avatar || null, text, ts: Date.now() };
+    if (gif) line.gif = gif;
     remember(room, { kind: "chat", ...line });
     broadcast(room, { type: "chat", data: line });
     reply({ ok: true });
@@ -287,6 +337,30 @@ const handlers = {
     client.name = cleanName(data?.name);
     const room = client.roomId && rooms.get(client.roomId);
     if (room) broadcast(room, { type: "members", data: { members: memberList(room), hostId: room.hostId } });
+    reply({ ok: true });
+  },
+
+  // change your profile picture (an emoji) mid-party
+  avatar(client, data, reply) {
+    const avatar = cleanAvatar(data?.avatar);
+    if (!avatar) return reply(null, "Bad avatar.");
+    client.avatar = avatar;
+    const room = client.roomId && rooms.get(client.roomId);
+    if (room) broadcast(room, membersMsg(room));
+    reply({ ok: true });
+  },
+
+  // floating emoji reaction over everyone's video (not kept in history)
+  react(client, data, reply) {
+    const room = client.roomId && rooms.get(client.roomId);
+    if (!room) return reply(null, "Not in a party.");
+    const emoji = data?.emoji;
+    if (!isSingleEmoji(emoji, 16)) return reply(null, "Bad reaction.");
+    const now = Date.now();
+    client.reacts = (client.reacts || []).filter((t) => now - t < REACT_WINDOW_MS);
+    if (client.reacts.length >= REACT_MAX) return reply(null, "Slow down.");
+    client.reacts.push(now);
+    broadcast(room, { type: "react", data: { id: client.id, name: client.name, avatar: client.avatar || null, emoji, ts: now } }, client.id);
     reply({ ok: true });
   },
 
@@ -410,25 +484,29 @@ return { connect, sweep, rooms, getRoom: (code) => rooms.get(String(code || "").
 // install NetParty first. The extension download only works while the party is live.
 export function watchUrlFor(videoId, roomId) {
   if (!videoId) return null;
+  if (videoId.startsWith("yt:"))
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId.slice(3))}&npParty=${encodeURIComponent(roomId)}`;
   const base = videoId.startsWith("hs:")
     ? "https://www.hotstar.com" + videoId.slice(3)
     : "https://www.netflix.com/watch/" + encodeURIComponent(videoId);
   return `${base}?npParty=${encodeURIComponent(roomId)}`;
 }
+export const siteFor = (videoId) =>
+  String(videoId || "").startsWith("hs:") ? "JioHotstar" : String(videoId || "").startsWith("yt:") ? "YouTube" : "Netflix";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 export function joinPage(room, code, { hasDownload = false } = {}) {
   const live = !!room && !room.ended;
   const host = live ? [...room.members.values()].find((m) => m.id === room.hostId) || [...room.members.values()][0] : null;
-  const site = room?.state.videoId?.startsWith("hs:") ? "JioHotstar" : "Netflix";
+  const site = siteFor(room?.state.videoId);
   const watch = live ? watchUrlFor(room.state.videoId, room.id) : null;
   const body = !live
     ? `<h1>This party has ended</h1><p>Ask your friend for a fresh invite link.</p>`
     : `<h1>${esc(host?.name || "A friend")} invited you to a watch party</h1>
 <p class="sub">${room.members.size ? room.members.size + " watching" : "Live"} on ${site} · party <code>${esc(room.id)}</code></p>
 <a class="btn" href="${esc(watch)}">Join on ${site}</a>
-<p class="note">You need your own ${site} account and the NetParty extension in Chrome (or Edge, Brave).</p>
+<p class="note">${site === "YouTube" ? "You need" : `You need your own ${site} account and`} the NetParty extension in Chrome (or Edge, Brave).</p>
 <details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>
 <ol>
 ${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty</a> and unzip it.</li>` : `<li>Ask ${esc(host?.name || "your friend")} to send you the NetParty zip, then unzip it.</li>`}

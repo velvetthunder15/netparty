@@ -1,6 +1,7 @@
 // NetParty sync server on Cloudflare Workers. All WebSocket connections go to one
 // Durable Object ("hub"), which runs the same room logic as the Node server.
 import { createHub, defaultIceServers, joinPage } from "../core.js";
+import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "../gifs.js";
 import extensionZip from "./public/netparty-extension.zip";
 // landing site (copied from the Hark-built page) bundled into the Worker
 import siteIndex from "./site/index.html";
@@ -76,13 +77,40 @@ export class PartyHub {
   }
 }
 
+// ---- GIF search proxy (KLIPY). Needs the Worker secret KLIPY_KEY; without it the
+// endpoints answer 503 {error:"gifs_unavailable"} and the extension hides GIFs.
+const gifLimit = makeLimiter({ max: 60, windowMs: 60_000 });
+async function gifs(request, env, ctx, url) {
+  const cors = corsHeaders(request.headers.get("Origin"));
+  const json = (status, body, extra = {}) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", ...cors, ...extra } });
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (request.method !== "GET") return json(405, { error: "method_not_allowed" });
+  const parsed = parseGifRequest(url);
+  if (parsed.error) return json(parsed.status, { error: parsed.error });
+  if (!env.KLIPY_KEY) return json(503, { error: "gifs_unavailable" }, { "cache-control": "no-store" });
+  const country = /^[A-Z]{2}$/.test(request.cf?.country || "") ? request.cf.country : "";
+  // edge cache, keyed on the normalized query (never on the key or the caller)
+  const ck = new Request(`${url.origin}/__gif-cache/${parsed.kind}?q=${encodeURIComponent(parsed.q)}&pos=${encodeURIComponent(parsed.pos)}&c=${country}`);
+  const cache = caches.default;
+  const hit = await cache.match(ck);
+  if (hit) return json(200, await hit.json(), { "cache-control": `public, max-age=${GIF_CACHE_SECONDS}`, "x-cache": "HIT" });
+  const ip = request.headers.get("CF-Connecting-IP") || "?";
+  if (!gifLimit(ip)) return json(429, { error: "rate_limited" }, { "retry-after": "60" });
+  const out = await gifSearch(parsed, { key: env.KLIPY_KEY, base: env.KLIPY_BASE, country });
+  if (out.status === 200)
+    ctx.waitUntil(cache.put(ck, new Response(JSON.stringify(out.body), { headers: { "content-type": "application/json", "cache-control": `public, max-age=${GIF_CACHE_SECONDS}` } })));
+  return json(out.status, out.body, { "cache-control": out.status === 200 ? `public, max-age=${GIF_CACHE_SECONDS}` : "no-store" });
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const stub = env.HUB.get(env.HUB.idFromName("global"));
     const url = new URL(request.url);
     if (url.hostname === "www.netparty.tech")
       return Response.redirect("https://netparty.tech" + url.pathname + url.search, 301);
     const isWs = request.headers.get("Upgrade") === "websocket";
+    if (!isWs && url.pathname.startsWith("/api/gifs/")) return gifs(request, env, ctx, url);
     if (!isWs && (request.method === "GET" || request.method === "HEAD")) {
       const page = SITE[url.pathname];
       if (page)

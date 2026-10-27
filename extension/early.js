@@ -1,8 +1,10 @@
 // Runs at document_start, before the site's own scripts.
 // 1) Saves an invite code (or a start request) from the URL before the site's router can rewrite it.
 // 2) Puts the first keyboard listener on window, so keystrokes typed into the
-//    NetParty panel reach us and never reach the site's hotkeys (space = pause,
-//    f = fullscreen, etc.), which otherwise swallow Enter in the chat box.
+//    NetParty panel (chat box, GIF search, pickers) reach us and never reach the
+//    site's hotkeys (space = pause, f = fullscreen, k/j/l on YouTube, etc.), which
+//    otherwise swallow Enter in the chat box.
+// 3) Same for clicks on links in chat, so the site can't cancel them.
 (() => {
   if (window.__netpartyEarly) return;
   window.__netpartyEarly = true;
@@ -25,6 +27,19 @@
         // stopping propagation doesn't cancel the browser's default text input)
         if (type === "keydown") window.__netpartyKey?.(e);
         e.stopImmediatePropagation();
+      },
+      true,
+    );
+  }
+  // Links in chat: let the browser follow them. Stopping the click here, before any of
+  // the site's own capture listeners, means the player can't swallow it or call
+  // preventDefault (stopping propagation keeps the link's default action).
+  for (const type of ["click", "auxclick", "mousedown", "mouseup", "pointerdown", "pointerup"]) {
+    window.addEventListener(
+      type,
+      (e) => {
+        if (!inPanel(e)) return;
+        if (e.composedPath().some((n) => n && n.nodeType === 1 && n.matches?.("a.np-a[href]"))) e.stopImmediatePropagation();
       },
       true,
     );

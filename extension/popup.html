@@ -13,20 +13,28 @@
       </div>
     </header>
 
-    <!-- not on Netflix / JioHotstar -->
+    <!-- not on Netflix / JioHotstar / YouTube -->
     <section id="vOff" class="hidden">
-      <p class="lead">Open Netflix or JioHotstar to start or join a party.</p>
-      <div class="two">
-        <button class="ghost" data-open="https://www.netflix.com/browse">Open Netflix</button>
-        <button class="ghost" data-open="https://www.hotstar.com/in/home">Open JioHotstar</button>
+      <p class="lead">Open Netflix, JioHotstar or YouTube to start or join a party.</p>
+      <div class="three">
+        <button class="ghost" data-open="https://www.netflix.com/browse">Netflix</button>
+        <button class="ghost" data-open="https://www.hotstar.com/in/home">JioHotstar</button>
+        <button class="ghost" data-open="https://www.youtube.com/">YouTube</button>
       </div>
+    </section>
+
+    <!-- you: picture + name (before and during a party) -->
+    <section id="vMe" class="hidden">
+      <label for="name">You</label>
+      <div class="me">
+        <button id="avatarBtn" class="avatar emo" type="button" title="Change your picture" aria-label="Change your picture" aria-expanded="false"></button>
+        <input id="name" type="text" maxlength="24" placeholder="Your name (what friends see)" />
+      </div>
+      <div id="avatarGrid" class="avatar-grid hidden" role="listbox" aria-label="Pick your picture"></div>
     </section>
 
     <!-- on the site, not in a party -->
     <section id="vIdle" class="hidden">
-      <label for="name">Your name</label>
-      <input id="name" type="text" maxlength="24" placeholder="What friends will see" />
-
       <div id="startBox">
         <button id="create" class="primary">Start a party</button>
         <p class="hint" id="startHint"></p>
@@ -58,6 +66,24 @@
 
     <div id="error" class="err"></div>
 
+    <details id="prefs">
+      <summary>Chat settings</summary>
+      <div class="pref">
+        <span class="pref-label" id="fontLabel">Chat text size</span>
+        <div class="seg" role="radiogroup" aria-labelledby="fontLabel">
+          <button type="button" role="radio" data-font="s">Small</button>
+          <button type="button" role="radio" data-font="m">Medium</button>
+          <button type="button" role="radio" data-font="l">Large</button>
+        </div>
+      </div>
+      <div class="pref">
+        <span class="pref-label">🎉 Reactions <small>(click one to change it)</small></span>
+        <div class="slots" id="slots"></div>
+        <div id="slotGrid" class="emoji-grid hidden" aria-label="Pick a reaction"></div>
+        <button id="slotReset" type="button" class="text small-link">Reset to 😂 😭 💀 🥰 😱</button>
+      </div>
+    </details>
+
     <details>
       <summary>Advanced</summary>
       <label for="server">Party server</label>
@@ -65,6 +91,7 @@
       <button id="save" class="ghost small">Save</button>
     </details>
 
+    <script src="emoji-data.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>
