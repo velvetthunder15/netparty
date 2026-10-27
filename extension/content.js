@@ -2389,11 +2389,11 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         }
       } catch {}
       const save = () => sessionStorage.setItem("netpartyCams", JSON.stringify({ collapsed, ...(pos || {}) }));
-      // keep it on screen and off the docked chat column
+      // keep it on screen; it may sit over the video or over the docked chat, wherever the user drops it
       function clamp() {
         if (!pos || !camLayer || camLayer.hidden) return;
         const r = camLayer.getBoundingClientRect();
-        const maxX = innerWidth - (open ? dockWidth() : 0) - r.width - 4;
+        const maxX = innerWidth - r.width - 4;
         pos.x = Math.round(Math.max(4, Math.min(pos.x, maxX)));
         pos.y = Math.round(Math.max(4, Math.min(pos.y, innerHeight - r.height - 4)));
         camLayer.style.left = pos.x + "px";

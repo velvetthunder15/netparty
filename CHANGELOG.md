@@ -4,6 +4,10 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [1.8.1] - 2026-10-28
+### Changed
+- The camera strip can now be dragged over the chat panel as well as the video, so it never has to cover the movie.
+
 ## [1.8.0] - 2026-10-28
 
 ### Added

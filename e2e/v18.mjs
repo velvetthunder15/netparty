@@ -240,8 +240,11 @@ await hp.mouse.move(moved.x + 30, moved.y + 8);
 await hp.mouse.down();
 await hp.mouse.move(1270, 700, { steps: 8 });
 await hp.mouse.up();
-const clamped = await shadow(hp, (r) => { const c = r.querySelector(".np-cams").getBoundingClientRect(), p = r.querySelector(".np-panel").getBoundingClientRect(); return { right: Math.round(c.right), bottom: Math.round(c.bottom), panelLeft: Math.round(p.left), vh: innerHeight }; });
-check("dragged into the corner it stays on screen and clear of the docked chat", clamped.right <= clamped.panelLeft && clamped.bottom <= clamped.vh, JSON.stringify(clamped));
+const clamped = await shadow(hp, (r) => { const c = r.querySelector(".np-cams").getBoundingClientRect(), p = r.querySelector(".np-panel").getBoundingClientRect(); return { right: Math.round(c.right), bottom: Math.round(c.bottom), panelLeft: Math.round(p.left), vw: innerWidth, vh: innerHeight }; });
+check("it can be dragged over the docked chat and still stays on screen", clamped.right > clamped.panelLeft && clamped.right <= clamped.vw && clamped.bottom <= clamped.vh, JSON.stringify(clamped));
+const onTop = await shadow(hp, (r) => { const c = r.querySelector(".np-cams").getBoundingClientRect(); const hit = r.elementFromPoint(c.left + c.width / 2, c.top + c.height / 2); return !!hit && !!hit.closest(".np-cams"); });
+check("over the chat, the camera strip draws above the chat panel", onTop);
+await hp.screenshot({ path: "v18-cams-over-chat.png" });
 check("dragging the strip didn't pause/play the video", (await hp.evaluate(() => document.querySelector("video").paused)) === vBefore);
 
 // camera off → the tile goes away for the other side; strip hides when no cameras
