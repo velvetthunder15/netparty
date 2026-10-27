@@ -14,12 +14,21 @@ import imgNeon from "./site/still-neon.jpg";
 import imgJio from "./site/jiohotstar-star.png";
 import svgNetflix from "./site/netflix.svg";
 import svgYoutube from "./site/youtube.svg";
+import imgOg from "./site/og.jpg";
 
 const HTML = "text/html; charset=utf-8";
+// link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
+const OG_TAGS = `<meta property="og:image" content="https://netparty.tech/og.jpg" />
+<meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, JioHotstar and YouTube" />
+<meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://netparty.tech/og.jpg" />
+`;
+const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/i, OG_TAGS + "</head>"));
+const siteIndexOg = withOg(siteIndex);
 const MAINTAIN_MS = 15 * 60 * 1000;
 const SITE = {
-  "/": [siteIndex, HTML],
-  "/index.html": [siteIndex, HTML],
+  "/": [siteIndexOg, HTML],
+  "/index.html": [siteIndexOg, HTML],
   "/privacy": [sitePrivacy, HTML],
   "/hark.css": [siteCss, "text/css; charset=utf-8"],
   "/hark-hero.css": [siteHeroCss, "text/css; charset=utf-8"],
@@ -29,6 +38,7 @@ const SITE = {
   "/jiohotstar-star.png": [imgJio, "image/png"],
   "/netflix.svg": [svgNetflix, "image/svg+xml"],
   "/youtube.svg": [svgYoutube, "image/svg+xml"],
+  "/og.jpg": [imgOg, "image/jpeg"],
 };
 
 // Security headers for the landing site. Inline <script> blocks are allowed only by

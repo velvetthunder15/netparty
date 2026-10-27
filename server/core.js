@@ -723,6 +723,7 @@ ${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty
 </ol></details>`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NetParty invite</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<meta property="og:title" content="You're invited to a NetParty"><meta property="og:description" content="Join the watch party: synced playback, encrypted chat and voice."><meta property="og:image" content="https://netparty.tech/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://netparty.tech/og.jpg">
 <style>
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:#121216;color:#f3f3f6;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 main{max-width:460px;padding:32px 24px}
