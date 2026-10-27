@@ -3,6 +3,7 @@
 // A tiny single-page app: browse/detail pages with a Play button, and watch pages
 // with a player, switched with history.pushState like the real sites.
 //   CSP=strict  -> the fake Netflix sends img-src 'self' blob: (KLIPY images blocked directly)
+//   CSP=script  -> also script-src 'self' 'unsafe-inline' on Netflix/JioHotstar (extension <script src> injection)
 import https from "node:https";
 import http from "node:http";
 import fs from "node:fs";
@@ -188,6 +189,8 @@ https.createServer({ key: fs.readFileSync("key.pem"), cert: fs.readFileSync("cer
   }
   const headers = { "content-type": "text/html" };
   if (CSP === "strict" && host === "www.netflix.com") headers["content-security-policy"] = "img-src 'self' blob:";
+  // CSP=script: a page script-src that only allows the site's own and inline scripts (extension-injected <script src> must cope)
+  if (CSP === "script" && (host === "www.netflix.com" || host === "www.hotstar.com")) headers["content-security-policy"] = "script-src 'self' 'unsafe-inline'; img-src 'self' blob:";
   res.writeHead(200, headers);
   res.end(app);
 }).listen(8443, () => console.log("fake site on 8443" + (CSP ? " (CSP " + CSP + ")" : "")));

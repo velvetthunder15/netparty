@@ -1,0 +1,51 @@
+// Popup flows in Firefox: Start a party from the popup (link copied), Join by pasting the invite link in the popup.
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+import { launchFF, extPage, tapTLS } from "./fflib.mjs";
+import { until, check, summary, out, sleep, people, keyOf } from "/workspace/work/e2e/lib.mjs";
+const T = tapTLS(8792, 8787);
+const H = await launchFF("/tmp/ff-pop-h", { uuid: "aaaaaaaa-0000-4000-8000-000000000004" });
+const G = await launchFF("/tmp/ff-pop-g", { uuid: "aaaaaaaa-0000-4000-8000-000000000005" });
+const he = await extPage(H), ge = await extPage(G);
+await he.evaluate((u) => chrome.storage.sync.set({ serverUrl: u, name: "Chirag" }), T.url);
+await ge.evaluate((u) => chrome.storage.sync.set({ serverUrl: u, name: "Rahul" }), T.url);
+await he.close(); await ge.close();
+const hp = await H.browser.newPage(), gp = await G.browser.newPage();
+await hp.goto("https://www.netflix.com/watch/12345", { waitUntil: "domcontentloaded" });
+await gp.goto("https://www.netflix.com/watch/12345", { waitUntil: "domcontentloaded" });
+await sleep(2500);
+const openPopup = async (x, page) => {
+  const pop = await x.browser.newPage();
+  await pop.setViewport({ width: 320, height: 600 });
+  await page.bringToFront();
+  await pop.goto(`${x.base}/popup.html`, { waitUntil: "domcontentloaded", timeout: 5000 }).catch(() => {});
+  await sleep(800);
+  return pop;
+};
+let pop = await openPopup(H, hp);
+const idle = await pop.evaluate(() => ({ idle: !document.getElementById("vIdle").classList.contains("hidden"), disabled: document.getElementById("create").disabled, hint: document.getElementById("startHint").textContent }));
+check("popup (not in a party) offers Start on a watch page", idle.idle && !idle.disabled, JSON.stringify(idle));
+await pop.click("#create");
+const inParty = await until(() => pop.evaluate(() => !document.getElementById("vParty").classList.contains("hidden") && { link: document.getElementById("copy").dataset.link, copy: document.getElementById("copy").textContent }), 10000);
+check("popup Start a party → in party, invite link with key", !!inParty && !!keyOf(inParty.link), JSON.stringify(inParty && { ...inParty, link: inParty.link.replace(/#k=.*/, "#k=…") }));
+check("popup says the link was copied", inParty?.copy === "Invite link copied ✓", inParty?.copy);
+await pop.close();
+await hp.bringToFront();
+await hp.evaluate(() => { const t = document.createElement("textarea"); t.id = "__paste"; t.style.cssText = "position:fixed;top:0;left:0;width:200px;height:40px;z-index:2147483647"; document.body.append(t); t.focus(); });
+await hp.keyboard.down("Control"); await hp.keyboard.press("v"); await hp.keyboard.up("Control");
+await sleep(300);
+const pasted = await hp.evaluate(() => { const t = document.getElementById("__paste"); const v = t.value; t.remove(); return v; });
+check("the invite link really is on the clipboard", pasted === inParty?.link, pasted.replace(/#k=.*/, "#k=…"));
+// guest joins from the popup by pasting the full invite link
+pop = await openPopup(G, gp);
+await pop.click("#code");
+await pop.keyboard.type(inParty.link);
+await pop.click("#join");
+check("popup Join with the pasted invite link → guest in the party", !!(await until(async () => (await people(gp))?.length === 2, 15000)), JSON.stringify(await people(gp)));
+check("host sees the guest", !!(await until(async () => JSON.stringify(await people(hp)) === '["You","Rahul"]', 8000)), JSON.stringify(await people(hp)));
+// a bare code is refused with a clear message
+const pop2 = await openPopup(G, gp);
+const st = await pop2.evaluate(() => !document.getElementById("vParty").classList.contains("hidden"));
+check("guest's popup shows the party", st);
+const f = summary("FIREFOX POPUP");
+await H.browser.close(); await G.browser.close(); T.close();
+process.exit(f ? 1 : 0);

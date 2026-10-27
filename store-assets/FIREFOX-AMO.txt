@@ -1,0 +1,211 @@
+NetParty: Firefox Add-ons (addons.mozilla.org) submission sheet
+Version 1.7.1. Each section below matches a field on the AMO submit form, ready to paste.
+
+======================================================================
+0. BEFORE YOU START
+======================================================================
+- Upload this file:  netparty-firefox-1.7.1.zip  (project root, next to the Chrome store zip)
+  Build it again with:  node netparty/scripts/build-firefox.mjs
+  It is the extension/ folder unchanged except manifest.json: background "scripts" (event page)
+  instead of "service_worker", no minimum_chrome_version, and browser_specific_settings.gecko
+  (id netparty@netparty.tech, strict_min_version 140.0, data_collection_permissions).
+- Add-on ID: netparty@netparty.tech  (it is in the manifest. Never change it, or Firefox treats it as a different add-on)
+- Distribution: pick "On this site" to get a public AMO listing (reviewed, searchable, auto-updates).
+  "On your own" means self-distribution: Mozilla signs the file but there's no listing.
+- Platforms: Firefox desktop only. Leave "Firefox for Android" unticked: Android hasn't been tested.
+- Mozilla's linter (web-ext 10.8.0 / addons-linter 10.14.0): 0 errors, 0 notices, 1 warning,
+  KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION. The warning only concerns Firefox for Android: the
+  manifest has no gecko_android key, so strict_min_version 140 would also apply to Android, where
+  built-in data consent starts at 142. NetParty isn't offered for Android, so it can be ignored.
+
+======================================================================
+1. SOURCE CODE QUESTION
+======================================================================
+"Do you need to submit source code?"  ->  No
+None of the code is minified, bundled, transpiled or generated. Every .js/.html/.css file is the
+hand-written source from https://github.com/velvetthunder15/netparty (folder extension/).
+emoji-data.js is a plain, readable, hand-written list of emoji, not generated output.
+The only file a tool touches is manifest.json, which scripts/build-firefox.mjs builds from
+extension/manifest.json. It stays plain, readable JSON (this is mentioned in the notes to reviewer).
+
+======================================================================
+2. NAME
+======================================================================
+NetParty
+
+======================================================================
+3. ADD-ON URL (slug)
+======================================================================
+netparty
+(-> https://addons.mozilla.org/firefox/addon/netparty/ ; this slug didn't exist on AMO when checked on 27 Oct 2026)
+Fallback if it's taken: netparty-watch-together
+
+======================================================================
+4. SUMMARY  (250 character max; this one is 190)
+======================================================================
+Watch Netflix, JioHotstar and YouTube in sync with friends, with end-to-end encrypted chat, emoji reactions, GIFs and peer-to-peer voice chat beside the video. Free, open source, no account.
+
+======================================================================
+5. DESCRIPTION
+======================================================================
+NetParty keeps everyone in a party on the same moment of the same video. When anyone plays, pauses or skips, everyone follows. Chat sits beside the player instead of on top of it.
+
+Works on:
+• Netflix (netflix.com/watch/…)
+• JioHotstar (movies, shows and episodes)
+• YouTube (regular videos. Shorts and live streams aren't supported)
+
+How it works
+1. Open a title and press play.
+2. Click the NetParty button in the toolbar and choose "Start a party", or use the "Start a NetParty" button on the page. The invite link is copied for you.
+3. Send the link to your friends. It opens a page that takes them to the same title, already in sync.
+
+Features
+• Playback sync: play, pause, seek and episode changes follow the party
+• End-to-end encrypted chat: messages, reactions, names and profile pictures are encrypted in your browser. The key only exists in the invite link (after the #), so the server can't read your chat
+• Chat docked beside the video: the player shrinks to make room, and you can hide the panel any time. Typing in chat never sets off the site's keyboard shortcuts
+• Emoji reactions that float up over everyone's video, also in fullscreen
+• GIFs from KLIPY, with search suggestions based on what you're watching
+• Voice chat, straight between friends' browsers (peer to peer), with mute and volume controls
+• Emoji profile pictures, an emoji picker and clickable links
+• Host controls: let only the host control playback
+• No account and no sign-up. No ads, no analytics, no tracking
+
+Good to know
+• Everyone in the party needs NetParty, and for Netflix and JioHotstar, their own subscription to that service. NetParty doesn't share or stream video, it only keeps each person's own player in sync.
+• Voice chat connects browsers directly and has no relay server, so it may not connect on some restrictive networks (some office, school or mobile networks). Text chat and sync still work there.
+• Anyone with the full invite link can join the party and read its chat, so share it only with people you want there.
+
+Free and open source (MIT): https://github.com/velvetthunder15/netparty
+NetParty isn't affiliated with or endorsed by Netflix, JioHotstar or YouTube.
+
+======================================================================
+6. CATEGORIES  (AMO's real category names, from addons.mozilla.org/api/v5/addons/categories/)
+======================================================================
+Firefox:
+  1. Social & Communication
+  2. Photos, Music & Videos
+(Other honest option: Games & Entertainment, whose description mentions "control video playback".)
+
+======================================================================
+7. TAGS  (AMO only accepts tags from its fixed list, addons.mozilla.org/api/v5/addons/tags/)
+======================================================================
+chat, streaming, youtube, privacy
+
+======================================================================
+8. SUPPORT
+======================================================================
+Support email:    support@netparty.tech
+Support website:  https://netparty.tech
+Homepage:         https://netparty.tech
+
+======================================================================
+9. LICENSE
+======================================================================
+MIT License  (choose "MIT/X11 License" in AMO's list. The repo has a LICENSE file)
+
+======================================================================
+10. PRIVACY POLICY
+======================================================================
+Tick "This add-on has a privacy policy" and paste the text below. It matches
+https://netparty.tech/privacy (last updated 27 October 2026), as plain text.
+
+----- paste from here -----
+NetParty Privacy Policy
+Last updated 27 October 2026 (end-to-end encrypted chat)
+
+NetParty is a free browser extension that lets friends watch a video together in sync, with text and voice chat, GIFs and emoji reactions. It works on Netflix, JioHotstar and YouTube. It is run by Chirag Rasane. This policy explains what the extension and its sync server handle, and why.
+
+No accounts, no tracking
+NetParty has no sign-up and no accounts. It has no analytics, advertising or tracking code, and we never sell or share your data.
+
+End-to-end encryption
+Party chat is end-to-end encrypted. When a party starts, the host's browser creates a random 256-bit key. The key is part of the invite link, after the # (browsers never send that part of a link to any server), and is kept only in the browsers of the people in the party, for that tab, until they leave. Chat messages, GIFs, reactions, display names and profile pictures, and the setup messages for voice calls, are encrypted with this key (AES-256-GCM) before they leave your browser. Our sync server only ever receives, relays and stores the encrypted form, and cannot read it. Anyone who has the full invite link can join the party and read its chat, so share the link only with people you want there.
+
+The sync server can still see what it needs to run the party: the party code, a random member ID for each person, when messages are sent and roughly how large they are (sizes are rounded up), playback state (play, pause, position, and the ID of the video being watched, which the invite page also uses), how many people are in the party, and connection data such as IP addresses.
+
+What the extension handles
+- Display name and picture. The name you choose and your profile picture (an emoji you pick, such as 🐼 or 🍕), shown to others in your party. Both are stored in your browser and sent to the people in your party end-to-end encrypted; the sync server only passes on the encrypted form.
+- Chat messages. What you type or send in the party chat (text, emoji, links and GIFs), end-to-end encrypted and relayed by the sync server to everyone in that party.
+- Reactions. When you tap a reaction, that emoji is end-to-end encrypted and relayed to the people in your party so it floats over their video. Reactions are not stored.
+- GIF searches. When you open the GIF picker, your search terms (suggested from the title you're watching) are sent to our server, which asks KLIPY for matching GIFs. Searches can't be end-to-end encrypted, because KLIPY has to read them to find GIFs. KLIPY receives the search terms from our server, not your name or party, and our server doesn't log them. Results are cached on our server's edge for about 10 minutes, without recording who searched. The GIF images themselves load from KLIPY's servers, so KLIPY can see your IP address as any website would, under its own privacy policy. A GIF you send is shared in the (encrypted) party chat as a link to KLIPY's image.
+- Party and playback state. The party code, the ID of what's playing (a Netflix, JioHotstar or YouTube video ID), and play, pause and seek events with timestamps, so everyone stays in sync. These are not encrypted: the server needs them to keep everyone in sync and to send invited friends to the right title.
+- Voice chat. Voice runs peer to peer between party members over WebRTC, which encrypts the audio. The server only passes on the connection setup messages that let browsers find each other, and those are end-to-end encrypted too, so the server can't read the network addresses inside them. Your audio is not sent to or recorded by our server. Microphone access is requested only when you turn voice on.
+- Local settings. Your name, picture, chat text size, chosen reactions and server setting are kept in your browser's extension storage (which your browser may sync to your own account if you use browser sync); recently used emoji and party state stay on your device. A party's encryption key is kept only in your browser's memory for that tab, never written to disk or synced, and is deleted when the party ends or you leave it, and at the latest when you close the tab or the browser.
+
+NetParty does not read your streaming account details, passwords, payment information or viewing history. It runs only on the supported sites: Netflix, JioHotstar and YouTube.
+
+How long we keep it
+While a party is active, the sync server keeps its encrypted data so people who reload can rejoin: the members' encrypted names and pictures and the party's last 150 chat lines (encrypted messages, and notes of who joined or left). It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours (our hosting provider's point-in-time recovery can keep encrypted copies of the storage for up to 30 days; nobody can read them without the party's key). Basic request logs kept by our hosting provider follow its standard retention; they never contain chat content.
+
+Where it's processed
+The sync server runs on Cloudflare Workers. Cloudflare processes connection data, such as IP addresses, to deliver the service under its own privacy policy.
+
+Children
+NetParty is not directed at children under 13, and we don't knowingly collect information from them.
+
+Changes and contact
+If this policy changes, we'll update the date above. Questions or deletion requests: chiragrasane15@gmail.com.
+
+NetParty is not affiliated with or endorsed by any streaming service.
+----- paste to here -----
+
+======================================================================
+11. DATA COLLECTION / CONSENT (Firefox built-in data consent)
+======================================================================
+The manifest declares these as REQUIRED (the extension can't work without them), so Firefox lists
+them in the install prompt and the user agrees by installing:
+
+  personalCommunications  "Personal communications"
+     Party chat messages, GIFs sent in chat, reactions, display names and emoji profile pictures,
+     and voice-call setup messages. All are end-to-end encrypted in the browser (AES-256-GCM) and
+     relayed by the NetParty server (netparty.tech), which can't read them. Voice audio goes
+     directly between the friends' browsers (WebRTC) and never reaches the server.
+  websiteActivity         "Website activity"
+     Play, pause and seek actions and the playback position on the streaming site, sent to the
+     server so everyone's player follows.
+  browsingActivity        "Browsing activity"
+     The ID of the title being watched (Netflix, JioHotstar or YouTube video ID), so the server can
+     keep the party on the same title and the invite page can send friends to it.
+  websiteContent          "Website content"
+     The title's name, read from the page, which is used as the GIF search (sent to the NetParty
+     server and on to KLIPY) only when the user opens the GIF picker.
+
+If the form asks for a short explanation of data collection, paste this:
+NetParty sends what a watch party needs to netparty.tech: encrypted chat, reactions, names and profile pictures (end-to-end encrypted, so the server can't read them), plus the unencrypted party code, playback state (play/pause/position) and the ID of the video being watched so everyone stays in sync. Opening the GIF picker sends the search text (by default the title's name) to our server, which forwards it to KLIPY. Voice audio is peer to peer between friends. No accounts, analytics, ads or tracking. Nothing is sold or shared. Full policy: https://netparty.tech/privacy
+
+======================================================================
+12. NOTES TO REVIEWER
+======================================================================
+Thanks for reviewing NetParty. It's a watch-party add-on: it keeps the video players of people in the same "party" in sync and adds an end-to-end encrypted chat panel next to the video.
+
+How to test (YouTube is free, so no subscription is needed):
+1. Install the add-on in two Firefox profiles (or two machines). You need two because a party is between people.
+2. Profile A: open any regular YouTube video (e.g. https://www.youtube.com/watch?v=aqz-KE-bpKQ) and let it play.
+3. Click the NetParty toolbar button, then "Start a party" (or click the "Start a NetParty" button under the video). The chat panel opens beside the player and the invite link (https://netparty.tech/j/<code>#k=<key>) is copied to the clipboard.
+4. Profile B: open that invite link. The invite page shows "<name> invited you…". Click "Join on YouTube". Profile B opens the same video and joins the party.
+   Note: the invite page's install help still says Chrome, because it was written for the Chrome version. With the Firefox add-on installed, the Join button works as described.
+5. Try: play/pause/seek in either profile (the other follows); type in the chat box and press Enter (it appears on the other side); hover the 🎉 button and click an emoji (it floats up on both screens); the GIF button opens a KLIPY GIF picker (search goes to https://netparty.tech/api/gifs/…, which asks KLIPY), and clicking a GIF sends it; the popup shows the party code, who's watching and "Copy invite link"; reload either tab (it rejoins and decrypts the chat history again); "Leave party" in the popup.
+6. Voice (optional): "Join voice chat" in both profiles. It asks for the microphone. Audio goes peer to peer with no relay (TURN) server, so it may not connect on restrictive networks.
+Netflix and JioHotstar work the same way but need a subscription on each side.
+
+Technical notes:
+- Server: wss://netparty.tech (Cloudflare Worker). The background script holds one WebSocket per tab in a party. The content script and the background send each other a "ping" every 20 s, so the event page stays alive while a party is open (it's suspended normally when there's no party).
+- GIFs: the background fetches search results from https://netparty.tech/api/gifs/search|trending (the KLIPY API key stays on the server) and, only when the site's CSP blocks loading GIF images straight from KLIPY, fetches them from static*.klipy.com so the panel can show them from blob: (or data:) URLs.
+- Permissions: "storage" (settings; the per-tab room key is in storage.session, memory only), "tabs" (the popup reads the active tab's URL to see if it's a supported site and messages its content script; the background deletes a tab's room key when the tab closes). Host permissions: the four supported sites (content scripts) and static/static1/static2.klipy.com (the background fetches GIF images for sites whose CSP blocks them).
+- page.js is a web-accessible script, injected into the page only on Netflix/JioHotstar. Netflix throws error M7375 if <video>.currentTime is set directly, so seeking has to use Netflix's own player API. It only answers status/play/pause/seek messages sent with window.postMessage, and checks e.source === window.
+- No remote code, eval, or innerHTML with user content: the UI is built node by node, and YouTube's Trusted Types CSP is respected.
+- Source: https://github.com/velvetthunder15/netparty (MIT). The submitted files are extension/ as-is. manifest.json is generated by scripts/build-firefox.mjs from extension/manifest.json (event-page background, gecko settings and data_collection_permissions added; minimum_chrome_version removed). Nothing is minified or bundled.
+- Privacy policy: https://netparty.tech/privacy
+
+======================================================================
+13. MEDIA
+======================================================================
+Icon (128x128):   store-assets/icons/icon-128.png   (AMO also takes 64x64: store-assets/icons/icon-64.png)
+Screenshots (1280x800, upload in this order, with these captions):
+  1. store-assets/screenshots-1280x800/01-sync.png       "Watch together, perfectly in sync on Netflix, JioHotstar and YouTube"
+  2. store-assets/screenshots-1280x800/02-chat.png       "Chat beside the video, not on top. Hide the panel any time"
+  3. store-assets/screenshots-1280x800/03-reactions.png  "Tap an emoji and it floats up on everyone's screen"
+  4. store-assets/screenshots-1280x800/04-voice.png      "Voice chat, straight between friends"
+  5. store-assets/screenshots-1280x800/05-private.png    "End-to-end encrypted chat. No account, no sign-up"
+(The screenshots show the NetParty panel and popup only, with no browser window around them, so they suit Firefox too.)

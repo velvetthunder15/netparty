@@ -402,6 +402,12 @@ ok("host-only control lock");
   if (r0.status === 503) assert.equal(j0.error, "gifs_unavailable");
   else assert.ok(r0.status === 200 && Array.isArray(j0.results), JSON.stringify(j0));
   assert.equal(r0.headers.get("access-control-allow-origin"), "chrome-extension://abcdefghijklmnopabcdefghijklmnop");
+  // Firefox: the background's origin is moz-extension://<random per-install UUID>
+  const MOZ = "moz-extension://0b3c5d1e-2f4a-4b6c-8d9e-0a1b2c3d4e5f";
+  const rf = await fetch(`${HTTP}/api/gifs/trending`, { headers: { origin: MOZ } });
+  assert.equal(rf.headers.get("access-control-allow-origin"), MOZ);
+  const notMoz = await fetch(`${HTTP}/api/gifs/trending`, { headers: { origin: "moz-extension://evil.example" } });
+  assert.equal(notMoz.headers.get("access-control-allow-origin"), null);
   const evil = await fetch(`${HTTP}/api/gifs/trending`, { headers: { origin: "https://evil.example" } });
   assert.equal(evil.headers.get("access-control-allow-origin"), null);
   assert.equal((await fetch(`${HTTP}/api/gifs/search`)).status, 400);

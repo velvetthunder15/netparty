@@ -10,10 +10,11 @@ const LIMIT = 24;
 export const GIF_CACHE_SECONDS = 600;
 
 // Only what the extension needs may read these responses: the extension itself
-// (its background worker fetches them) and the sites it runs on.
+// (its background fetches them: chrome-extension://<32 a-p> in Chrome, moz-extension://<random UUID>
+// in Firefox, which has no fixed ID in the origin) and the sites it runs on.
 const PAGE_ORIGINS = new Set(["https://www.netflix.com", "https://www.hotstar.com", "https://www.jiohotstar.com", "https://www.youtube.com"]);
 export function corsHeaders(origin) {
-  const ok = typeof origin === "string" && (/^chrome-extension:\/\/[a-p]{32}$/.test(origin) || PAGE_ORIGINS.has(origin));
+  const ok = typeof origin === "string" && (/^chrome-extension:\/\/[a-p]{32}$/.test(origin) || /^moz-extension:\/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(origin) || PAGE_ORIGINS.has(origin));
   return ok
     ? { "access-control-allow-origin": origin, "access-control-allow-methods": "GET, OPTIONS", "access-control-max-age": "86400", vary: "Origin" }
     : { vary: "Origin" };

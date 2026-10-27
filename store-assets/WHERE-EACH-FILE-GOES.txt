@@ -18,3 +18,8 @@ SCREENSHOTS
 PROMO TILES
 - promo/small-promo-440x280.png  Chrome small promo tile, Edge small promotional tile
 - promo/marquee-1400x560.png     Chrome marquee tile, Edge large promotional tile
+
+FIREFOX (addons.mozilla.org)
+- FIREFOX-AMO.txt: every field of the AMO submit form, ready to paste (listing text, categories, tags,
+  privacy policy, data-collection consent, notes to reviewer, which screenshots and icon to upload)
+- package: netparty-firefox-<version>.zip in the project root, built by scripts/build-firefox.mjs
