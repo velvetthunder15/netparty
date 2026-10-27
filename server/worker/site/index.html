@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NetParty — Watch together, in sync</title>
-    <meta name="description" content="NetParty is a free Chrome extension for watch parties: synced play, pause and seek, with text chat and voice chat beside the video. No account needed." />
+    <meta name="description" content="NetParty is a free browser extension for watch parties: synced play, pause and seek, with text chat and voice chat beside the video. No account needed." />
     <meta property="og:title" content="NetParty — Watch together, in sync" />
-    <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat and voice right beside the video. Free Chrome extension." />
+    <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat and voice right beside the video. Free browser extension." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://netparty.tech/" />
     <meta name="theme-color" content="#0B0A10" />
@@ -438,6 +438,54 @@
       .x-join__err { color: var(--x-amber); font-size: 13px; margin-top: 10px; min-height: 1em; }
       @media (max-width: 420px) { .x-join { flex-direction: column; } .x-cta .x-btn { width: 100%; } }
 
+      /* install: browser tabs */
+      .x-inst { max-width: 620px; margin: clamp(28px, 4vw, 40px) auto 0; }
+      .x-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 999px; background: #100f16; border: 1px solid var(--x-line); box-shadow: 0 1px 0 rgba(255,255,255,.03) inset; }
+      .x-tabs [role="tab"] {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; min-width: 0; padding: 0 12px;
+        border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--x-mute);
+        font: 600 14px/1 var(--x-inter); letter-spacing: -0.01em; cursor: pointer; transition: color .2s, background .2s, border-color .2s;
+      }
+      .x-tabs [role="tab"]:hover { color: var(--x-text); background: rgba(255,255,255,.03); }
+      .x-tabs [role="tab"][aria-selected="true"] { color: var(--x-text); background: var(--x-s2); border-color: #3d3852; box-shadow: 0 6px 18px -10px rgba(124,92,255,.65), 0 1px 0 rgba(255,255,255,.06) inset; }
+      .x-tabs [role="tab"]:focus-visible { outline-offset: 2px; border-radius: 999px; }
+      .x-br { width: 20px; height: 20px; flex: none; filter: grayscale(.35) opacity(.8); transition: filter .2s; }
+      .x-tabs [role="tab"]:hover .x-br, .x-tabs [role="tab"][aria-selected="true"] .x-br { filter: none; }
+      .x-tabs [role="tab"] span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .x-pane { padding-top: 26px; }
+      .x-pane:focus-visible { outline-offset: 6px; border-radius: 16px; }
+      .x-pane.is-in { animation: x-pane .35s ease-out both; }
+      @keyframes x-pane { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .x-pane__name { display: none; font: 500 12px var(--x-mono); color: var(--x-o); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+      .x-pane .x-btn .x-br { width: 18px; height: 18px; filter: none; }
+      .x-pane .x-note { margin-top: 18px; }
+      .x-btn--store { background: #f4f3f8; color: #14121c; box-shadow: 0 8px 28px -10px rgba(47,167,232,.55), 0 1px 0 #fff inset; }
+      .x-btn--store:hover { background: #fff; transform: translateY(-1px); }
+      .x-btn--store .x-ext { width: 14px; height: 14px; opacity: .55; }
+      .x-btn--soon { background: #13121a; color: #77738a; border: 1px dashed #3a3649; cursor: not-allowed; box-shadow: none; }
+      .x-btn--soon .x-br { filter: grayscale(1) opacity(.45) !important; }
+      .x-soon-tag { font: 500 11px var(--x-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--x-amber); background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.25); border-radius: 999px; padding: 3px 8px; }
+      .x-inst__more { display: flex; flex-direction: column; align-items: center; margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--x-line); }
+      .x-inst__more > p:first-child { color: var(--x-mute); font-size: 14px; margin-bottom: 12px; }
+      html:not(.x-js) .x-tabs { display: none; }
+      html:not(.x-js) .x-pane[hidden] { display: block; }
+      html:not(.x-js) .x-pane__name { display: block; }
+      @media (max-width: 520px) {
+        .x-tabs { border-radius: 18px; gap: 3px; padding: 4px; }
+        .x-tabs [role="tab"] { flex-direction: column; gap: 6px; min-height: 62px; padding: 8px 2px; border-radius: 14px; font-size: 12.5px; }
+        .x-tabs [role="tab"]:focus-visible { border-radius: 14px; }
+        .x-pane .x-btn { width: 100%; white-space: normal; text-align: center; line-height: 1.25; padding-block: 12px; }
+        .x-beta { flex-direction: column; align-items: stretch; max-width: 300px; margin-inline: auto; }
+        .x-beta li { text-align: left; }
+      }
+      @media (max-width: 420px) {
+        .x-free { display: none; }
+        .x-pane .x-btn { padding-inline: 16px; font-size: 14.5px; }
+        .x-btn--store .x-ext { display: none; }
+        .x-nav { gap: 10px; }
+        .x-nav .x-btn--sm { padding: 0 14px; }
+      }
+
       /* footer */
       .x-foot { margin-top: clamp(80px, 10vw, 120px); padding: 32px 0 8px; border-top: 1px solid var(--x-line); display: grid; gap: 22px; }
       .x-foot__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; }
@@ -486,6 +534,24 @@
           <path d="M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z" fill="url(#x-g)" />
           <path d="M17 14.5v7l6-3.5z" fill="#fff" />
         </symbol>
+        <linearGradient id="x-ff" x1=".85" y1="0" x2=".2" y2="1"><stop offset="0" stop-color="#FFBD4F" /><stop offset=".45" stop-color="#FF7139" /><stop offset="1" stop-color="#F5156C" /></linearGradient>
+        <linearGradient id="x-edge" x1=".8" y1="0" x2=".2" y2="1"><stop offset="0" stop-color="#4ED38A" /><stop offset=".4" stop-color="#2FA7E8" /><stop offset="1" stop-color="#0C59A4" /></linearGradient>
+        <linearGradient id="x-opera" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF1B2D" /><stop offset="1" stop-color="#C2001B" /></linearGradient>
+        <symbol id="br-chrome" viewBox="0 0 24 24">
+          <path fill="#EA4335" d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0z" />
+          <path fill="#34A853" d="M1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29z" />
+          <path fill="#FBBC04" d="M15.273 7.636a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364z" />
+          <path fill="#4285F4" d="M12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z" />
+        </symbol>
+        <symbol id="br-firefox" viewBox="0 0 24 24">
+          <path fill="url(#x-ff)" d="M8.824 7.287c.008 0 .004 0 0 0zm-2.8-1.4c.006 0 .003 0 0 0zm16.754 2.161c-.505-1.215-1.53-2.528-2.333-2.943.654 1.283 1.033 2.57 1.177 3.53l.002.02c-1.314-3.278-3.544-4.6-5.366-7.477-.091-.147-.184-.292-.273-.446a3.545 3.545 0 01-.13-.24 2.118 2.118 0 01-.172-.46.03.03 0 00-.027-.03.038.038 0 00-.021 0l-.006.001a.037.037 0 00-.01.005L15.624 0c-2.585 1.515-3.657 4.168-3.932 5.856a6.197 6.197 0 00-2.305.587.297.297 0 00-.147.37c.057.162.24.24.396.17a5.622 5.622 0 012.008-.523l.067-.005a5.847 5.847 0 011.957.222l.095.03a5.816 5.816 0 01.616.228c.08.036.16.073.238.112l.107.055a5.835 5.835 0 01.368.211 5.953 5.953 0 012.034 2.104c-.62-.437-1.733-.868-2.803-.681 4.183 2.09 3.06 9.292-2.737 9.02a5.164 5.164 0 01-1.513-.292 4.42 4.42 0 01-.538-.232c-1.42-.735-2.593-2.121-2.74-3.806 0 0 .537-2 3.845-2 .357 0 1.38-.998 1.398-1.287-.005-.095-2.029-.9-2.817-1.677-.422-.416-.622-.616-.8-.767a3.47 3.47 0 00-.301-.227 5.388 5.388 0 01-.032-2.842c-1.195.544-2.124 1.403-2.8 2.163h-.006c-.46-.584-.428-2.51-.402-2.913-.006-.025-.343.176-.389.206-.406.29-.787.616-1.136.974-.397.403-.76.839-1.085 1.303a9.816 9.816 0 00-1.562 3.52c-.003.013-.11.487-.19 1.073-.013.09-.026.181-.037.272a7.8 7.8 0 00-.069.667l-.002.034-.023.387-.001.06C.386 18.795 5.593 24 12.016 24c5.752 0 10.527-4.176 11.463-9.661.02-.149.035-.298.052-.448.232-1.994-.025-4.09-.753-5.844z" />
+        </symbol>
+        <symbol id="br-edge" viewBox="0 0 24 24">
+          <path fill="url(#x-edge)" d="M21.86 17.86q.14 0 .25.12.1.13.1.25t-.11.33l-.32.46-.43.53-.44.5q-.21.25-.38.42l-.22.23q-.58.53-1.34 1.04-.76.51-1.6.91-.86.4-1.74.64t-1.67.24q-.9 0-1.69-.28-.8-.28-1.48-.78-.68-.5-1.22-1.17-.53-.66-.92-1.44-.38-.77-.58-1.6-.2-.83-.2-1.67 0-1 .32-1.96.33-.97.87-1.8.14.95.55 1.77.41.82 1.02 1.5.6.68 1.38 1.21.78.54 1.64.9.86.36 1.77.56.92.2 1.8.2 1.12 0 2.18-.24 1.06-.23 2.06-.72l.2-.1.2-.05zm-15.5-1.27q0 1.1.27 2.15.27 1.06.78 2.03.51.96 1.24 1.77.74.82 1.66 1.4-1.47-.2-2.8-.74-1.33-.55-2.48-1.37-1.15-.83-2.08-1.9-.92-1.07-1.58-2.33T.36 14.94Q0 13.54 0 12.06q0-.81.32-1.49.31-.68.83-1.23.53-.55 1.2-.96.66-.4 1.35-.66.74-.27 1.5-.39.78-.12 1.55-.12.7 0 1.42.1.72.12 1.4.35.68.23 1.32.57.63.35 1.16.83-.35 0-.7.07-.33.07-.65.23v-.02q-.63.28-1.2.74-.57.46-1.05 1.04-.48.58-.87 1.26-.38.67-.65 1.39-.27.71-.42 1.44-.15.72-.15 1.38zM11.96.06q1.7 0 3.33.39 1.63.38 3.07 1.15 1.43.77 2.62 1.93 1.18 1.16 1.98 2.7.49.94.76 1.96.28 1 .28 2.08 0 .89-.23 1.7-.24.8-.69 1.48-.45.68-1.1 1.22-.64.53-1.45.88-.54.24-1.11.36-.58.13-1.16.13-.42 0-.97-.03-.54-.03-1.1-.12-.55-.1-1.05-.28-.5-.19-.84-.5-.12-.09-.23-.24-.1-.16-.1-.33 0-.15.16-.35.16-.2.35-.5.2-.28.36-.68.16-.4.16-.95 0-1.06-.4-1.96-.4-.91-1.06-1.64-.66-.74-1.52-1.28-.86-.55-1.79-.89-.84-.3-1.72-.44-.87-.14-1.76-.14-1.55 0-3.06.45T.94 7.55q.71-1.74 1.81-3.13 1.1-1.38 2.52-2.35Q6.68 1.1 8.37.58q1.7-.52 3.58-.52Z" />
+        </symbol>
+        <symbol id="br-opera" viewBox="0 0 24 24">
+          <path fill="url(#x-opera)" d="M8.051 5.238c-1.328 1.566-2.186 3.883-2.246 6.48v.564c.061 2.598.918 4.912 2.246 6.479 1.721 2.236 4.279 3.654 7.139 3.654 1.756 0 3.4-.537 4.807-1.471C17.879 22.846 15.074 24 12 24c-.192 0-.383-.004-.57-.014C5.064 23.689 0 18.436 0 12 0 5.371 5.373 0 12 0h.045c3.055.012 5.84 1.166 7.953 3.055-1.408-.93-3.051-1.471-4.81-1.471-2.858 0-5.417 1.42-7.14 3.654h.003zM24 12c0 3.556-1.545 6.748-4.002 8.945-3.078 1.5-5.946.451-6.896-.205 3.023-.664 5.307-4.32 5.307-8.74 0-4.422-2.283-8.075-5.307-8.74.949-.654 3.818-1.703 6.896-.205C22.455 5.25 24 8.445 24 12z" />
+        </symbol>
         <symbol id="gh-mark" viewBox="0 0 24 24">
           <path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
         </symbol>
@@ -500,7 +566,7 @@
           <a href="#faq">FAQ</a>
         </nav>
         <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
-        <a class="x-btn x-btn--primary x-btn--sm" href="#install">Add to Chrome</a>
+        <a class="x-btn x-btn--primary x-btn--sm" href="#install" data-install>Add to browser</a>
       </header>
 
       <main>
@@ -550,7 +616,7 @@
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" alt="" /></span>YouTube</li>
           </ul>
           <div class="x-cta x-rv">
-            <a class="x-btn x-btn--primary" href="#install">Add to Chrome — it's free</a>
+            <a class="x-btn x-btn--primary" href="#install" data-install>Add to browser — it's free</a>
             <a class="x-btn x-btn--ghost" href="#how">See how it works</a>
           </div>
           <p class="x-fine x-rv">No account. No sign-up. Everyone uses their own streaming subscription.</p>
@@ -624,8 +690,8 @@
                 <span class="x-tb"><i></i><span class="x-chip"><svg class="x-ext-mark"><use href="#np-mark" /></svg>NetParty · Installed <span class="x-ok">✓</span></span></span>
               </div>
               <span class="x-num">01</span>
-              <h3>Add NetParty to Chrome</h3>
-              <p>One click. Works in Chrome and other Chromium browsers.</p>
+              <h3>Add NetParty to your browser</h3>
+              <p>Works in Chrome, Edge and Brave today. Firefox and Opera are coming soon.</p>
             </li>
             <li class="x-card x-step x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -764,7 +830,7 @@
           <div class="x-faq">
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
             <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
-            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar and YouTube in Google Chrome on a computer (Chromium browsers like Edge and Brave should work too). Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar and YouTube on a computer, in Google Chrome, Brave and other Chromium browsers, or in Microsoft Edge from the Edge Add-ons store. Firefox and Opera are coming soon. Phones and TVs aren't supported.</p></details>
             <details class="x-rv"><summary>How does voice chat work?</summary><p>Click Join voice chat in the panel and allow your microphone. Audio travels directly between the people in the party, and the connection setup is encrypted too.</p></details>
             <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name and profile picture with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
             <details class="x-rv"><summary>Why do friends need the full link?</summary><p>The invite link carries your party's encryption key after the # sign, which is never sent to any server. A bare party code can't unlock the chat, so always share the full link.</p></details>
@@ -776,23 +842,56 @@
         <section class="x-sec" id="install" aria-labelledby="install-title">
           <div class="x-band x-rv">
             <h2 class="x-h2" id="install-title">Your next movie night <span class="x-grad-text">starts here.</span></h2>
-            <div class="x-cta">
-              <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download>Add to Chrome — it's free</a>
-              <button class="x-btn x-btn--ghost" type="button" id="x-join-toggle" aria-expanded="false" aria-controls="x-join">Join a party</button>
+            <div class="x-inst">
+              <div class="x-tabs" role="tablist" aria-label="Choose your browser">
+                <button type="button" role="tab" id="x-tab-chrome" aria-controls="x-pane-chrome" aria-selected="true" tabindex="0" data-browser="chrome"><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Chrome</span></button>
+                <button type="button" role="tab" id="x-tab-firefox" aria-controls="x-pane-firefox" aria-selected="false" tabindex="-1" data-browser="firefox"><svg class="x-br" aria-hidden="true"><use href="#br-firefox" /></svg><span>Firefox</span></button>
+                <button type="button" role="tab" id="x-tab-edge" aria-controls="x-pane-edge" aria-selected="false" tabindex="-1" data-browser="edge"><svg class="x-br" aria-hidden="true"><use href="#br-edge" /></svg><span>Edge</span></button>
+                <button type="button" role="tab" id="x-tab-opera" aria-controls="x-pane-opera" aria-selected="false" tabindex="-1" data-browser="opera"><svg class="x-br" aria-hidden="true"><use href="#br-opera" /></svg><span>Opera</span></button>
+              </div>
+
+              <div class="x-pane" role="tabpanel" id="x-pane-chrome" aria-labelledby="x-tab-chrome" tabindex="0">
+                <p class="x-pane__name">Chrome</p>
+                <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Download for Chrome<span class="x-free"> — it's free</span></span></a>
+                <p><span class="x-ver">Version 1.7.1</span></p>
+                <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
+                <ol class="x-beta">
+                  <li><b>1</b>Unzip</li>
+                  <li><b>2</b>Open chrome://extensions</li>
+                  <li><b>3</b>Turn on Developer mode</li>
+                  <li><b>4</b>Load unpacked → pick the folder</li>
+                </ol>
+                <p class="x-note">Brave and other Chromium browsers use this same download.</p>
+              </div>
+
+              <div class="x-pane" role="tabpanel" id="x-pane-firefox" aria-labelledby="x-tab-firefox" tabindex="0" hidden>
+                <p class="x-pane__name">Firefox</p>
+                <span class="x-btn x-btn--soon" aria-disabled="true"><svg class="x-br" aria-hidden="true"><use href="#br-firefox" /></svg>Firefox <span class="x-soon-tag">Coming soon</span></span>
+                <p class="x-note">NetParty for Firefox is on the way. Until then, you can join from Chrome or Edge on the same computer.</p>
+              </div>
+
+              <div class="x-pane" role="tabpanel" id="x-pane-edge" aria-labelledby="x-tab-edge" tabindex="0" hidden>
+                <p class="x-pane__name">Edge</p>
+                <a class="x-btn x-btn--store" href="https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki" target="_blank" rel="noopener"><svg class="x-br" aria-hidden="true"><use href="#br-edge" /></svg><span>Get it from Microsoft Edge&nbsp;Add&#8209;ons</span><svg class="x-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg></a>
+                <p class="x-note">Install in one click from Microsoft's official store. No unzipping, and updates arrive automatically.</p>
+              </div>
+
+              <div class="x-pane" role="tabpanel" id="x-pane-opera" aria-labelledby="x-tab-opera" tabindex="0" hidden>
+                <p class="x-pane__name">Opera</p>
+                <span class="x-btn x-btn--soon" aria-disabled="true"><svg class="x-br" aria-hidden="true"><use href="#br-opera" /></svg>Opera <span class="x-soon-tag">Coming soon</span></span>
+                <p class="x-note">NetParty for Opera is on the way. Until then, you can join from Chrome or Edge on the same computer.</p>
+              </div>
+
+              <div class="x-inst__more">
+                <p>Already have NetParty?</p>
+                <button class="x-btn x-btn--ghost" type="button" id="x-join-toggle" aria-expanded="false" aria-controls="x-join">Join a party</button>
+              </div>
             </div>
-            <p><span class="x-ver">Version 1.7.1</span></p>
             <form class="x-join" id="x-join" hidden novalidate>
               <input id="x-join-input" aria-label="Full invite link" type="url" inputmode="url" placeholder="Paste the full invite link" autocomplete="off" spellcheck="false" />
               <button class="x-btn x-btn--primary" type="submit">Join</button>
             </form>
             <p class="x-join__err" id="x-join-err" aria-live="polite"></p>
-            <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
-            <ol class="x-beta">
-              <li><b>1</b>Unzip</li>
-              <li><b>2</b>Open chrome://extensions</li>
-              <li><b>3</b>Turn on Developer mode</li>
-              <li><b>4</b>Load unpacked → pick the folder</li>
-            </ol>
           </div>
         </section>
       </main>
@@ -909,6 +1008,36 @@
         } else {
           tick = setInterval(function () { if (playing) { secs++; paint(); } }, 1000);
           run();
+        }
+
+        /* install: browser tabs */
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('.x-tabs [role="tab"]'));
+        function pick(tab, focus) {
+          tabs.forEach(function (t) {
+            var on = t === tab, pane = document.getElementById(t.getAttribute("aria-controls"));
+            t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1;
+            if (on && pane.hidden) { pane.classList.remove("is-in"); void pane.offsetWidth; pane.classList.add("is-in"); }
+            pane.hidden = !on;
+          });
+          if (focus) tab.focus();
+        }
+        var ua = navigator.userAgent || "";
+        var mine = /OPR\//.test(ua) ? "opera" : /Edg\//.test(ua) ? "edge" : /Firefox\//.test(ua) ? "firefox" : "chrome";
+        function pickMine() { pick(tabs.filter(function (t) { return t.getAttribute("data-browser") === mine; })[0] || tabs[0], false); }
+        tabs.forEach(function (t, i) {
+          t.addEventListener("click", function () { pick(t, false); });
+          t.addEventListener("keydown", function (e) {
+            var n = tabs.length, j = null;
+            if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % n;
+            else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + n) % n;
+            else if (e.key === "Home") j = 0;
+            else if (e.key === "End") j = n - 1;
+            if (j !== null) { e.preventDefault(); pick(tabs[j], true); }
+          });
+        });
+        if (tabs.length) {
+          pickMine();
+          document.querySelectorAll("a[data-install]").forEach(function (a) { a.addEventListener("click", pickMine); });
         }
 
         /* join a party */

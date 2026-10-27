@@ -139,6 +139,11 @@ function withSecurity(res, extra = {}) {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h, webSocket: res.webSocket });
 }
 
+// invite page browser line: point Edge users at the store listing (Firefox/Opera not yet)
+const EDGE_STORE = "https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki";
+const withInviteBrowsers = (html) => html.replace(" in Chrome (or Edge, Brave).</p>",
+  ` in Chrome or Brave, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Firefox and Opera are coming soon.</p>`);
+
 export class PartyHub {
   constructor(state, env) {
     this.state = state;
@@ -182,7 +187,7 @@ export class PartyHub {
     const j = url.pathname.match(/^\/j\/([a-z0-9]{4,16})\/?$/i);
     if (j) {
       const room = await this.hub.findRoom(j[1]);
-      return new Response(joinPage(room, j[1], { hasDownload: true }), {
+      return new Response(withInviteBrowsers(joinPage(room, j[1], { hasDownload: true })), {
         status: room ? 200 : 404,
         headers: await joinPageHeaders(),
       });
