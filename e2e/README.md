@@ -10,6 +10,8 @@ API (`http://127.0.0.1:8444`) and mock KLIPY media host (`static.klipy.com`), an
 | `run.mjs` | split-screen layout, start party → invite page (key in `#k=`, host named by the page) → join → chat via Enter and Send → pause/seek sync, reloads (decrypted history survives); WebSocket frames recorded by a proxy contain no names, messages or key |
 | `lifecycle.mjs` | Start a NetParty button, next episode keeps the party (chat still decrypts), leaving ends/leaves it (`HOT=1` for JioHotstar) |
 | `features.mjs` | avatars, emoji picker, 🎉 reactions (rate limit, edit, fullscreen), text size, links, GIFs (no key → unavailable; mock KLIPY → search/chips/attribution/send), popup, voice over encrypted signaling, reload keeps decryption, bare code / missing / malformed / wrong key messages, and a leak audit of every WebSocket frame (names, pictures, messages, GIF URLs, reactions, SDP/ICE, key, cids). `CSP=strict` makes the fake Netflix send `img-src 'self' blob:` so GIFs go through the blob: fallback |
+| `prime.mjs` | fake Prime Video (`www.primevideo.com`, `www.amazon.co.uk/gp/video`: overlay player `#dv-web-player`, muted hero trailer, `?autoplay=1`): start button next to Play, invite → join (autoplay opens the guest's player), sync both ways through the player's `<video>` (never the trailer), Prime ad countdown pauses sync, dock narrows the fixed player, title change, closing the player leaves/ends, popup site detection |
+| `v18.mjs` | own messages show your picture + name, themes (System follows `prefers-color-scheme`, Light/Dark override, persisted in the popup), WCAG contrast audit of every visible text in panel/pickers/voice/camera strip/toast/popup in both themes, video chat between two Chromium browsers with fake cameras (live frames both ways, 640x360 ≤24 fps, collapse, drag + clamp, camera off, leaving voice), SDP/camera state never in plaintext, camera permission denied, HiDPI (2x/3x: no upscaled raster images) |
 | `youtube.mjs` | YouTube start button, invite → join (key in the fragment, stripped from the URL), encrypted chat, sync, ads, video change, dock geometry (default/theater/fullscreen), leaving |
 
 `lib.mjs` has `tap(port, target)`: a recording WebSocket/HTTP proxy in front of the server, so the suites can check
@@ -25,5 +27,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 30
 SCRIPT=lifecycle.mjs HOT=1 ./go.sh
 SCRIPT=features.mjs ./go.sh; SCRIPT=features.mjs CSP=strict ./go.sh
 SCRIPT=youtube.mjs ./go.sh
+SCRIPT=prime.mjs ./go.sh; SCRIPT=v18.mjs TMO=300 ./go.sh
 ```
+The certificate needs `DNS:www.primevideo.com,DNS:www.amazon.co.uk` in its subjectAltName too.
 Paths to Chromium, Playwright and the extension are set at the top of `lib.mjs` / the scripts.

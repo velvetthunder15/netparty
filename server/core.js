@@ -78,6 +78,29 @@ export function isKlipyMediaUrl(s) {
   return u.protocol === "https:" && !u.username && !u.password && !u.port && KLIPY_MEDIA_HOSTS.includes(u.hostname) && u.href === s;
 }
 
+// ---- what's playing. A party's videoId names the title on one site, and the invite page turns
+// it into a link, so only these exact shapes are accepted (same rules as videoIdFromUrl and
+// watchUrl in extension/content.js):
+//   Netflix      "81234567"                       -> https://www.netflix.com/watch/81234567
+//   JioHotstar   "hs:/in/shows/<slug>/<id>/.../watch" -> https://www.hotstar.com/in/shows/...
+//   YouTube      "yt:<11-char id>"                 -> https://www.youtube.com/watch?v=<id>
+//   Prime Video  "pv:<host>/detail/<id>", "pv:<host>/dp/<id>" or "pv:<host>/gp/video/detail/<id>",
+//                <host> = www.primevideo.com or one of the Amazon stores in PRIME_HOSTS
+export const PRIME_HOSTS = [
+  "www.primevideo.com",
+  ...["com", "co.uk", "de", "co.jp", "in", "ca", "com.au", "fr", "it", "es", "com.br", "com.mx", "nl"].map((t) => "www.amazon." + t),
+];
+const PV_RE = /^pv:([a-z0-9.-]+)(\/(?:detail|dp|gp\/video\/detail)\/[A-Za-z0-9._-]{6,100})$/;
+export function validVideoId(v) {
+  if (typeof v !== "string" || !v || v.length > 512) return false;
+  if (/^\d{1,12}$/.test(v)) return true;
+  if (v.startsWith("yt:")) return /^yt:[A-Za-z0-9_-]{11}$/.test(v);
+  if (v.startsWith("hs:")) return /^hs:(\/[A-Za-z0-9._~%-]+)+\/\d{5,}\/watch$/.test(v);
+  const pv = PV_RE.exec(v);
+  if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
+  return false;
+}
+
 export function defaultIceServers(env = {}) {
   const ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
   if (env.TURN_URL) ice.push({ urls: env.TURN_URL.split(","), username: env.TURN_USER, credential: env.TURN_PASS });
@@ -268,7 +291,8 @@ function validState(d) {
     (d.videoId === undefined || d.videoId === null || (typeof d.videoId === "string" && d.videoId.length <= 512))
   );
 }
-const cleanVideoId = (v) => (typeof v === "string" && v && v.length <= 512 ? v : null);
+// a videoId that isn't one of the shapes above is dropped (the party keeps the last good one)
+const cleanVideoId = (v) => (validVideoId(v) ? v : null);
 
 function limited(client, kind) {
   const [max, windowMs] = limits[kind];
@@ -621,17 +645,20 @@ return { connect, sweep, maintain, rooms, getRoom: (code) => rooms.get(String(co
 // sent by this page (its CSP forbids it). It also tells people how to install NetParty first;
 // the extension download only works while the party is live.
 export function watchUrlFor(videoId, roomId) {
-  if (!videoId) return null;
-  if (videoId.startsWith("yt:"))
-    return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId.slice(3))}&npParty=${encodeURIComponent(roomId)}`;
-  const base = videoId.startsWith("hs:")
-    ? "https://www.hotstar.com" + videoId.slice(3)
-    : "https://www.netflix.com/watch/" + encodeURIComponent(videoId);
-  return `${base}?npParty=${encodeURIComponent(roomId)}`;
+  if (!validVideoId(videoId)) return null; // never build a link to anywhere else (no open redirect)
+  const code = encodeURIComponent(roomId);
+  if (videoId.startsWith("yt:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${code}`;
+  // Prime Video: autoplay=1 opens the player on the title page
+  if (videoId.startsWith("pv:")) return `https://${videoId.slice(3)}?autoplay=1&npParty=${code}`;
+  const base = videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : "https://www.netflix.com/watch/" + videoId;
+  return `${base}?npParty=${code}`;
 }
-export const siteFor = (videoId) =>
-  String(videoId || "").startsWith("hs:") ? "JioHotstar" : String(videoId || "").startsWith("yt:") ? "YouTube" : "Netflix";
+export const siteFor = (videoId) => {
+  const v = String(videoId || "");
+  return v.startsWith("hs:") ? "JioHotstar" : v.startsWith("yt:") ? "YouTube" : v.startsWith("pv:") ? "Prime Video" : "Netflix";
+};
 
+export const EDGE_STORE = "https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // The invite page's only script. A constant (its SHA-256 is pinned in the page's CSP), so
@@ -714,7 +741,7 @@ export function joinPage(room, code, { hasDownload = false } = {}) {
 <a class="btn" id="go" hidden href="${esc(watch)}" data-watch="${esc(watch)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Join on ${site}</a>
 <noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party's encrypted chat with the key in your invite link.</p></noscript>
 <p class="note">🔒 Chat is end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
-<p class="note">${site === "YouTube" ? "You need" : `You need your own ${site} account and`} the NetParty extension (1.7 or newer) in Chrome (or Edge, Brave).</p>
+<p class="note">${site === "YouTube" ? "You need" : `You need your own ${site} account and`} the NetParty extension (${site === "Prime Video" ? "1.8" : "1.7"} or newer) in Chrome or Brave, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Firefox and Opera are coming soon.</p>
 <details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>
 <ol>
 ${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty</a> and unzip it.</li>` : `<li>Ask your friend to send you the NetParty zip, then unzip it.</li>`}

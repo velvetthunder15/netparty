@@ -396,6 +396,48 @@ ok("host-only control lock");
 }
 
 {
+  // Prime Video party: invite page names Prime Video and links to the title page (autoplay opens the player)
+  const pv = await member("pv", { key: genKey(), create: { videoId: "pv:www.primevideo.com/detail/0ABCDEFGH12345", playing: false, position: 0, at: Date.now() } });
+  const html = await (await fetch(`${HTTP}/j/${pv.room}`)).text();
+  assert.match(html, /Join on Prime Video/);
+  assert.match(html, /own Prime Video account/);
+  assert.match(html, /NetParty extension \(1\.8 or newer\) in Chrome or Brave, or in Edge from the <a href="https:\/\/microsoftedge\.microsoft\.com\/addons\/detail\/netparty\/[a-z]+"[^>]*>Edge Add-ons store<\/a>\. Firefox and Opera are coming soon\./);
+  assert.ok(html.includes(`https://www.primevideo.com/detail/0ABCDEFGH12345?autoplay=1&amp;npParty=${pv.room}`));
+  // the Amazon store form keeps its own store (accounts are per store)
+  await pv.req("state", { playing: true, position: 1000, at: Date.now(), videoId: "pv:www.amazon.co.uk/gp/video/detail/B0ABCDEF12", reason: "episode" });
+  const html2 = await (await fetch(`${HTTP}/j/${pv.room}`)).text();
+  assert.ok(html2.includes(`https://www.amazon.co.uk/gp/video/detail/B0ABCDEF12?autoplay=1&amp;npParty=${pv.room}`), "amazon store link");
+  await pv.req("end", {});
+  pv.close();
+  ok("Prime Video invite page (primevideo.com and Amazon store links)");
+}
+
+{
+  // videoIds become links on the invite page, so anything but the known shapes is dropped:
+  // no open redirect through netparty.tech/j/<code> to another site
+  const bad = [
+    "hs:.evil.com/x/12345/watch", "hs:@evil.com/1/12345/watch", "hs:/in/x/12345/watch?x=1", "yt:abc", "yt:dQw4w9WgXcQ&x=1",
+    "pv:evil.com/detail/0ABCDEFG", "pv:www.primevideo.com.evil.com/detail/0ABCDEFG", "pv:www.amazon.com/detail/0ABCDEFG",
+    "pv:www.primevideo.com/detail/../../x", "pv:www.primevideo.com/detail/0ABC DEF", "javascript:alert(1)", "//evil.com", "12345/../../x",
+  ];
+  for (const videoId of bad) {
+    const m = await member("bad", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    const html = await (await fetch(`${HTTP}/j/${m.room}`)).text();
+    assert.ok(!/evil|alert|Join on/.test(html), "bad videoId reached the invite page: " + videoId);
+    await m.req("end", {});
+    m.close();
+  }
+  // a good title, then a bad update: the party keeps the good one
+  const g = await member("good", { key: genKey(), create: { videoId: "hs:/in/shows/x-y/1260000002/ep-1/1260000099/watch", playing: false, position: 0, at: Date.now() } });
+  await g.req("state", { playing: true, position: 0, at: Date.now(), videoId: "hs:.evil.com/a/12345/watch" });
+  const html = await (await fetch(`${HTTP}/j/${g.room}`)).text();
+  assert.ok(html.includes("https://www.hotstar.com/in/shows/x-y/1260000002/ep-1/1260000099/watch?npParty=") && !/evil/.test(html));
+  await g.req("end", {});
+  g.close();
+  ok(`video ids: ${bad.length} malformed / foreign-site ids never become invite links`);
+}
+
+{
   // GIF search proxy: without a key it says so (503); with one it normalizes KLIPY's answer
   const r0 = await fetch(`${HTTP}/api/gifs/trending`, { headers: { origin: "chrome-extension://abcdefghijklmnopabcdefghijklmnop" } });
   const j0 = await r0.json();

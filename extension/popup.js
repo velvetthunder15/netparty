@@ -1,6 +1,18 @@
 const $ = (id) => document.getElementById(id);
 const DEFAULT_SERVER = "wss://netparty.tech";
-const SITE_RE = /^https:\/\/www\.(netflix|hotstar|jiohotstar|youtube)\.com\//;
+// the sites NetParty runs on (same list as the content scripts in manifest.json)
+const PRIME_TLDS = ["com", "co.uk", "de", "co.jp", "in", "ca", "com.au", "fr", "it", "es", "com.br", "com.mx", "nl"];
+function supportedSite(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:") return false;
+  if (/^www\.(netflix|hotstar|jiohotstar|youtube|primevideo)\.com$/.test(u.hostname)) return true;
+  return PRIME_TLDS.some((t) => u.hostname === "www.amazon." + t) && /^\/(gp\/video|Amazon-Video)\//.test(u.pathname);
+}
 const E = globalThis.NP_EMOJI;
 let tabId = null;
 
@@ -35,7 +47,7 @@ function parseInvite(s) {
 async function refresh() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
-  if (!SITE_RE.test(tab?.url || "")) return view("vOff");
+  if (!supportedSite(tab?.url || "")) return view("vOff");
   const st = await toTab({ cmd: "status" });
   if (st.error) {
     view("vIdle");
@@ -58,7 +70,9 @@ async function refresh() {
       ? `Starts a party for what's playing on ${st.site}.`
       : st.site === "YouTube"
         ? `Open a video on YouTube, or use the "Start a NetParty" button under it.`
-        : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
+        : st.site === "Prime Video"
+          ? `Open a title's page on Prime Video and press play, or use the "Start a NetParty" button next to Play.`
+          : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
   }
 }
 
@@ -147,7 +161,20 @@ $("avatarBtn").onclick = () => {
   $("avatarBtn").setAttribute("aria-expanded", String(!hidden));
 };
 
-// ---- chat settings: text size, 🎉 reactions
+// ---- settings: theme (System follows the computer's light/dark setting), text size, 🎉 reactions
+function showTheme(t) {
+  const v = t === "light" || t === "dark" ? t : "system";
+  if (v === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = v;
+  for (const b of document.querySelectorAll("[data-theme-opt]")) b.setAttribute("aria-checked", String(b.dataset.themeOpt === v));
+}
+for (const b of document.querySelectorAll("[data-theme-opt]"))
+  b.onclick = async () => {
+    const v = b.dataset.themeOpt;
+    if (v === "system") await chrome.storage.sync.remove("theme");
+    else await chrome.storage.sync.set({ theme: v });
+    showTheme(v);
+  };
 function showFont(f) {
   for (const b of document.querySelectorAll("[data-font]")) b.setAttribute("aria-checked", String(b.dataset.font === (f || "m")));
 }
@@ -192,7 +219,8 @@ $("slotReset").onclick = async () => {
 };
 
 (async () => {
-  const { name, serverUrl, avatar, chatFont, reactions } = await chrome.storage.sync.get(["name", "serverUrl", "avatar", "chatFont", "reactions"]);
+  const { name, serverUrl, avatar, chatFont, reactions, theme } = await chrome.storage.sync.get(["name", "serverUrl", "avatar", "chatFont", "reactions", "theme"]);
+  showTheme(theme);
   $("name").value = name && !/^Guest \d+$/.test(name) ? name : "";
   $("server").value = serverUrl || DEFAULT_SERVER;
   showAvatar(avatar);

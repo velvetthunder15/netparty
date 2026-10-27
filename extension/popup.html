@@ -6,20 +6,21 @@
   </head>
   <body>
     <header>
-      <img src="icons/icon48.png" alt="" />
+      <img src="icons/mark.svg" width="36" height="36" alt="" />
       <div>
         <h1>NetParty</h1>
         <p class="sub">Watch together, in sync</p>
       </div>
     </header>
 
-    <!-- not on Netflix / JioHotstar / YouTube -->
+    <!-- not on Netflix / JioHotstar / YouTube / Prime Video -->
     <section id="vOff" class="hidden">
-      <p class="lead">Open Netflix, JioHotstar or YouTube to start or join a party.</p>
+      <p class="lead">Open Netflix, JioHotstar, YouTube or Prime Video to start or join a party.</p>
       <div class="three">
         <button class="ghost" data-open="https://www.netflix.com/browse">Netflix</button>
         <button class="ghost" data-open="https://www.hotstar.com/in/home">JioHotstar</button>
         <button class="ghost" data-open="https://www.youtube.com/">YouTube</button>
+        <button class="ghost" data-open="https://www.primevideo.com/">Prime Video</button>
       </div>
     </section>
 
@@ -67,7 +68,15 @@
     <div id="error" class="err"></div>
 
     <details id="prefs">
-      <summary>Chat settings</summary>
+      <summary>Settings</summary>
+      <div class="pref">
+        <span class="pref-label" id="themeLabel">Theme</span>
+        <div class="seg" role="radiogroup" aria-labelledby="themeLabel">
+          <button type="button" role="radio" data-theme-opt="system">System</button>
+          <button type="button" role="radio" data-theme-opt="light">Light</button>
+          <button type="button" role="radio" data-theme-opt="dark">Dark</button>
+        </div>
+      </div>
       <div class="pref">
         <span class="pref-label" id="fontLabel">Chat text size</span>
         <div class="seg" role="radiogroup" aria-labelledby="fontLabel">

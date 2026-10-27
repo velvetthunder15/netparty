@@ -1,4 +1,4 @@
-// Fake www.netflix.com / www.hotstar.com / www.youtube.com for extension e2e tests,
+// Fake www.netflix.com / www.hotstar.com / www.youtube.com / www.primevideo.com (+ www.amazon.co.uk/gp/video) for extension e2e tests,
 // plus a mock KLIPY API (http :8444) and a mock KLIPY media host (static.klipy.com).
 // A tiny single-page app: browse/detail pages with a Play button, and watch pages
 // with a player, switched with history.pushState like the real sites.
@@ -161,6 +161,81 @@ document.addEventListener("keydown", (e) => {
 });
 </script></body></html>`;
 
+// ---- fake Prime Video (www.primevideo.com and www.amazon.co.uk/gp/video): title pages with a Play
+// button and a muted hero trailer; the player is an overlay (#dv-web-player, position:fixed) on the
+// same page that gets its <video> when it opens (?autoplay=1 opens it on load), like the real site.
+// An SPA: other titles via pushState. __pvAd(on) shows the player's ad countdown; __pvClose() closes it.
+const pv = `<!doctype html><html><head><title>Prime Video</title>
+<style>
+body { margin: 0; background: #0f171e; color: #fff; font-family: Arial, sans-serif; }
+#dv-web-player { display: none; }
+#dv-web-player.dv-player-fullscreen { display: block; position: fixed; inset: 0; z-index: 1000; background: #000; }
+.webPlayerSDKContainer { position: absolute; inset: 0; }
+.rendererContainer { position: absolute; inset: 0; }
+.atvwebplayersdk-overlays-container { position: absolute; left: 0; right: 0; top: 0; height: 60px; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
+.atvwebplayersdk-ad-timer-text { position: absolute; right: 20px; top: 70px; background: #ff0; color: #000; padding: 2px 8px; }
+.pv-controls { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 20px; background: linear-gradient(transparent, #000a); }
+.dv-hero video { width: 320px; height: 180px; }
+</style></head><body>
+<div id="pv-app"></div>
+<div id="dv-web-player"></div>
+<script>
+const AMZ = /amazon\\./.test(location.hostname);
+const TITLES = { "0PVFAKEMOVIE1": "Fake Prime Movie", "0PVFAKEMOVIE2": "Fake Prime Two", B0FAKEUK01: "Fake UK Movie" };
+const titleId = () => (location.pathname.match(AMZ ? /\\/gp\\/video\\/detail\\/([A-Za-z0-9._-]+)/ : /\\/detail\\/([A-Za-z0-9._-]+)/) || [])[1];
+function closePlayer() {
+  const p = document.getElementById("dv-web-player");
+  p.classList.remove("dv-player-fullscreen");
+  p.textContent = "";
+}
+function openPlayer() {
+  const id = titleId(), p = document.getElementById("dv-web-player");
+  if (!TITLES[id] || p.classList.contains("dv-player-fullscreen")) return;
+  p.classList.add("dv-player-fullscreen");
+  p.innerHTML = '<div class="webPlayerSDKContainer"><div class="rendererContainer"><video id="v" src="/test.webm" muted autoplay style="position:absolute;top:0;left:0"></video></div>' +
+    '<div class="atvwebplayersdk-overlays-container"><button id="pvback">back</button><h1 class="atvwebplayersdk-title-text" style="font-size:18px;margin:0">' + TITLES[id] + '</h1></div>' +
+    '<div class="pv-controls"><button id="pvplay">play</button><button id="pvfs">full</button></div></div>';
+  const box = p.querySelector(".webPlayerSDKContainer"), vid = p.querySelector("video");
+  new ResizeObserver(() => { const r = box.getBoundingClientRect(); vid.style.width = r.width + "px"; vid.style.height = r.height + "px"; }).observe(box);
+  p.querySelector("#pvback").onclick = closePlayer;
+  p.querySelector("#pvplay").onclick = () => (vid.paused ? vid.play() : vid.pause());
+  p.querySelector("#pvfs").onclick = () => (document.fullscreenElement ? document.exitFullscreen() : p.requestFullscreen());
+}
+window.__pvClose = closePlayer;
+window.__pvAd = (on) => {
+  const p = document.querySelector("#dv-web-player .webPlayerSDKContainer");
+  let n = p.querySelector(".atvwebplayersdk-ad-timer-text");
+  if (on && !n) { n = document.createElement("div"); n.className = "atvwebplayersdk-ad-timer-text"; n.textContent = "Ad 0:15"; p.append(n); p.querySelector("video").currentTime = 100; }
+  if (!on && n) n.remove();
+};
+function render() {
+  const id = titleId(), app = document.getElementById("pv-app");
+  closePlayer();
+  if (!TITLES[id]) { app.innerHTML = '<div style="padding:40px"><h1>Prime Video home</h1><a id="pvopen" href="' + (AMZ ? "/gp/video/detail/B0FAKEUK01" : "/detail/0PVFAKEMOVIE1/ref=atv_hm") + '">Open</a></div>'; return; }
+  document.title = "Prime Video: " + TITLES[id];
+  app.innerHTML = '<div style="padding:40px"><div class="dv-hero"><video class="hero-trailer" src="/test.webm" muted autoplay loop></video></div><h1 data-automation-id="title">' + TITLES[id] + '</h1>' +
+    '<div class="dv-dp-node-playback" style="display:flex;gap:12px;align-items:center">' +
+    '<a href="?autoplay=1&ref_=atv_dp_pb" data-testid="play-button" id="pvplaylink" style="display:inline-flex"><button id="pvplaybtn" aria-label="Play" style="height:48px;padding:0 24px;border-radius:8px;border:0;font-size:18px;font-weight:700">Play</button></a>' +
+    '<button id="pvtrailer" style="height:48px;padding:0 24px;border-radius:8px;border:0;font-size:18px">Trailer</button>' +
+    '<button style="height:48px;padding:0 24px;border-radius:8px;border:0;font-size:18px">Watchlist</button></div>' +
+    '<p><a id="pvnext" href="' + (AMZ ? "/gp/video/detail/B0FAKEUK01" : "/detail/0PVFAKEMOVIE2") + '">Another title</a></p></div>';
+  // like Prime: the play link opens the overlay player without leaving the page
+  app.querySelector("#pvplaylink").onclick = (e) => { e.preventDefault(); history.replaceState(null, "", location.pathname + "?autoplay=1"); openPlayer(); };
+  app.querySelector("#pvnext").onclick = (e) => { e.preventDefault(); window.__go(e.currentTarget.getAttribute("href")); };
+}
+window.__go = (path) => { history.pushState(null, "", path); render(); };
+addEventListener("popstate", render);
+render();
+const q = new URLSearchParams(location.search);
+// the router drops unknown parameters, then autoplay opens the player a moment later
+setTimeout(() => history.replaceState(null, "", location.pathname + (q.get("autoplay") === "1" ? "?autoplay=1" : "")), 50);
+if (q.get("autoplay") === "1") setTimeout(openPlayer, 900);
+window.__hotkeys = 0;
+window.addEventListener("keydown", (e) => {
+  if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; }
+}, true);
+</script></body></html>`;
+
 // mock KLIPY media (static.klipy.com is mapped here by the browser's host-resolver-rules)
 https.createServer({ key: fs.readFileSync("key.pem"), cert: fs.readFileSync("cert.pem") }, (req, res) => {
   const host = (req.headers.host || "").split(":")[0];
@@ -182,6 +257,10 @@ https.createServer({ key: fs.readFileSync("key.pem"), cert: fs.readFileSync("cer
     }
     res.writeHead(200, { "content-type": "video/webm", "accept-ranges": "bytes", "content-length": video.length });
     return res.end(video);
+  }
+  if (host === "www.primevideo.com" || host === "www.amazon.co.uk") {
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end(pv);
   }
   if (host === "www.youtube.com") {
     res.writeHead(200, { "content-type": "text/html", "content-security-policy": "require-trusted-types-for 'script'; trusted-types fake; script-src 'nonce-ytfake' 'strict-dynamic'" });

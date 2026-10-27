@@ -1,20 +1,22 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "1.7.1",
-  "description": "Watch Netflix, JioHotstar and YouTube in sync with friends, with end-to-end encrypted chat, voice, GIFs and reactions.",
+  "version": "1.8.0",
+  "description": "Watch Netflix, JioHotstar, YouTube and Prime Video in sync with friends, with end-to-end encrypted chat, voice and video.",
   "minimum_chrome_version": "116",
   "action": {
     "default_popup": "popup.html",
     "default_title": "NetParty",
     "default_icon": {
       "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
@@ -31,6 +33,7 @@
     "https://www.hotstar.com/*",
     "https://www.jiohotstar.com/*",
     "https://www.youtube.com/*",
+    "https://www.primevideo.com/*",
     "https://static.klipy.com/*",
     "https://static1.klipy.com/*",
     "https://static2.klipy.com/*"
@@ -41,7 +44,34 @@
         "https://www.netflix.com/*",
         "https://www.hotstar.com/*",
         "https://www.jiohotstar.com/*",
-        "https://www.youtube.com/*"
+        "https://www.youtube.com/*",
+        "https://www.primevideo.com/*",
+        "https://www.amazon.com/gp/video/*",
+        "https://www.amazon.com/Amazon-Video/*",
+        "https://www.amazon.co.uk/gp/video/*",
+        "https://www.amazon.co.uk/Amazon-Video/*",
+        "https://www.amazon.de/gp/video/*",
+        "https://www.amazon.de/Amazon-Video/*",
+        "https://www.amazon.co.jp/gp/video/*",
+        "https://www.amazon.co.jp/Amazon-Video/*",
+        "https://www.amazon.in/gp/video/*",
+        "https://www.amazon.in/Amazon-Video/*",
+        "https://www.amazon.ca/gp/video/*",
+        "https://www.amazon.ca/Amazon-Video/*",
+        "https://www.amazon.com.au/gp/video/*",
+        "https://www.amazon.com.au/Amazon-Video/*",
+        "https://www.amazon.fr/gp/video/*",
+        "https://www.amazon.fr/Amazon-Video/*",
+        "https://www.amazon.it/gp/video/*",
+        "https://www.amazon.it/Amazon-Video/*",
+        "https://www.amazon.es/gp/video/*",
+        "https://www.amazon.es/Amazon-Video/*",
+        "https://www.amazon.com.br/gp/video/*",
+        "https://www.amazon.com.br/Amazon-Video/*",
+        "https://www.amazon.com.mx/gp/video/*",
+        "https://www.amazon.com.mx/Amazon-Video/*",
+        "https://www.amazon.nl/gp/video/*",
+        "https://www.amazon.nl/Amazon-Video/*"
       ],
       "js": [
         "early.js"
@@ -53,7 +83,34 @@
         "https://www.netflix.com/*",
         "https://www.hotstar.com/*",
         "https://www.jiohotstar.com/*",
-        "https://www.youtube.com/*"
+        "https://www.youtube.com/*",
+        "https://www.primevideo.com/*",
+        "https://www.amazon.com/gp/video/*",
+        "https://www.amazon.com/Amazon-Video/*",
+        "https://www.amazon.co.uk/gp/video/*",
+        "https://www.amazon.co.uk/Amazon-Video/*",
+        "https://www.amazon.de/gp/video/*",
+        "https://www.amazon.de/Amazon-Video/*",
+        "https://www.amazon.co.jp/gp/video/*",
+        "https://www.amazon.co.jp/Amazon-Video/*",
+        "https://www.amazon.in/gp/video/*",
+        "https://www.amazon.in/Amazon-Video/*",
+        "https://www.amazon.ca/gp/video/*",
+        "https://www.amazon.ca/Amazon-Video/*",
+        "https://www.amazon.com.au/gp/video/*",
+        "https://www.amazon.com.au/Amazon-Video/*",
+        "https://www.amazon.fr/gp/video/*",
+        "https://www.amazon.fr/Amazon-Video/*",
+        "https://www.amazon.it/gp/video/*",
+        "https://www.amazon.it/Amazon-Video/*",
+        "https://www.amazon.es/gp/video/*",
+        "https://www.amazon.es/Amazon-Video/*",
+        "https://www.amazon.com.br/gp/video/*",
+        "https://www.amazon.com.br/Amazon-Video/*",
+        "https://www.amazon.com.mx/gp/video/*",
+        "https://www.amazon.com.mx/Amazon-Video/*",
+        "https://www.amazon.nl/gp/video/*",
+        "https://www.amazon.nl/Amazon-Video/*"
       ],
       "js": [
         "emoji-data.js",
@@ -72,7 +129,21 @@
         "https://www.netflix.com/*",
         "https://www.hotstar.com/*",
         "https://www.jiohotstar.com/*",
-        "https://www.youtube.com/*"
+        "https://www.youtube.com/*",
+        "https://www.primevideo.com/*",
+        "https://www.amazon.com/*",
+        "https://www.amazon.co.uk/*",
+        "https://www.amazon.de/*",
+        "https://www.amazon.co.jp/*",
+        "https://www.amazon.in/*",
+        "https://www.amazon.ca/*",
+        "https://www.amazon.com.au/*",
+        "https://www.amazon.fr/*",
+        "https://www.amazon.it/*",
+        "https://www.amazon.es/*",
+        "https://www.amazon.com.br/*",
+        "https://www.amazon.com.mx/*",
+        "https://www.amazon.nl/*"
       ]
     }
   ]

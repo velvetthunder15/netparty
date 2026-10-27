@@ -1,11 +1,17 @@
-# NetParty — watch Netflix, JioHotstar and YouTube together
+# NetParty — watch Netflix, JioHotstar, YouTube and Prime Video together
 
-A Chrome extension + tiny sync server. Everyone in the party needs the extension and,
-for Netflix and JioHotstar, their own account on the service.
+A Chrome extension (also Edge, Brave; Firefox build in `scripts/`) + tiny sync server. Everyone in the party
+needs the extension and, for Netflix, JioHotstar and Prime Video, their own account on the service.
 
-Supported: **Netflix** (`netflix.com/watch/...`), **JioHotstar**
-(`hotstar.com/in/.../watch`, movies, shows and episodes) and **YouTube**
-(`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported).
+Supported:
+- **Netflix** (`netflix.com/watch/...`)
+- **JioHotstar** (`hotstar.com/in/.../watch`, movies, shows and episodes)
+- **YouTube** (`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported)
+- **Prime Video** (new in 1.8, not yet tested on a live account): a title's page on `primevideo.com`
+  (`/detail/<id>`, also under `/region/…` and `/-/<lang>/`) or on an Amazon store's Prime Video pages,
+  `amazon.<tld>/gp/video/detail/<ASIN>` (`.com`, `.co.uk`, `.de`, `.co.jp`, `.in`, `.ca`, `.com.au`, `.fr`, `.it`,
+  `.es`, `.com.br`, `.com.mx`, `.nl`; the extension also runs on `/Amazon-Video/` pages). Start from the title's page;
+  Amazon product pages (`amazon.<tld>/<name>/dp/<ASIN>`) aren't supported.
 
 Features
 - **End-to-end encrypted chat**: messages, GIFs, reactions, names and pictures (and voice-call setup)
@@ -29,6 +35,10 @@ Features
 - Links in chat are clickable (open in a new tab)
 - Chat text size: Small / Medium / Large (Aa in the chat bar, or the popup's Chat settings)
 - Voice chat: peer-to-peer WebRTC audio, mute, volume, speaking indicator
+- Video chat (1.8): turn your camera on next to voice; small draggable, collapsible tiles show everyone with a
+  camera on. 640x360 at up to 24 fps, at most 4 cameras at once, peer to peer (see the TURN note below)
+- Light and dark themes for the chat panel and popup: follows your system, or pick one in Settings → Theme
+- Every chat line shows the sender's picture and name, your own included
 - Host-only control lock, host hand-off when the host leaves, auto-reconnect
 
 ## Quick start (2 minutes)
@@ -38,13 +48,14 @@ Features
 2. **Install** in Chrome: open `chrome://extensions`, turn on **Developer mode**,
    click **Load unpacked**, and pick the `extension` folder.
 3. **Pin** NetParty from the puzzle-piece menu.
-4. **Host**: open any title on Netflix or JioHotstar (or a YouTube video), press play, click NetParty → **Start a party**
+4. **Host**: open any title on Netflix, JioHotstar or Prime Video (or a YouTube video), press play, click NetParty → **Start a party**
    (or the **Start a NetParty** button on the page).
    The invite link is copied to your clipboard.
 5. **Invite**: send the link. It opens an invite page: friends without NetParty get a
-   download + 3-step install there, then press **Join on Netflix/JioHotstar/YouTube** and land on the same title, in sync.
+   download + 3-step install there, then press **Join on Netflix/JioHotstar/YouTube/Prime Video** and land on the same title, in sync.
 6. **Talk**: the chat panel opens on the right; the round purple button reopens it.
-   Type and press Enter (or the send arrow). **Join voice chat** and allow the mic to talk.
+   Type and press Enter (or the send arrow). **Join voice chat** and allow the mic to talk; the camera
+   button in the voice bar turns on video.
 
 No server setup needed: the extension uses the hosted server by default.
 
@@ -52,13 +63,15 @@ No server setup needed: the extension uses the hosted server by default.
 
 | Action | How |
 | --- | --- |
-| Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar) or next to Like under a YouTube video: starts the party. Or, on a playing title, NetParty icon → **Start a party** |
+| Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar), next to Play on a Prime Video title page, or next to Like under a YouTube video: starts the party. Or, on a playing title, NetParty icon → **Start a party** |
 | Join a party | Open the invite link, or icon → paste the **full** invite link → **Join** (the code alone can't unlock the encrypted chat) |
 | Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
 | Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
+| Video | In voice, the camera button turns your camera on/off. Drag the camera strip by its bar; the arrow folds it away |
+| Theme | Icon → **Settings** → **Theme**: System (default, follows your computer), Light or Dark |
 | Emoji / GIF / react | Chat bar: 🙂 opens emoji, **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
-| Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Chat settings** |
+| Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Settings** |
 | Lock controls | Host: icon → **Only I can play, pause and skip** |
 | Change your name or picture | Icon → **You** (the picture opens the picker), or click your own picture in the chat panel |
 | Leave | Exit the title, or **Leave party**. If the host leaves, the party ends for everyone; a guest leaving just leaves. Next episode keeps the party going. |
@@ -66,6 +79,10 @@ No server setup needed: the extension uses the hosted server by default.
 Tips
 - Everyone needs their own account on a plan that streams that title in their region.
 - JioHotstar: ads on ad-supported plans play separately for each person; after an ad, press play/pause once to resync.
+- Prime Video: the party is tied to the title's page with the player open; closing the player leaves the party
+  (the host closing it ends it). While Prime shows you an ad, sync pauses for you and you catch up afterwards.
+  Episodes that play inside the same player without changing the address aren't followed automatically:
+  everyone picks the next episode.
 - YouTube: ads play separately for each person. While yours plays, the panel shows "Waiting for ad to finish"
   and nothing is synced; when it ends you jump to where the party is. Switching video moves the whole party.
 - Use headphones on voice to avoid echo.
@@ -80,6 +97,10 @@ Tips
 - **"Can't decrypt messages — check your invite link"**: the key in the link doesn't belong to that party (a mangled or mixed-up link). Ask for the full link again.
 - **"Update NetParty …"**: you (or a friend) still run 1.6 or older; 1.7 parties are encrypted and need 1.7 on everyone's browser.
 - **No mic prompt / no audio**: click the lock icon in the address bar → allow Microphone for the site, then rejoin voice.
+- **"Camera blocked"**: same place → allow Camera for the site, then press the camera button again.
+  "Your camera is in use by another app" means another app (Zoom, Meet…) has it.
+- **A friend's camera tile stays on their picture**, or "Voice/video link … failed": your networks can't connect
+  peer to peer (no relay server yet, see TURN below).
 - **Netflix error after a seek**: reload the tab; the party rejoins automatically.
 - **"GIFs aren't available right now"**: the server has no KLIPY key yet (see GIFs below).
 
@@ -124,7 +145,7 @@ For friends on other networks the server must be public over `wss://`. Any Node
 host works (Render, Railway, Fly.io, a VPS behind Caddy/Nginx). Set `PORT` if
 your host requires it. Health check: `GET /health`.
 
-Voice uses Google STUN. On strict networks (some college/mobile networks) peers
+Voice and video use Google STUN and connect peer to peer. On strict networks (symmetric NAT) (some college/mobile networks) peers
 may fail to connect; add a TURN server with env vars:
 `TURN_URL=turn:host:3478 TURN_USER=... TURN_PASS=...`
 
@@ -192,11 +213,13 @@ messages honestly (it can't read or forge them, but it could drop or delay them)
 - `extension/background.js` – holds the WebSocket per tab (outside Netflix's CSP)
 - `extension/early.js` – runs at page start: keeps the invite code if the site rewrites the URL, and
   routes keys typed in the panel away from the site's hotkeys
-- `extension/content.js` – party logic, clock sync, playback sync, chat (emoji, GIFs, links), reactions, voice, overlay (shadow DOM)
+- `extension/content.js` – party logic, clock sync, playback sync, chat (emoji, GIFs, links), reactions, voice and video
+  (WebRTC mesh: the caller offers a video slot up front, so the camera is added with `replaceTrack`, no renegotiation),
+  overlay (shadow DOM, light/dark), Prime Video's overlay player
 - `extension/emoji-data.js` – bundled emoji lists (pictures, picker, default reactions); shared by content script, popup, background
 - `extension/page.js` – runs in the site's page: drives Netflix's internal player API
   (setting `video.currentTime` directly triggers Netflix error M7375) and the plain
-  HTML5 `<video>` on JioHotstar
+  HTML5 `<video>` on JioHotstar (YouTube and Prime Video's `<video>` are driven straight from content.js)
 - `server/core.js` – rooms, seats (private cid → public pid), state relay, encrypted chat/profile/reaction
   relay with size checks and rate limits, encrypted WebRTC signaling relay, invite page (shared)
 - `server/gifs.js` – KLIPY GIF search proxy (shared by Node and the Worker)
@@ -205,7 +228,10 @@ messages honestly (it can't read or forge them, but it could drop or delay them)
   (Worker bundles it: run `npm run deploy` in `server/`; Node: set `EXTENSION_ZIP=/path/to.zip`)
 - `e2e/` – real-Chromium tests: two browsers, fake Netflix/JioHotstar/YouTube pages, a mock KLIPY;
   `run.mjs` (invite → join → chat → sync), `lifecycle.mjs`, `features.mjs` (avatars, emoji, reactions,
-  text size, links, GIFs; `CSP=strict` for a strict image CSP), `youtube.mjs` (start, sync, ads, video change, dock)
+  text size, links, GIFs; `CSP=strict` for a strict image CSP), `youtube.mjs` (start, sync, ads, video change, dock),
+  `prime.mjs` (mock Prime Video / Amazon pages: start, invite, sync both ways, ads, dock, title change, leaving),
+  `v18.mjs` (own avatar, light/dark + contrast audit, video chat with fake cameras, camera denied, HiDPI);
+  `e2e/firefox/` runs the Firefox build (incl. Firefox ↔ Chromium voice and video)
 
 Protocol frames: `{ type, reqId?, data }`; replies echo `reqId`.
 Shared state: `{ playing, position (ms), at (server ms), videoId }`.
@@ -217,10 +243,15 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
   Windows, Noto on Android/Linux (no emoji images are bundled).
 - YouTube's real page can change its layout; the split-screen dock narrows `ytd-watch-flexy` and the top bar.
 - Episode changes reload followers' tabs; voice reconnects automatically after.
-- Voice is a mesh: great up to ~6 people in voice, heavier beyond that.
+- Voice is a mesh: great up to ~6 people in voice, heavier beyond that. Video is limited to 4 cameras, and each
+  camera is uploaded once per viewer (lower quality as more people watch).
+- No TURN relay server yet: voice and video only work when the browsers can reach each other directly.
+- Prime Video support is built from Prime's public player markup and tested on a mock page only; Prime can change
+  it, and `video.currentTime` may not match the time Prime shows (everyone gets the same offset, so sync holds).
 - Netflix's internal player API is undocumented and can change.
 - JioHotstar support is untested on a live account so far; live sports/TV streams are not synced (no shared timeline).
-- Everyone in a party watches on the same service; a Netflix party can't include JioHotstar viewers.
+- Everyone in a party watches on the same service; a Netflix party can't include JioHotstar viewers. On Prime Video,
+  guests open the title on the host's store (primevideo.com or that amazon.<tld>).
 
 ## Credits
 
@@ -267,6 +298,14 @@ No Teleparty or REA code is included; NetParty is an original implementation.
 - The server stores only ciphertext, and an idle saved party is deleted within 6 hours (checked every 15 min).
 - The invite page names who invited you by decrypting it in your browser, and refuses links without a valid key.
 
+## v1.8.0
+
+- **Prime Video** (primevideo.com and amazon.<tld>/gp/video): start button, sync, ads, dock, invites. Untested on a live account.
+- **Video chat**: optional camera tiles on the voice mesh (640x360, ≤24 fps, max 4 cameras), draggable and collapsible.
+- **Light mode** (System / Light / Dark in Settings), WCAG AA contrast in both themes.
+- Your own messages show your picture and name. Crisp icons on HiDPI (SVG logo, 32 px toolbar icon).
+- Security: only known title-id shapes become links (invite page, follow-the-host). Full list in [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
-MIT, see [LICENSE](LICENSE). Netflix, JioHotstar and YouTube are trademarks of their owners; NetParty is not affiliated with them.
+MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube and Prime Video are trademarks of their owners; NetParty is not affiliated with them.

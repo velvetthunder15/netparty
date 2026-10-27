@@ -16,18 +16,20 @@ export const summary = (label) => {
   out(fails ? `\n${fails} FAILED, ${passes} passed` : `\nALL ${passes} ${label} CHECKS PASSED`);
   return fails;
 };
-export async function launch(dir, { name, avatar, extra = {} } = {}) {
+export async function launch(dir, { name, avatar, extra = {}, ctxOpts = {}, args = [], prompts = false } = {}) {
   fs.rmSync(dir, { recursive: true, force: true });
   const ctx = await chromium.launchPersistentContext(dir, {
     executablePath: "/usr/bin/chromium",
     headless: true,
     viewport: { width: 1280, height: 720 },
+    ...ctxOpts,
     args: [
       `--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`,
-      "--host-resolver-rules=MAP www.netflix.com:443 127.0.0.1:8443, MAP www.hotstar.com:443 127.0.0.1:8443, MAP www.youtube.com:443 127.0.0.1:8443, MAP static.klipy.com:443 127.0.0.1:8443",
+      "--host-resolver-rules=MAP www.netflix.com:443 127.0.0.1:8443, MAP www.hotstar.com:443 127.0.0.1:8443, MAP www.youtube.com:443 127.0.0.1:8443, MAP static.klipy.com:443 127.0.0.1:8443, MAP www.primevideo.com:443 127.0.0.1:8443, MAP www.amazon.co.uk:443 127.0.0.1:8443",
       "--ignore-certificate-errors", "--autoplay-policy=no-user-gesture-required", "--no-sandbox", "--no-proxy-server",
       // voice chat with a fake microphone; plain host candidates so two local browsers can connect
-      "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--disable-features=WebRtcHideLocalIpsWithMdns",
+      "--use-fake-device-for-media-stream", ...(prompts ? [] : ["--use-fake-ui-for-media-stream"]), "--disable-features=WebRtcHideLocalIpsWithMdns",
+      ...args,
     ],
   });
   let [sw] = ctx.serviceWorkers();
@@ -53,7 +55,7 @@ export async function until(fn, ms = 10000, step = 200) {
 export const status = (x, page) =>
   x.sw.evaluate(async (u) => {
     const tabs = await chrome.tabs.query({});
-    const t = tabs.find((t) => t.url === u) || tabs.find((t) => /netflix|hotstar|youtube/.test(t.url || ""));
+    const t = tabs.find((t) => t.url === u) || tabs.find((t) => /netflix|hotstar|youtube|primevideo|amazon/.test(t.url || ""));
     return chrome.tabs.sendMessage(t.id, { cmd: "status" }).catch((e) => ({ error: String(e) }));
   }, page.url());
 export const people = (p) => p.evaluate(() => [...(document.getElementById("netparty-root")?.shadowRoot?.querySelectorAll(".np-pname") || [])].map((n) => n.textContent));

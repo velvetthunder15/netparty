@@ -1,0 +1,21 @@
+NetParty 1.8.0 - release notes ("What's new")
+
+=== Edge Add-ons / Opera (under 500 characters) ===
+- Prime Video: watch parties on primevideo.com and Amazon's Prime Video pages (new, not yet tested on a live account).
+- Video chat: turn your camera on next to voice. Peer to peer, so it may not connect on strict networks.
+- Light mode: follows your system, or pick Light / Dark in Settings.
+- Your own messages now show your picture and name.
+- Sharper icons on high-resolution screens.
+- Security: invite links only ever lead to the supported sites.
+
+=== Firefox Add-ons (AMO) ===
+What's new in 1.8.0
+
+- Prime Video: parties now work on primevideo.com and on Amazon's Prime Video pages (amazon.com, .co.uk, .de, .in and other stores). Play, pause and seek stay in sync, and there's a Start a NetParty button next to Play. This is new and hasn't been tested on a live Prime account yet, so please report anything that doesn't sync.
+- Video chat: turn your camera on next to voice chat. Small tiles show everyone with a camera on; drag them anywhere or fold them away. Up to 4 cameras at 640x360. Video goes peer to peer between friends (its setup is end-to-end encrypted like chat), so on strict networks (some college or office Wi-Fi) it may not connect; there's no relay server yet.
+- Light mode: the chat panel and popup follow your system's light or dark setting. Choose Light or Dark under Settings to override it.
+- Your own messages now show your picture and name, like everyone else's.
+- Sharper icons on high-resolution screens.
+- Security: invite links and "follow the host" only ever lead to Netflix, JioHotstar, YouTube or Prime Video titles.
+
+The camera is only used after you press the camera button, and it turns off when you press it again or leave voice.

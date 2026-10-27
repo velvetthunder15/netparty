@@ -39,6 +39,16 @@ await shadow(gp, (r) => { r.querySelector(".np-join-voice")?.click(); });
 await sleep(700);
 await shadow(hp, (r) => { r.querySelector(".np-join-voice")?.click(); });
 check("voice connects Firefox ↔ Chromium", !!(await until(async () => (await linked(hp)) === "connected" && (await linked(gp)) === "connected", 25000)), JSON.stringify([await linked(hp), await linked(gp)]));
+// 1.8 video chat across browsers (Firefox offered the connection, so it made the video slot)
+const tiles = (p) => shadow(p, (r) => { const c = r.querySelector(".np-cams"); return !c || c.hidden ? [] : [...c.querySelectorAll(".np-cam")].map((t) => { const v = t.querySelector("video"); return { name: t.querySelector(".np-cam-name").textContent, w: v.videoWidth, t: v.currentTime, live: !t.classList.contains("np-cam-wait") }; }); });
+const liveTile = async (p, name) => { const a = (await tiles(p)).find((x) => x.name === name); await sleep(800); const b = (await tiles(p)).find((x) => x.name === name); return a && b && b.live && b.w > 0 && b.t > a.t ? b : null; };
+await shadow(hp, (r) => { r.querySelector(".np-cam-btn").click(); });
+check("Firefox camera → Chromium sees a live tile", !!(await until(() => liveTile(gp, "Foxy"), 20000, 500)), JSON.stringify(await tiles(gp)));
+await shadow(gp, (r) => { r.querySelector(".np-cam-btn").click(); });
+check("Chromium camera → Firefox sees a live tile", !!(await until(() => liveTile(hp, "Chromy"), 20000, 500)), JSON.stringify(await tiles(hp)));
+await shadow(hp, (r) => { r.querySelector(".np-cam-btn").click(); });
+check("Firefox camera off → its tile leaves Chromium", !!(await until(async () => !(await tiles(gp)).some((t) => t.name === "Foxy"), 8000)));
+check("no SDP / camera state in any frame", leaks(T.frames, ["m=video", "a=fingerprint", '"cam"']).length === 0);
 check("no names/messages/key in any frame", leaks(T.frames, ["Foxy", "Chromy", "XMARK", keyOf(created.invite)]).length === 0);
 const f = summary("CROSS-BROWSER");
 await H.browser.close(); await G.ctx.close(); T.close();

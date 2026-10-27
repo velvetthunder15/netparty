@@ -1,5 +1,5 @@
-// NetParty content script (Netflix, JioHotstar, YouTube). Owns: the party connection, clock sync,
-// playback sync, text chat (emoji, GIFs, links), reactions, voice chat (WebRTC mesh) and the in-page overlay.
+// NetParty content script (Netflix, JioHotstar, YouTube, Prime Video). Owns: the party connection, clock sync,
+// playback sync, text chat (emoji, GIFs, links), reactions, voice and video chat (WebRTC mesh) and the in-page overlay.
 (() => {
   if (window.__netpartyLoaded) return;
   window.__netpartyLoaded = true;
@@ -18,11 +18,73 @@
   };
   // ---- platforms. A party's videoId is the Netflix title id ("81234567"),
   // "hs:" + the JioHotstar watch path ("hs:/in/shows/<show>/<id>/<ep>/<id>/watch"),
-  // or "yt:" + the YouTube video id ("yt:dQw4w9WgXcQ", from /watch?v=…).
+  // "yt:" + the YouTube video id ("yt:dQw4w9WgXcQ", from /watch?v=…),
+  // or "pv:" + the Prime Video title page ("pv:www.primevideo.com/detail/<id>",
+  // "pv:www.amazon.co.uk/gp/video/detail/<ASIN>"), while its player is open.
+  // Same shapes as validVideoId in server/core.js: anything else is never turned into a link.
+  const PRIME_HOSTS = [
+    "www.primevideo.com",
+    ...["com", "co.uk", "de", "co.jp", "in", "ca", "com.au", "fr", "it", "es", "com.br", "com.mx", "nl"].map((t) => "www.amazon." + t),
+  ];
+  const PV_RE = /^pv:([a-z0-9.-]+)(\/(?:detail|dp|gp\/video\/detail)\/[A-Za-z0-9._-]{6,100})$/;
+  function validVideoId(v) {
+    if (typeof v !== "string" || !v || v.length > 512) return false;
+    if (/^\d{1,12}$/.test(v)) return true;
+    if (v.startsWith("yt:")) return /^yt:[A-Za-z0-9_-]{11}$/.test(v);
+    if (v.startsWith("hs:")) return /^hs:(\/[A-Za-z0-9._~%-]+)+\/\d{5,}\/watch$/.test(v);
+    const pv = PV_RE.exec(v);
+    if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
+    return false;
+  }
   const IS_HOTSTAR = /(^|\.)(jio)?hotstar\.com$/.test(location.hostname);
   const IS_YT = /(^|\.)youtube\.com$/.test(location.hostname);
-  const SITE_NAME = IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : "Netflix";
+  const IS_PRIME = PRIME_HOSTS.includes(location.hostname);
+  const SITE_NAME = IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : "Netflix";
+  const largest = (vids) => {
+    if (vids.length < 2) return vids[0] || null;
+    const area = (v) => {
+      const r = v.getBoundingClientRect();
+      return r.width * r.height;
+    };
+    return vids.sort((a, b) => area(b) - area(a))[0];
+  };
+  // Prime Video plays titles in an overlay player on the title's own page (the URL stays the
+  // title page). The player counts as open while one of its containers is on screen with a
+  // <video> in it; the title page's muted hero trailer isn't inside those containers.
+  const PRIME_PLAYER = ["#dv-web-player", ".webPlayerSDKContainer", ".webPlayerContainer"];
+  function primePlayer() {
+    for (const sel of PRIME_PLAYER)
+      for (const box of document.querySelectorAll(sel)) {
+        const r = box.getBoundingClientRect();
+        if (r.width < 200 || r.height < 120) continue;
+        const cs = getComputedStyle(box);
+        if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity || "1") < 0.1) continue;
+        const vids = [...box.querySelectorAll("video")].filter((v) => {
+          const q = v.getBoundingClientRect();
+          return q.width > 0 && q.height > 0;
+        });
+        if (vids.length) return { box, video: largest(vids) };
+      }
+    return null;
+  }
+  // the title in the address bar: /detail/<id> or /dp/<id> on primevideo.com (also under
+  // /region/<r>/ or /-/<lang>/), /gp/video/detail/<ASIN> on the Amazon stores
+  function primeTitlePath() {
+    if (!IS_PRIME) return null;
+    const p = location.pathname;
+    if (location.hostname === "www.primevideo.com") {
+      const m = p.match(/\/(detail|dp)\/([A-Za-z0-9._-]{6,100})(?=\/|$)/);
+      return m ? `/${m[1]}/${m[2]}` : null;
+    }
+    const m = p.match(/\/gp\/video\/detail\/([A-Za-z0-9._-]{6,100})(?=\/|$)/);
+    return m ? `/gp/video/detail/${m[1]}` : null;
+  }
   const videoIdFromUrl = () => {
+    if (IS_PRIME) {
+      const t = primeTitlePath();
+      const v = t && "pv:" + location.hostname + t;
+      return v && validVideoId(v) && primePlayer() ? v : null;
+    }
     if (IS_YT) {
       if (location.pathname !== "/watch") return null; // Shorts, live chat pop-outs etc. aren't supported
       const v = new URLSearchParams(location.search).get("v");
@@ -32,16 +94,27 @@
     const path = location.pathname.replace(/\/+$/, "");
     return /\/\d{5,}\/watch$/.test(path) ? "hs:" + path : null;
   };
-  // compare by content id so slug or language-prefix differences don't matter
-  const videoKey = (v) => (v && v.startsWith("hs:") ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1] : v);
+  // compare by content id so slug, language-prefix or store differences don't matter
+  const videoKey = (v) =>
+    v && v.startsWith("hs:") ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1] : v && v.startsWith("pv:") ? "pv:" + v.split("/").pop() : v;
   const sameVideo = (a, b) => videoKey(a) === videoKey(b);
+  // null for anything that isn't a known title shape (a party member can't send us elsewhere)
   const watchUrl = (videoId, roomId) => {
-    if (videoId.startsWith("yt:"))
-      return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId.slice(3))}&npParty=${roomId}`;
+    if (!validVideoId(videoId) || !/^[a-z0-9]{4,16}$/.test(String(roomId))) return null;
+    if (videoId.startsWith("yt:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${roomId}`;
+    // Prime Video: autoplay=1 opens the player on the title page
+    if (videoId.startsWith("pv:")) return `https://${videoId.slice(3)}?autoplay=1&npParty=${roomId}`;
     return (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) + `?npParty=${roomId}`;
   };
-  // YouTube plays ads in the main player: no sync while one is on screen
+  const HAS_ADS = IS_YT || IS_PRIME;
+  // YouTube and Prime Video play ads in the main player: no sync while one is on screen
   const adPlaying = () => {
+    if (IS_PRIME) {
+      // Prime's player shows an ad countdown ("Ad 0:15") during ad breaks
+      const box = primePlayer()?.box;
+      const n = box?.querySelector('[class*="atvwebplayersdk-ad-timer"], [class*="atvwebplayersdk-adtimeindicator"], [class*="atvwebplayersdk-ad-indicator"]');
+      return !!n && n.getBoundingClientRect().width > 0 && !!n.textContent.trim();
+    }
     if (!IS_YT) return false;
     if (document.querySelector("#movie_player.ad-showing, #movie_player.ad-interrupting")) return true;
     const ads = document.querySelector("#movie_player .video-ads");
@@ -51,7 +124,12 @@
   const titleCache = { vid: null, title: "" };
   function readTitle() {
     let t = "";
-    if (IS_YT) {
+    if (IS_PRIME) {
+      const box = primePlayer()?.box;
+      t = box?.querySelector('[class*="atvwebplayersdk-title-text"]')?.textContent || "";
+      if (!t.trim()) t = document.querySelector('meta[property="og:title"]')?.content || document.querySelector("h1")?.textContent || "";
+      t = t.replace(/^(watch|prime video:)\s+/i, "").replace(/\s*[|–-]\s*(prime video|amazon\.\S+).*$/i, "");
+    } else if (IS_YT) {
       t = document.querySelector("ytd-watch-metadata h1, h1.ytd-watch-metadata, #above-the-fold #title h1")?.textContent || "";
       if (!t.trim()) t = document.title.replace(/^\(\d+\)\s*/, "").replace(/\s*-\s*YouTube\s*$/i, "");
     } else if (IS_HOTSTAR) {
@@ -73,15 +151,7 @@
     return titleCache.title;
   };
   // the main player <video>: skip tiny previews/ads by preferring the largest one on screen
-  const mainVideo = () => {
-    const vids = [...document.querySelectorAll("video")];
-    if (vids.length < 2) return vids[0] || null;
-    const area = (v) => {
-      const r = v.getBoundingClientRect();
-      return r.width * r.height;
-    };
-    return vids.sort((a, b) => area(b) - area(a))[0];
-  };
+  const mainVideo = () => (IS_PRIME ? primePlayer()?.video || null : largest([...document.querySelectorAll("video")]));
   const fmt = (ms) => {
     const t = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
@@ -263,8 +333,11 @@
   const bridge = (() => {
     // YouTube: a plain HTML5 <video> in #movie_player, driven straight from here. (No page
     // script needed, which matters because youtube.com enforces a nonce-based script-src.)
-    if (IS_YT) {
-      const v = () => document.querySelector("#movie_player video.html5-main-video") || document.querySelector("#movie_player video") || mainVideo();
+    // Prime Video: the HTML5 <video> in its overlay player, the same way.
+    if (IS_YT || IS_PRIME) {
+      const v = IS_PRIME
+        ? () => primePlayer()?.video || null
+        : () => document.querySelector("#movie_player video.html5-main-video") || document.querySelector("#movie_player video") || mainVideo();
       const status = () => {
         const x = v();
         if (!x) return null;
@@ -515,12 +588,13 @@
     st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) : 0);
 
   async function loadPrefs() {
-    const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions"]);
+    const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions", "theme"]);
     party.serverUrl = p.serverUrl || party.serverUrl;
     party.name = p.name || party.name;
     party.avatar = p.avatar || null;
     ui.setFont(p.chatFont);
     ui.setReactions(p.reactions);
+    ui.setTheme(p.theme);
   }
 
   chrome.storage.onChanged.addListener((ch, area) => {
@@ -536,6 +610,7 @@
       ui.render();
     }
     if (ch.chatFont) ui.setFont(ch.chatFont.newValue);
+    if (ch.theme) ui.setTheme(ch.theme.newValue);
     if (ch.reactions) ui.setReactions(ch.reactions.newValue);
     if (ch.serverUrl) party.serverUrl = ch.serverUrl.newValue;
   });
@@ -586,7 +661,14 @@
 
   async function createParty() {
     const vid = videoIdFromUrl();
-    if (!vid) throw new Error(IS_YT ? "Open a YouTube video first, then start the party." : `Open a ${SITE_NAME} title and press play first, then start the party.`);
+    if (!vid)
+      throw new Error(
+        IS_YT
+          ? "Open a YouTube video first, then start the party."
+          : IS_PRIME && !primeTitlePath()
+            ? "Open the title's own page on Prime Video and press play there, then start the party."
+            : `Open a ${SITE_NAME} title and press play first, then start the party.`,
+      );
     if (adPlaying()) {
       // start from the video itself, not from wherever the ad is
       notice("The party starts as soon as the ad is over.");
@@ -638,9 +720,10 @@
     if (!videoIdFromUrl()) {
       // not on a player yet (browse page): go to the party's title; the invite code
       // rides along in the URL (the key stays in this tab's extension storage) and the join happens there
-      if (!info.videoId) throw new Error("The host hasn't opened a title yet.");
+      const url = info.videoId && watchUrl(info.videoId, info.roomId);
+      if (!url) throw new Error("The host hasn't opened a title yet.");
       net.stop();
-      location.href = watchUrl(info.videoId, info.roomId);
+      location.href = url;
       return info;
     }
     await e2e.use(info.roomId, key);
@@ -697,11 +780,16 @@
         el("style", {}, `.n{position:fixed;top:18px;left:50%;transform:translate(-50%,-20px);opacity:0;z-index:2147483647;
 background:#1b1b22;color:#f3f3f6;border:1px solid #7c5cff;border-radius:12px;padding:10px 16px;
 font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 8px 30px #0008;transition:.25s;pointer-events:none}
-.n.s{opacity:1;transform:translate(-50%,0)} b{color:#a48bff}`),
+.n.s{opacity:1;transform:translate(-50%,0)} b{color:#a48bff}
+.n[data-theme=light]{background:#fff;color:#17151f;box-shadow:0 8px 30px #0003} .n[data-theme=light] b{color:#5a3fd6}
+@media (prefers-color-scheme: light){.n:not([data-theme=dark]){background:#fff;color:#17151f;box-shadow:0 8px 30px #0003} .n:not([data-theme=dark]) b{color:#5a3fd6}}
+@media (prefers-reduced-motion: reduce){.n{transition:none}}`),
         el("div", { class: "n" }),
       );
     }
     const box = noticeHost.shadowRoot.querySelector(".n");
+    if (ui.theme) box.dataset.theme = ui.theme;
+    else delete box.dataset.theme;
     box.replaceChildren(el("b", {}, "NetParty "), text);
     (document.fullscreenElement || document.body).append(noticeHost);
     requestAnimationFrame(() => box.classList.add("s"));
@@ -797,9 +885,11 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     if (st.videoId && !sameVideo(vid, st.videoId)) {
       // a late update from the old episode right after we switched: ours wins
       if (Date.now() - lastEpisodeChange < 8000) return;
-      // different title/episode: follow the party
+      // different title/episode: follow the party (only to a known title shape on this site's kind)
+      const url = watchUrl(st.videoId, party.roomId);
+      if (!url) return;
       sessionStorage.setItem("netpartyRoom", party.roomId);
-      location.href = watchUrl(st.videoId, party.roomId);
+      location.href = url;
       return;
     }
     if (adPlaying()) return; // YouTube ad on screen: catch up when it ends (see adWatch)
@@ -817,12 +907,12 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
   let sendTimer = null;
   function onLocalPlayerEvent(kind) {
-    if (IS_YT) adWatch(); // an ad that just ended: the resume events below are YouTube's, not ours
+    if (HAS_ADS) adWatch(); // an ad that just ended: the resume events below are the site's, not ours
     if (!party.roomId || Date.now() < suppressUntil || adPlaying()) return;
     // coalesce bursts (Netflix fires pause+seeked+play when scrubbing)
     clearTimeout(sendTimer);
     sendTimer = setTimeout(async () => {
-      if (IS_YT) adWatch();
+      if (HAS_ADS) adWatch();
       if (Date.now() < suppressUntil || adPlaying()) return; // an ad started, or a remote action is being applied
       const st = await bridge.status();
       if (!st || !party.roomId || !Number.isFinite(st.position) || !videoIdFromUrl() || adPlaying()) return;
@@ -857,7 +947,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
   }, 3000);
 
-  // YouTube ads: while one plays this viewer neither sends nor applies sync; when it
+  // YouTube / Prime Video ads: while one plays this viewer neither sends nor applies sync; when it
   // ends they jump back to where the party is.
   let adWas = false;
   function adWatch() {
@@ -872,7 +962,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
     ui.render();
   }
-  if (IS_YT) setInterval(adWatch, 500);
+  if (HAS_ADS) setInterval(adWatch, 500);
 
   // attach to the <video> element and follow the sites' SPA navigation
   let lastVideoId = videoIdFromUrl();
@@ -891,7 +981,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           party.state = prev; // retry on the next check
           lastVideoId = null;
         });
-        ui.system(IS_YT ? "Moved the party to a new video." : "Moved the party to a new episode.");
+        ui.system(IS_YT ? "Moved the party to a new video." : IS_PRIME ? "Moved the party to a new title." : "Moved the party to a new episode.");
       }
     }
     const v = mainVideo();
@@ -904,8 +994,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
     partyLifecycle(vid);
     if (!party.roomId && (IS_YT ? !!vid : !vid)) startButtons.inject();
-    else if (IS_YT && party.roomId) startButtons.clear();
-    if (IS_YT) adWatch();
+    else if ((IS_YT || IS_PRIME) && party.roomId) startButtons.clear();
+    if (HAS_ADS) adWatch();
     if (vid) currentTitle();
     ui.mount();
     ui.dockCheck();
@@ -916,7 +1006,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   //   takes you out of it if you're a guest. Next episode stays on a watch page, so
   //   the party carries on.
   // * a pending invite or "Start a NetParty" request is acted on once a player opens.
-  const LEAVE_GRACE_MS = 2500; // ride out the site's own route changes
+  // ride out the site's own route changes (Prime's overlay player swaps its <video> between episodes)
+  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : 2500;
   let offWatchSince = 0;
   let busy = false;
   let booted = false; // the boot sequence below decides first (reload / rejoin)
@@ -1124,6 +1215,33 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       });
       place(c, btn);
     }
+    function prime() {
+      // the title page's big Play / Resume / Watch now button (opens the overlay player). Only on a
+      // title's own page: that's where the party gets its title id.
+      if (!primeTitlePath() || document.querySelector(`[${MARK}]`)) return;
+      const re = /^(play|resume|continue|watch|start watching)\b/i;
+      const cands = [
+        ...new Set([
+          ...document.querySelectorAll('[data-automation-id*="play"], [data-testid*="play"], a[href*="autoplay=1"]'),
+          ...[...document.querySelectorAll("button, a, [role=button]")].filter((n) => re.test(label(n))),
+        ]),
+      ].filter((n) => {
+        if (skip(n) || n.closest(PRIME_PLAYER.join(","))) return false;
+        const f = face(n);
+        if (!visible(f)) return false;
+        const r = f.getBoundingClientRect();
+        if (r.width < 80 || r.height < 28 || r.top > innerHeight) return false;
+        return re.test(label(f)) || /play/i.test((n.getAttribute("data-automation-id") || "") + (n.getAttribute("data-testid") || ""));
+      });
+      cands.sort((x, y) => {
+        const a = face(x).getBoundingClientRect(), b = face(y).getBoundingClientRect();
+        return b.width * b.height - a.width * a.height;
+      });
+      const c = cands[0];
+      if (!c) return;
+      const f = face(c);
+      place(c, makeButton(f, () => f.click())); // the player opens on this page; the start flag rides along
+    }
     function youtube() {
       // already on the watch page: the button sits in the actions row under the video
       // (before Like/Share) and starts the party right away
@@ -1142,7 +1260,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     return {
       inject() {
         try {
-          IS_YT ? youtube() : IS_HOTSTAR ? hotstar() : netflix();
+          IS_YT ? youtube() : IS_PRIME ? prime() : IS_HOTSTAR ? hotstar() : netflix();
         } catch (e) {
           console.warn("[NetParty] start button", e);
         }
@@ -1177,7 +1295,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       case "state":
         party.state = msg.data;
         if (msg.data.reason && msg.data.by) {
-          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : "changed the episode" }[msg.data.reason];
+          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : IS_PRIME ? "changed the title" : "changed the episode" }[msg.data.reason];
           if (what) ui.system(`${nameOf(msg.data.by)} ${what}`);
         }
         applyRemote(msg.data, "remote");
@@ -1256,11 +1374,32 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
   }
 
-  // --------------------------------------------------------- voice chat
+  // --------------------------------------------------------- voice + video chat
+  // A WebRTC mesh between everyone in voice: audio, plus an optional camera (1.8). Connection
+  // setup (SDP, ICE) goes through the server end-to-end encrypted, media flows peer to peer
+  // (DTLS-SRTP). No TURN server yet: behind some networks (symmetric NAT, strict campus Wi-Fi)
+  // peers can't reach each other and that link fails.
+  //
+  // Video: whoever starts a connection offers a video slot next to the audio (sendrecv, no track
+  // yet), so turning the camera on later only puts a track into that slot (replaceTrack): no
+  // renegotiation, no offer glare, and 1.7 peers (which don't know about video) keep working.
+  // Each 1.8 peer says whether its camera is on in an encrypted signal ({ cam: 1 | 0 }) once the
+  // link is up and on every change; that message is also how we know a peer can show video, so
+  // a 1.7 peer is never sent any.
+  const CAM = {
+    MAX: 4, // cameras on at once in a party (each one is sent to every other viewer in voice)
+    constraints: { width: { ideal: 640, max: 640 }, height: { ideal: 360, max: 360 }, frameRate: { ideal: 20, max: 24 }, facingMode: "user" },
+    fallback: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 20 } },
+  };
+  // bitrate / size per outgoing copy: the more people we send to, the smaller each copy
+  const camEncoding = (n) =>
+    n <= 1 ? { maxBitrate: 800_000, maxFramerate: 24, scaleResolutionDownBy: 1 } : n === 2 ? { maxBitrate: 500_000, maxFramerate: 20, scaleResolutionDownBy: 1 } : { maxBitrate: 300_000, maxFramerate: 15, scaleResolutionDownBy: 1.5 };
   const voice = (() => {
     let localStream = null;
     let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
-    const peers = new Map(); // id -> { pc, audio, pendingIce: [] }
+    // id -> { pc, audio, pendingIce: [], sendQ, vt (video transceiver), video (their camera track),
+    //        camOn (their camera is on), v18 (they run 1.8+: sent us a cam message or offered video) }
+    const peers = new Map();
     const peerState = new Map(); // id -> { muted, speaking }
     const rxQ = new Map(); // id -> chain of incoming signals being handled
     let muted = false;
@@ -1268,6 +1407,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     let meter = null;
     let volume = 1;
     let active = false;
+    let camTrack = null; // our camera, while it's on
+    let camBusy = false;
 
     async function getMic() {
       return navigator.mediaDevices.getUserMedia({
@@ -1276,24 +1417,53 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       });
     }
 
-    function makePeer(id) {
+    const videoSlot = (pc) => pc.getTransceivers().find((t) => t.receiver?.track?.kind === "video" && !t.stopped) || null;
+    const canSend = (p) => !!(p.vt && p.v18);
+    function tuneVideo() {
+      const sending = [...peers.values()].filter(canSend);
+      const enc = camEncoding(sending.length);
+      for (const p of sending) {
+        try {
+          const params = p.vt.sender.getParameters();
+          if (!params.encodings?.length) continue; // not negotiated yet; tuned again once connected
+          Object.assign(params.encodings[0], enc);
+          p.vt.sender.setParameters(params).catch(() => {});
+        } catch {}
+      }
+    }
+
+    function makePeer(id, offerer) {
       const pc = new RTCPeerConnection({ iceServers });
       const audio = new Audio();
       audio.autoplay = true;
       audio.volume = volume;
-      const entry = { pc, audio, pendingIce: [], sendQ: Promise.resolve() };
+      const entry = { pc, audio, pendingIce: [], sendQ: Promise.resolve(), vt: null, video: null, camOn: false, v18: false };
       peers.set(id, entry);
       localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+      // the video slot rides in the same stream as the mic, so a 1.7 peer's player keeps the audio
+      if (offerer) entry.vt = pc.addTransceiver("video", { direction: "sendrecv", streams: [localStream] });
       pc.ontrack = (e) => {
-        audio.srcObject = e.streams[0];
+        if (e.track.kind === "video") {
+          entry.video = e.track;
+          e.track.onmute = e.track.onunmute = e.track.onended = () => ui.cams();
+          ui.cams();
+          return;
+        }
+        audio.srcObject = e.streams[0] || new MediaStream([e.track]);
         audio.play().catch(() => ui.system("Click anywhere on the page to hear voice chat."));
       };
       pc.onicecandidate = (e) => e.candidate && signal(entry, id, { ice: e.candidate.toJSON() }).catch(() => {});
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "failed") {
-          ui.system("Voice link to " + nameOf(id) + " failed (network may block peer-to-peer; add a TURN server).");
+          ui.system("Voice/video link to " + nameOf(id) + " failed: your networks may block peer-to-peer connections (there's no relay server yet).");
+        }
+        if (pc.connectionState === "connected") {
+          tuneVideo();
+          // tell them whether our camera is on (also covers a reconnect); 1.7 ignores this
+          signal(entry, id, { cam: camTrack ? 1 : 0 }).catch(() => {});
         }
         ui.render();
+        ui.cams();
       };
       return entry;
     }
@@ -1307,6 +1477,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       p.audio.srcObject = null;
       peers.delete(id);
       peerState.delete(id);
+      tuneVideo();
+      ui.cams();
     }
 
     // WebRTC setup (SDP and ICE candidates, which contain IP addresses) is encrypted with the
@@ -1323,7 +1495,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
 
     async function callPeer(id) {
-      const entry = makePeer(id);
+      const entry = makePeer(id, true);
       const offer = await entry.pc.createOffer();
       await entry.pc.setLocalDescription(offer);
       await signal(entry, id, { sdp: entry.pc.localDescription.toJSON() });
@@ -1357,6 +1529,78 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       meter = { ctx, iv };
     }
 
+    function camError(e) {
+      const n = e?.name || "";
+      if (n === "NotAllowedError" || n === "SecurityError")
+        return `Camera blocked. Allow camera access for ${location.hostname} (the icon at the left of the address bar), then try again.`;
+      if (n === "NotFoundError" || n === "OverconstrainedError") return "No camera found on this computer.";
+      if (n === "NotReadableError" || n === "AbortError") return "Your camera is in use by another app (or couldn't start). Close that app and try again.";
+      return "Couldn't start the camera" + (n ? ` (${n})` : "") + ".";
+    }
+    const remoteCams = () => [...peers.values()].filter((p) => p.camOn).length;
+
+    async function cameraOn() {
+      if (!active || camTrack || camBusy) return;
+      if (remoteCams() >= CAM.MAX) {
+        ui.system(`${CAM.MAX} cameras are already on, the most a peer-to-peer call handles well. Ask someone to turn theirs off first.`);
+        return;
+      }
+      camBusy = true;
+      ui.render();
+      let track = null;
+      try {
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: CAM.constraints, audio: false });
+        } catch (e) {
+          if (e?.name !== "OverconstrainedError") throw e;
+          stream = await navigator.mediaDevices.getUserMedia({ video: CAM.fallback, audio: false });
+        }
+        track = stream.getVideoTracks()[0];
+        if (!track) throw Object.assign(new Error("no track"), { name: "NotFoundError" });
+      } catch (e) {
+        camBusy = false;
+        ui.system(camError(e));
+        ui.render();
+        return;
+      }
+      camBusy = false;
+      // left voice (or turned it on twice) while the permission prompt was up
+      if (!active || camTrack) {
+        track.stop();
+        ui.render();
+        return;
+      }
+      track.contentHint = "motion";
+      camTrack = track;
+      // unplugged, or permission taken away mid-call
+      track.addEventListener("ended", () => camTrack === track && cameraOff());
+      let reached = 0, old = 0;
+      for (const [id, p] of peers) {
+        signal(p, id, { cam: 1 }).catch(() => {});
+        if (canSend(p)) {
+          reached++;
+          p.vt.sender.replaceTrack(track).catch(() => {});
+        } else if (p.pc.connectionState === "connected") old++;
+      }
+      tuneVideo();
+      if (old && !reached) ui.system("Your friends' NetParty is too old to show video. They can update to 1.8 at netparty.tech.");
+      else if (old) ui.system(`${old === 1 ? "One friend's" : old + " friends'"} NetParty is too old to show video (1.8 needed).`);
+      ui.render();
+      ui.cams();
+    }
+    function cameraOff() {
+      const track = camTrack;
+      camTrack = null;
+      if (track) track.stop(); // the camera light goes off
+      for (const [id, p] of peers) {
+        if (p.vt) p.vt.sender.replaceTrack(null).catch(() => {});
+        if (track) signal(p, id, { cam: 0 }).catch(() => {});
+      }
+      ui.render();
+      ui.cams();
+    }
+
     const api = {
       get active() {
         return active;
@@ -1370,7 +1614,22 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       get volume() {
         return volume;
       },
-      peerInfo: (id) => ({ ...(peerState.get(id) || {}), connected: peers.get(id)?.pc.connectionState === "connected" }),
+      get camOn() {
+        return !!camTrack;
+      },
+      get camBusy() {
+        return camBusy;
+      },
+      get camTrack() {
+        return camTrack;
+      },
+      // remote cameras to show: [{ id, track, live }] (live: frames are arriving)
+      cams() {
+        const out = [];
+        for (const [id, p] of peers) if (p.camOn && p.video && p.video.readyState !== "ended") out.push({ id, track: p.video, live: !p.video.muted && p.pc.connectionState === "connected" });
+        return out;
+      },
+      peerInfo: (id) => ({ ...(peerState.get(id) || {}), connected: peers.get(id)?.pc.connectionState === "connected", cam: !!peers.get(id)?.camOn }),
       async join() {
         if (active || !party.roomId) return;
         try {
@@ -1399,6 +1658,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         sessionStorage.removeItem("netpartyVoice");
         if (!active) return;
         active = false;
+        cameraOff();
         for (const id of [...peers.keys()]) closePeer(id);
         localStream?.getTracks().forEach((t) => t.stop());
         localStream = null;
@@ -1412,6 +1672,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           await net.request("voiceLeave", {});
         } catch {}
         ui.render();
+        ui.cams();
       },
       toggleMute() {
         if (!active) return;
@@ -1420,6 +1681,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         if (muted) speaking = false;
         net.request("voiceState", { muted, speaking }).catch(() => {});
         ui.render();
+      },
+      toggleCamera() {
+        return camTrack ? cameraOff() : cameraOn();
       },
       setVolume(v) {
         volume = v;
@@ -1451,16 +1715,25 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     async function handleSignal(from, payload) {
       if (!active) return;
       let entry = peers.get(from);
-      if (payload.sdp) {
-        if (payload.sdp.type === "offer") {
+      if (payload.sdp && typeof payload.sdp === "object") {
+        const sdp = { type: payload.sdp.type, sdp: String(payload.sdp.sdp || "") };
+        if (sdp.type === "offer") {
           if (entry) closePeer(from);
-          entry = makePeer(from);
-          await entry.pc.setRemoteDescription(payload.sdp);
+          entry = makePeer(from, false);
+          await entry.pc.setRemoteDescription(sdp);
+          // a 1.8 caller offered a video slot: answer it as two-way (1.7 callers don't offer one)
+          const vt = videoSlot(entry.pc);
+          if (vt) {
+            vt.direction = "sendrecv";
+            entry.vt = vt;
+            entry.v18 = true;
+            if (camTrack) await vt.sender.replaceTrack(camTrack).catch(() => {});
+          }
           const answer = await entry.pc.createAnswer();
           await entry.pc.setLocalDescription(answer);
           await signal(entry, from, { sdp: entry.pc.localDescription.toJSON() });
-        } else if (entry) {
-          await entry.pc.setRemoteDescription(payload.sdp);
+        } else if (sdp.type === "answer" && entry) {
+          await entry.pc.setRemoteDescription(sdp);
         }
         for (const c of entry?.pendingIce.splice(0) || []) await entry.pc.addIceCandidate(c).catch(() => {});
       } else if (payload.ice) {
@@ -1468,6 +1741,17 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           if (!entry) return;
           entry.pendingIce.push(payload.ice);
         } else await entry.pc.addIceCandidate(payload.ice).catch(() => {});
+      } else if ("cam" in payload && entry) {
+        const first = !entry.v18;
+        entry.v18 = true;
+        entry.camOn = payload.cam === 1;
+        // first word from a 1.8 peer we called: now it's safe to send them our camera
+        if (first && camTrack && entry.vt) {
+          await entry.vt.sender.replaceTrack(camTrack).catch(() => {});
+          tuneVideo();
+        }
+        ui.cams();
+        ui.render();
       }
     }
     return api;
@@ -1478,7 +1762,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   const ui = (() => {
     const E = globalThis.NP_EMOJI || { avatars: ["🙂"], reactions: ["😂", "😭", "💀", "🥰", "😱"], categories: [] };
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
-    let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn;
+    let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer;
     let open = false;
     let unread = 0;
     let toastTimer = 0;
@@ -1513,6 +1797,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       smile: '<path fill="none" stroke="currentColor" stroke-width="2" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 14.5a5 5 0 0 0 8 0"/><path fill="currentColor" d="M9 8.5a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6zm6 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>',
       edit: '<path fill="currentColor" d="M3 17.2V21h3.8L17.8 9.9l-3.7-3.7zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7z"/>',
       clock: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4v5l3 2"/>',
+      cam: '<path fill="currentColor" d="M4 6h11a2 2 0 0 1 2 2v1.6l4-2.6v10l-4-2.6V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>',
+      camOff: '<path fill="currentColor" d="M3.3 2 2 3.3 4.7 6H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h11c.4 0 .8-.1 1.1-.3l4.6 4.6 1.3-1.3zM21 7l-4 2.6V8a2 2 0 0 0-2-2H9.2L21 17.8z"/>',
+      chevron: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>',
     };
     const iconBtn = (icon, title, onclick, cls = "") =>
       el("button", { type: "button", class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
@@ -2034,6 +2321,15 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       };
     })();
 
+    // ---- theme: "light" / "dark", or null to follow the system (prefers-color-scheme, in overlay.css)
+    let theme = null;
+    function setTheme(t) {
+      theme = t === "light" || t === "dark" ? t : null;
+      if (!root) return;
+      if (theme) root.dataset.theme = theme;
+      else delete root.dataset.theme;
+    }
+
     // ---- chat text size
     const FONTS = { s: [12, "Small"], m: [14, "Medium"], l: [16, "Large"] };
     let font = "m";
@@ -2079,6 +2375,118 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       if (last < text.length) out.push(text.slice(last));
       return out;
     }
+
+    // ---- camera tiles: a small floating, draggable, collapsible strip over the video
+    const camUi = (() => {
+      let body, countEl, collapseBtn;
+      const tiles = new Map(); // id -> { node, video, track, label, pic }
+      let pos = null, collapsed = false;
+      try {
+        const saved = JSON.parse(sessionStorage.getItem("netpartyCams") || "null");
+        if (saved && typeof saved === "object") {
+          collapsed = !!saved.collapsed;
+          if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) pos = { x: saved.x, y: saved.y };
+        }
+      } catch {}
+      const save = () => sessionStorage.setItem("netpartyCams", JSON.stringify({ collapsed, ...(pos || {}) }));
+      // keep it on screen and off the docked chat column
+      function clamp() {
+        if (!pos || !camLayer || camLayer.hidden) return;
+        const r = camLayer.getBoundingClientRect();
+        const maxX = innerWidth - (open ? dockWidth() : 0) - r.width - 4;
+        pos.x = Math.round(Math.max(4, Math.min(pos.x, maxX)));
+        pos.y = Math.round(Math.max(4, Math.min(pos.y, innerHeight - r.height - 4)));
+        camLayer.style.left = pos.x + "px";
+        camLayer.style.top = pos.y + "px";
+        camLayer.style.bottom = "auto";
+      }
+      function setCollapsed(v) {
+        collapsed = v;
+        camLayer.classList.toggle("np-cams-min", collapsed);
+        collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+        collapseBtn.title = collapsed ? "Show cameras" : "Hide cameras";
+        collapseBtn.setAttribute("aria-label", collapseBtn.title);
+        save();
+        requestAnimationFrame(clamp);
+      }
+      function build() {
+        countEl = el("span", { class: "np-cams-count" });
+        collapseBtn = el("button", { type: "button", class: "np-cams-btn", onclick: () => setCollapsed(!collapsed) }, svg(ICON.chevron));
+        const bar = el("div", { class: "np-cams-bar", title: "Drag to move" }, svg(ICON.cam), countEl, el("span", { class: "np-grow" }), collapseBtn);
+        body = el("div", { class: "np-cams-body" });
+        camLayer = el("div", { class: "np-cams", role: "region", "aria-label": "Cameras", hidden: "" }, bar, body);
+        // drag by the bar
+        let drag = null;
+        bar.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0 || e.target.closest("button")) return;
+          const r = camLayer.getBoundingClientRect();
+          drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+          bar.setPointerCapture(e.pointerId);
+          camLayer.classList.add("np-dragging");
+          e.preventDefault();
+        });
+        bar.addEventListener("pointermove", (e) => {
+          if (!drag || e.pointerId !== drag.id) return;
+          pos = { x: e.clientX - drag.dx, y: e.clientY - drag.dy };
+          clamp();
+        });
+        const end = (e) => {
+          if (!drag || e.pointerId !== drag.id) return;
+          drag = null;
+          camLayer.classList.remove("np-dragging");
+          save();
+        };
+        bar.addEventListener("pointerup", end);
+        bar.addEventListener("pointercancel", end);
+        // clicks and drags on the tiles must not reach the player (pause, seek, fullscreen)
+        for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"]) camLayer.addEventListener(evt, (e) => e.stopPropagation());
+        addEventListener("resize", () => requestAnimationFrame(clamp));
+        setCollapsed(collapsed);
+      }
+      function tile(id, self) {
+        const video = el("video", { class: "np-cam-video" + (self ? " np-self" : ""), autoplay: "", playsinline: "", "aria-hidden": "true" });
+        video.muted = true; // voices play through the voice chat's own audio
+        const pic = el("div", { class: "np-cam-pic np-emo", "aria-hidden": "true" });
+        const label = el("div", { class: "np-cam-name" });
+        const node = el("div", { class: "np-cam", "data-uid": id }, pic, video, label);
+        return { node, video, pic, label, track: null };
+      }
+      function render() {
+        if (!camLayer) build();
+        const list = [];
+        if (voice.camOn && voice.camTrack) list.push({ id: party.me, track: voice.camTrack, live: true, self: true });
+        list.push(...voice.cams());
+        const want = new Set(list.map((c) => c.id));
+        for (const [id, t] of tiles)
+          if (!want.has(id)) {
+            t.video.srcObject = null;
+            t.node.remove();
+            tiles.delete(id);
+          }
+        camLayer.hidden = !list.length;
+        if (!list.length) return;
+        for (const c of list) {
+          let t = tiles.get(c.id);
+          if (!t) tiles.set(c.id, (t = tile(c.id, c.self)));
+          if (t.track !== c.track) {
+            t.track = c.track;
+            t.video.srcObject = new MediaStream([c.track]);
+            t.video.play().catch(() => {});
+          }
+          t.node.classList.toggle("np-cam-wait", !c.live);
+          const name = c.self ? "You" : nameOf(c.id);
+          if (t.label.textContent !== name) t.label.textContent = name;
+          const p = picOf(c.id);
+          if (t.pic.textContent !== p) t.pic.textContent = p;
+          t.pic.style.setProperty("--h", hue(c.id));
+          t.node.title = c.live ? name : name + " · connecting video…";
+          body.append(t.node); // keeps the order: you first
+        }
+        countEl.textContent = list.length === 1 ? "1 camera" : list.length + " cameras";
+        requestAnimationFrame(clamp);
+      }
+      return { render };
+    })();
 
     function build() {
       host = el("div", { id: "netparty-root" });
@@ -2166,9 +2574,11 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       // keep clicks and scrolls inside the panel from reaching the player
       for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"])
         panel.addEventListener(evt, (e) => e.stopPropagation());
-      root = el("div", { class: "np-root" }, floatLayer, toggleBtn, toastEl, panel);
+      camUi.render(); // builds the (hidden) camera strip
+      root = el("div", { class: "np-root" }, floatLayer, camLayer, toggleBtn, toastEl, panel);
       shadow.append(root);
       setFont(font);
+      setTheme(theme);
       reactions.set(reactionPref);
       shadow.addEventListener("pointerdown", (e) => pops.outside(e.composedPath()), true);
       document.addEventListener("pointerdown", (e) => !e.composedPath().includes(host) && pops.close(), true);
@@ -2196,12 +2606,15 @@ html.np-docked [data-np-shrink] {
     // The site then lays out the video and its controls inside the smaller box itself,
     // so nothing is cropped. (Forcing widths on the <video> or its inner wrappers fights
     // the player's own sizing and crops the picture.)
+    // JioHotstar and Prime Video: the generic search below (from the player's <video> up to the
+    // outermost full-width box, stopping at a position:fixed one such as Prime's overlay player).
     const PLAYER_BOX = {
       netflix: [".sizing-wrapper", ".watch-video--player-view", ".watch-video", "[data-uia=player]"],
       hotstar: [],
+      prime: [],
     };
     function playerBox() {
-      for (const sel of PLAYER_BOX[IS_HOTSTAR ? "hotstar" : "netflix"] || []) {
+      for (const sel of PLAYER_BOX[IS_HOTSTAR ? "hotstar" : IS_PRIME ? "prime" : "netflix"] || []) {
         const n = document.querySelector(sel);
         if (n && n.getBoundingClientRect().width > 0) return n;
       }
@@ -2354,13 +2767,14 @@ html.np-docked [data-np-shrink] {
             return tile;
           }),
         );
-        // names and pictures on chat lines follow profile changes
+        // names and pictures on chat lines and camera tiles follow profile changes
         refreshNames();
+        camUi.render();
       }
 
       const inVoiceCount = party.members.filter((m) => (m.id === party.me ? voice.active : m.inVoice)).length;
       // only rebuild the voice bar when it changes (so the volume slider isn't replaced mid-drag)
-      const sig = [voice.active, voice.muted, voice.speaking, inVoiceCount].join();
+      const sig = [voice.active, voice.muted, voice.speaking, inVoiceCount, voice.camOn, voice.camBusy].join();
       if (sig === voiceBox.dataset.sig) return;
       voiceBox.dataset.sig = sig;
       if (!voice.active) {
@@ -2383,6 +2797,15 @@ html.np-docked [data-np-shrink] {
             el("button", { type: "button", class: "np-round" + (voice.muted ? " np-muted" : ""), title: voice.muted ? "Unmute" : "Mute", "aria-label": voice.muted ? "Unmute" : "Mute", onclick: () => voice.toggleMute() }, svg(voice.muted ? ICON.micOff : ICON.mic)),
             el("div", { class: "np-voice-label" }, voice.muted ? "You're muted" : voice.speaking ? "Speaking…" : "Voice on", el("small", {}, `${inVoiceCount} in voice`)),
             vol,
+            el(
+              "button",
+              {
+                type: "button", class: "np-round np-cam-btn" + (voice.camOn ? " np-on" : ""),
+                title: voice.camOn ? "Turn camera off" : "Turn camera on", "aria-label": voice.camOn ? "Turn camera off" : "Turn camera on",
+                "aria-pressed": String(voice.camOn), ...(voice.camBusy ? { disabled: "" } : {}), onclick: () => voice.toggleCamera(),
+              },
+              svg(voice.camOn ? ICON.cam : ICON.camOff),
+            ),
             el("button", { type: "button", class: "np-round np-hang", title: "Leave voice", "aria-label": "Leave voice", onclick: () => voice.leave() }, svg(ICON.phoneOff)),
           ),
         );
@@ -2416,12 +2839,13 @@ html.np-docked [data-np-shrink] {
         body = el("div", { class: "np-bubble np-bubble-gif" }, img, el("span", { class: "np-time" }, time));
       } else if (text) body = el("div", { class: "np-bubble" }, ...linkify(text), el("span", { class: "np-time" }, time));
       else return;
+      // everyone's lines, ours included, carry the sender's picture and name (ours on the right)
       addLine(
         el(
           "div",
           { class: "np-msg" + (mine ? " np-mine" : "") },
-          mine ? "" : el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
-          el("div", { class: "np-mcol" }, mine ? "" : el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), body),
+          el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
+          el("div", { class: "np-mcol" }, el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), body),
         ),
       );
       if (!open && !mine && !replay) {
@@ -2485,6 +2909,11 @@ html.np-docked [data-np-shrink] {
       loadHistory,
       float,
       setFont,
+      setTheme,
+      get theme() {
+        return theme;
+      },
+      cams: () => host && camUi.render(),
       setReactions(v) {
         reactionPref = v;
         reactions.set(v);
@@ -2553,6 +2982,10 @@ html.np-docked [data-np-shrink] {
     if (!room) return void (booted = true); // invites and "Start a NetParty" are handled by partyLifecycle()
     busy = true;
     try {
+      // Prime Video: after a reload the title page opens first and its player a moment later
+      // (autoplay=1 in the address bar); give it time before treating this as leaving the title
+      if (IS_PRIME && primeTitlePath() && !videoIdFromUrl())
+        for (let t = 0; t < 25000 && !videoIdFromUrl() && primeTitlePath(); t += 500) await sleep(500);
       if (videoIdFromUrl()) {
         // reload or episode change: take our seat back
         await waitForPlayer();

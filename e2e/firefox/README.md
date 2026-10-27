@@ -10,7 +10,7 @@ only speaks wss://, just like with netparty.tech.
 | --- | --- |
 | `ffrun.mjs` | install + data-collection grant, start party, invite page, join via link (#key stripped), encrypted chat both ways, play/pause/seek sync both ways (page.js bridge), 🎉 reactions, panel Copy invite → clipboard, popup in-party view + avatar change, voice (fake mic, WebRTC in the content script), reloads (key from storage.session), leave/end, WebSocket leak audit. `SITE=` for JioHotstar/YouTube, `IDLE=<ms>` sets `extensions.background.idle.timeout`, `QUIET=<s>` idles mid-test and counts socket restarts |
 | `ffpopup.mjs` | popup Start a party (link really on the clipboard) and Join by pasting the invite link |
-| `ffcross.mjs` | Firefox host + Chromium guest: join, chat both ways, sync both ways, voice |
+| `ffcross.mjs` | Firefox host + Chromium guest: join, chat both ways, sync both ways, voice, camera tiles both ways (1.8) |
 | `ffgif.mjs` | background GIF API fetch (CORS for moz-extension://) and KLIPY media, GIF picker renders |
 | `ffprod.mjs` | against the live wss://netparty.tech: create, prod invite page, join, chat both ways, sync, end |
 | `ffprodgif.mjs` | against the live netparty.tech: GIF search/trending and a KLIPY image from the add-on's moz-extension:// origin |

@@ -33,10 +33,11 @@ ff.browser_specific_settings = {
       // What leaves the browser (categories from Firefox's data-consent taxonomy,
       // https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/; details in
       // https://netparty.tech/privacy). All of it is needed for the extension to work, so all required.
-      //   personalCommunications: party chat, GIFs, reactions, display names and pictures and voice-call setup
-      //     (end-to-end encrypted, relayed by netparty.tech) and voice audio (peer to peer between friends)
+      //   personalCommunications: party chat, GIFs, reactions, display names and pictures and voice/video-call
+      //     setup incl. camera on/off (end-to-end encrypted, relayed by netparty.tech) and voice audio and
+      //     camera video (peer to peer between friends, never through our server)
       //   websiteActivity: play / pause / seek events and positions on the streaming site
-      //   browsingActivity: the ID of the title being watched (Netflix / JioHotstar / YouTube video ID)
+      //   browsingActivity: the ID of the title being watched (Netflix / JioHotstar / YouTube / Prime Video ID)
       //   websiteContent: the title's name read from the page, used as the GIF search when the GIF picker opens
       required: ["personalCommunications", "websiteActivity", "browsingActivity", "websiteContent"],
     },
