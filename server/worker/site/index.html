@@ -9,7 +9,7 @@
     <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat and voice right beside the video. Free Chrome extension." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://netparty.tech/" />
-    <meta name="theme-color" content="#0B0A12" />
+    <meta name="theme-color" content="#0B0A10" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237C5CFF'/%3E%3Cstop offset='1' stop-color='%23B05CFF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4 6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-7l-5 4v-4.3A4 4 0 0 1 4 14z' fill='url(%23g)' opacity='.55'/%3E%3Cpath d='M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z' fill='url(%23g)'/%3E%3Cpath d='M17 14.5v7l6-3.5z' fill='%23fff'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,9 +23,11 @@
     <script>document.documentElement.classList.add("x-js");</script>
     <style>
       :root {
-        --x-ink: #0b0a12; --x-s1: #15131f; --x-s2: #1c1929; --x-line: #2a2638;
-        --x-text: #f4f2fa; --x-mute: #a7a2b8; --x-v: #7c5cff; --x-o: #b05cff; --x-amber: #ffb547;
+        --x-ink: #0b0a10; --x-s1: #13121a; --x-s2: #1a1823; --x-line: #2a2735;
+        --x-text: #f4f3f8; --x-mute: #a9a6b8; --x-v: #7c5cff; --x-o: #b05cff; --x-amber: #ffb547;
         --x-grad: linear-gradient(135deg, #7c5cff, #b05cff);
+        --x-btn: linear-gradient(135deg, #6a48f0, #9645ec);
+        --x-btn-hover: linear-gradient(135deg, #7552f6, #9a46ee);
         --x-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
         --x-mono: "JetBrains Mono", ui-monospace, monospace;
         --x-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 20px 50px -20px rgba(0,0,0,.7);
@@ -41,7 +43,7 @@
       :focus-visible { outline: 2px solid var(--x-o); outline-offset: 3px; border-radius: 8px; }
       .x-mono { font-family: var(--x-mono); }
       html, .page { overflow-x: clip; }
-      .x-grad-text { background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #c4a6ff; -webkit-text-fill-color: transparent; }
+      .x-grad-text { background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #b05cff; -webkit-text-fill-color: transparent; }
 
       /* buttons */
       .x-btn {
@@ -50,10 +52,10 @@
         border: 1px solid transparent; cursor: pointer; transition: transform .2s, box-shadow .2s, background .2s, border-color .2s;
         white-space: nowrap;
       }
-      .x-btn--primary { background: var(--x-grad); color: #fff; box-shadow: 0 8px 28px -8px rgba(124,92,255,.7), 0 1px 0 rgba(255,255,255,.25) inset; }
-      .x-btn--primary:hover { transform: translateY(-1px); box-shadow: 0 12px 34px -8px rgba(176,92,255,.8), 0 1px 0 rgba(255,255,255,.25) inset; }
-      .x-btn--ghost { background: #15131f; color: var(--x-text); border-color: var(--x-line); }
-      .x-btn--ghost:hover { border-color: #463f5e; background: #1c1929; }
+      .x-btn--primary { background: var(--x-btn); color: #fff; box-shadow: 0 8px 28px -8px rgba(124,92,255,.7), 0 1px 0 rgba(255,255,255,.22) inset; }
+      .x-btn--primary:hover { background: var(--x-btn-hover); transform: translateY(-1px); box-shadow: 0 12px 34px -8px rgba(176,92,255,.75), 0 1px 0 rgba(255,255,255,.25) inset; }
+      .x-btn--ghost { background: #13121a; color: var(--x-text); border-color: var(--x-line); }
+      .x-btn--ghost:hover { border-color: #443f57; background: #1a1823; }
       .x-btn--sm { min-height: 44px; padding: 0 16px; font-size: 14px; }
 
       /* logo */
@@ -64,7 +66,7 @@
       .x-nav {
         position: sticky; top: 10px; z-index: 50; display: flex; align-items: center; gap: 16px;
         padding: 8px 8px 8px 18px; border-radius: 999px; border: 1px solid var(--x-line);
-        background: rgba(21,19,31,.62); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
+        background: rgba(19,18,26,.62); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%);
       }
       .x-nav__links { display: flex; gap: 4px; margin-left: auto; }
       .x-nav__links a { color: var(--x-mute); text-decoration: none; font-size: 14px; font-weight: 500; padding: 0 12px; min-height: 44px; display: inline-flex; align-items: center; border-radius: 999px; transition: color .2s; }
@@ -77,7 +79,7 @@
       .x-bg {
         --edge: clamp(250px, 24vw, 360px); --h: 72vw;
         position: absolute; z-index: -1; top: -120px; bottom: 0; left: 50%; width: 100vw; margin-left: -50vw;
-        overflow: hidden; pointer-events: none; background: #050409;
+        overflow: hidden; pointer-events: none; background: #06050b;
         -webkit-mask-image: linear-gradient(#000 0, #000 68%, transparent 100%);
         mask-image: linear-gradient(#000 0, #000 68%, transparent 100%);
       }
@@ -88,16 +90,16 @@
       }
       .x-arc::before, .x-arc::after { content: ""; position: absolute; inset: 0; border-radius: 50%; }
       .x-arc::before {
-        background: radial-gradient(closest-side, rgba(124,92,255,0) 52%, rgba(124,92,255,.10) 70%, rgba(140,96,255,.30) 86%, rgba(176,92,255,.62) 96%, rgba(176,92,255,0) 100%);
+        background: radial-gradient(closest-side, rgba(58,5,8,0) 52%, rgba(58,5,8,.38) 70%, rgba(229,9,20,.30) 86%, rgba(240,24,30,.58) 96%, rgba(229,9,20,0) 100%);
         filter: blur(28px);
       }
       .x-arc::after {
-        background: radial-gradient(closest-side, rgba(214,180,255,0) 92%, rgba(222,196,255,.55) 98.4%, rgba(214,180,255,0) 100%);
+        background: radial-gradient(closest-side, rgba(255,59,59,0) 92%, rgba(255,59,59,.6) 98.4%, rgba(255,59,59,0) 100%);
         filter: blur(5px);
       }
       @keyframes x-breathe { from { opacity: .82; transform: translateX(-50%) scale(1); } to { opacity: 1; transform: translateX(-50%) scale(1.035); } }
-      .x-corner { position: absolute; bottom: 14%; width: 62vw; height: 62vw; max-width: 900px; max-height: 900px; border-radius: 50%; background: radial-gradient(closest-side, rgba(124,92,255,.20), rgba(176,92,255,.07) 55%, transparent); filter: blur(30px); }
-      .x-corner--l { left: -26vw; } .x-corner--r { right: -26vw; background: radial-gradient(closest-side, rgba(176,92,255,.18), rgba(124,92,255,.06) 55%, transparent); }
+      .x-corner { position: absolute; bottom: 14%; width: 62vw; height: 62vw; max-width: 900px; max-height: 900px; border-radius: 50%; background: radial-gradient(closest-side, rgba(124,92,255,.16), rgba(40,20,90,.32) 55%, transparent); filter: blur(30px); }
+      .x-corner--l { left: -26vw; } .x-corner--r { right: -26vw; background: radial-gradient(closest-side, rgba(176,92,255,.12), rgba(50,18,90,.3) 55%, transparent); }
       .x-grain {
         position: absolute; inset: -40%; opacity: .06; will-change: transform; animation: x-grain 1s steps(6) infinite;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
@@ -105,7 +107,9 @@
       @keyframes x-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(-1%, -3%); } }
       .x-live { width: 8px; height: 8px; border-radius: 50%; background: var(--x-amber); box-shadow: 0 0 0 0 rgba(255,181,71,.6); animation: x-ping 2s infinite; flex: none; }
       @keyframes x-ping { 0% { box-shadow: 0 0 0 0 rgba(255,181,71,.55); } 70%,100% { box-shadow: 0 0 0 7px rgba(255,181,71,0); } }
-      .x-word { font: 800 clamp(72px, 14vw, 180px)/.92 var(--x-inter); letter-spacing: -0.055em; margin: 0 auto; padding: 0 .04em .06em; background: linear-gradient(135deg, #9a80ff 10%, #7c5cff 45%, #b05cff 90%); -webkit-background-clip: text; background-clip: text; color: #c4a6ff; -webkit-text-fill-color: transparent; filter: drop-shadow(0 10px 40px rgba(124,92,255,.45)); }
+      .x-word { font: 800 clamp(72px, 14vw, 180px)/.92 var(--x-inter); letter-spacing: -0.055em; margin: 0 auto; padding: 0 .04em .06em; background: linear-gradient(135deg, #9a82ff 10%, #7c5cff 45%, #b05cff 90%); -webkit-background-clip: text; background-clip: text; color: #7c5cff; -webkit-text-fill-color: transparent;
+        /* thin black outline drawn outside the gradient fill (works with background-clip:text in Chrome and Safari), then the glow */
+        filter: drop-shadow(1px 0 0 rgba(0,0,0,.62)) drop-shadow(-1px 0 0 rgba(0,0,0,.62)) drop-shadow(0 1px 0 rgba(0,0,0,.62)) drop-shadow(0 -1px 0 rgba(0,0,0,.62)) drop-shadow(0 10px 40px rgba(124,92,255,.42)); }
       /* hero wordmark with a 3D icon orbit: icons and the wordmark share one preserve-3d context */
       .x-orbit-wrap { position: relative; width: 100vw; margin-left: calc(50% - 50vw); overflow-x: clip; padding-block: clamp(28px, 6vw, 72px); }
       .x-stage { perspective: 1800px; perspective-origin: 50% 40%; }
@@ -122,8 +126,8 @@
       .x-ic__face {
         position: absolute; width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
         display: grid; place-items: center; border-radius: 30%; color: #fff; overflow: hidden;
-        background: linear-gradient(135deg, #8a6bff, #7c5cff 40%, #b05cff);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 6px rgba(40,10,90,.35), 0 6px 16px -6px rgba(0,0,0,.6);
+        background: linear-gradient(135deg, #ff5a4f, #e50914 45%, #a8060e);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -2px 6px rgba(70,0,6,.4), 0 6px 16px -6px rgba(0,0,0,.6);
         transform: rotateY(calc(-1 * var(--a))) rotateX(calc(-1 * var(--x))) rotateZ(calc(-1 * var(--z)));
         will-change: transform, opacity;
         animation: x-face var(--d) linear infinite, x-depth var(--d) linear infinite;
@@ -133,20 +137,20 @@
       .x-orb--2 .x-ic__face { animation-direction: reverse, normal; }
       .x-ic__face::before { content: ""; position: absolute; inset: 0 0 50% 0; background: linear-gradient(rgba(255,255,255,.38), rgba(255,255,255,0)); border-radius: inherit; }
       .x-ic__face svg { position: relative; width: 56%; height: 56%; }
-      .x-ic__face--dark { background: linear-gradient(135deg, #221d36, #15131f); border: 1px solid #3b3552; }
+      .x-ic__face--dark { background: linear-gradient(135deg, #2e1517, #161112); border: 1px solid #4d2a2d; }
       .x-ic__face--dark svg { width: 66%; height: 66%; }
       @keyframes x-face {
         from { transform: rotateY(calc(-1 * var(--a))) rotateX(calc(-1 * var(--x))) rotateZ(calc(-1 * var(--z))); }
         to { transform: rotateY(calc(-1 * var(--a) - 360deg)) rotateX(calc(-1 * var(--x))) rotateZ(calc(-1 * var(--z))); }
       }
       @keyframes x-depth {
-        0%, 100% { opacity: 1; scale: 1.08; filter: blur(0) drop-shadow(0 0 12px rgba(176,92,255,.75)); }
-        25%, 75% { opacity: .78; scale: .9; filter: blur(.3px) drop-shadow(0 0 5px rgba(176,92,255,.3)); }
-        50% { opacity: .42; scale: .72; filter: blur(1.4px) drop-shadow(0 0 0 rgba(176,92,255,0)); }
+        0%, 100% { opacity: 1; scale: 1.08; filter: blur(0) drop-shadow(0 0 12px rgba(255,59,59,.7)); }
+        25%, 75% { opacity: .78; scale: .9; filter: blur(.3px) drop-shadow(0 0 5px rgba(255,59,59,.28)); }
+        50% { opacity: .42; scale: .72; filter: blur(1.4px) drop-shadow(0 0 0 rgba(255,59,59,0)); }
       }
       .x-h1 { font: 700 clamp(24px, 3.4vw, 40px)/1.15 var(--x-inter); letter-spacing: -0.025em; margin: 14px auto 0; max-width: 24ch; text-wrap: balance; }
-      .x-gh { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; color: var(--x-text); background: #15131f; border: 1px solid var(--x-line); text-decoration: none; transition: border-color .2s, background .2s; }
-      .x-gh:hover { border-color: #463f5e; background: #1c1929; }
+      .x-gh { display: inline-grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%; color: var(--x-text); background: #13121a; border: 1px solid var(--x-line); text-decoration: none; transition: border-color .2s, background .2s; }
+      .x-gh:hover { border-color: #443f57; background: #1a1823; }
       .x-gh svg { width: 20px; height: 20px; }
       .x-p-brand svg { width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; }
       .x-lead { color: var(--x-mute); font-size: clamp(16px, 1.6vw, 19px); max-width: 58ch; margin: 22px auto 0; }
@@ -156,13 +160,13 @@
 
       /* mock */
       .x-mock { margin: clamp(44px, 7vw, 72px) auto 0; max-width: 1040px; text-align: left; }
-      .x-win { border-radius: 18px; border: 1px solid var(--x-line); background: var(--x-s1); overflow: hidden; box-shadow: 0 40px 120px -30px rgba(124,92,255,.35), 0 30px 60px -30px rgba(0,0,0,.9); }
-      .x-win__bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: #121019; border-bottom: 1px solid var(--x-line); }
+      .x-win { border-radius: 18px; border: 1px solid var(--x-line); background: var(--x-s1); overflow: hidden; box-shadow: 0 40px 120px -30px rgba(124,92,255,.3), 0 30px 60px -30px rgba(0,0,0,.9); }
+      .x-win__bar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: #100f16; border-bottom: 1px solid var(--x-line); }
       .x-dots { display: flex; gap: 7px; flex: none; }
-      .x-dots i { width: 11px; height: 11px; border-radius: 50%; background: #3a3550; }
-      .x-dots i:nth-child(1) { background: #6b5a8f; } .x-dots i:nth-child(2) { background: #8a6d4a; } .x-dots i:nth-child(3) { background: #4f4870; }
+      .x-dots i { width: 11px; height: 11px; border-radius: 50%; background: #35334a; }
+      .x-dots i:nth-child(1) { background: #6b4fd8; } .x-dots i:nth-child(2) { background: #8a6d4a; } .x-dots i:nth-child(3) { background: #4a4760; }
       .x-tab { font-size: 12px; color: var(--x-text); background: var(--x-s2); border: 1px solid var(--x-line); border-bottom: 0; padding: 6px 14px; border-radius: 9px 9px 0 0; margin-bottom: -11px; white-space: nowrap; }
-      .x-addr { flex: 1; min-width: 0; font: 12px var(--x-mono); color: var(--x-mute); background: #0e0d15; border: 1px solid var(--x-line); border-radius: 999px; padding: 6px 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .x-addr { flex: 1; min-width: 0; font: 12px var(--x-mono); color: var(--x-mute); background: #0d0c12; border: 1px solid var(--x-line); border-radius: 999px; padding: 6px 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .x-addr b { color: var(--x-text); font-weight: 400; }
       .x-split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 3fr); min-height: 470px; }
       .x-player { position: relative; background: #000; overflow: hidden; display: flex; align-items: center; }
@@ -177,10 +181,17 @@
       .x-ctrl .x-ico-pause { display: none; }
       .x-player.is-paused .x-ctrl .x-ico-play { display: none; }
       .x-player.is-paused .x-ctrl .x-ico-pause { display: block; }
-      .x-bigplay { position: absolute; left: 50%; top: 45%; width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: rgba(11,10,18,.6); border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(6px); display: grid; place-items: center; opacity: 0; transform: scale(.85); transition: opacity .35s, transform .35s; }
+      .x-bigplay { position: absolute; left: 50%; top: 45%; width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: rgba(11,10,11,.6); border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(6px); display: grid; place-items: center; opacity: 0; transform: scale(.85); transition: opacity .35s, transform .35s; }
+      /* floating reactions over the film still */
+      .x-react { position: absolute; bottom: 64px; font-size: 26px; line-height: 1; opacity: 0; pointer-events: none; will-change: transform, opacity; animation: x-rise 4.2s ease-out infinite; }
+      .x-react--1 { left: 12%; }
+      .x-react--2 { left: 22%; font-size: 22px; animation-delay: 1.6s; }
+      .x-react--3 { left: 16%; font-size: 20px; animation-delay: 2.9s; }
+      @keyframes x-rise { 0% { opacity: 0; transform: translateY(0) scale(.7); } 12% { opacity: 1; transform: translateY(-14px) scale(1); } 70% { opacity: .9; } 100% { opacity: 0; transform: translateY(-150px) translateX(10px) scale(1.05); } }
+      @media (max-width: 600px) { .x-react { bottom: 52px; } @keyframes x-rise { 0% { opacity: 0; transform: translateY(0) scale(.7); } 12% { opacity: 1; transform: translateY(-10px) scale(1); } 100% { opacity: 0; transform: translateY(-90px) scale(1); } } }
       .x-bigplay svg { width: 28px; height: 28px; color: #fff; }
       .x-player.is-paused .x-bigplay { opacity: 1; transform: none; }
-      .x-paused-tag { position: absolute; top: 14px; left: 14px; font: 500 12px var(--x-mono); color: #fff; background: rgba(11,10,18,.7); border: 1px solid rgba(255,255,255,.15); padding: 5px 10px; border-radius: 999px; display: inline-flex; gap: 7px; align-items: center; opacity: 0; transition: opacity .35s; }
+      .x-paused-tag { position: absolute; top: 14px; left: 14px; font: 500 12px var(--x-mono); color: #fff; background: rgba(11,10,11,.7); border: 1px solid rgba(255,255,255,.15); padding: 5px 10px; border-radius: 999px; display: inline-flex; gap: 7px; align-items: center; opacity: 0; transition: opacity .35s; }
       .x-player.is-paused .x-paused-tag { opacity: 1; }
 
       /* panel: matches the real extension's overlay.css */
@@ -190,18 +201,21 @@
       .x-p-code { font: 500 12px var(--x-mono); color: #a3a3ad; }
       .x-p-meta { color: #a3a3ad; font-size: 12px; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
       .x-p-actions { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px; }
-      .x-p-pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px; background: #6b4cf0; color: #fff; font-weight: 600; font-size: 12px; }
+      .x-p-pill { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px; background: #6a48f0; color: #fff; font-weight: 600; font-size: 12px; }
       .x-p-pill svg { width: 14px; height: 14px; }
       .x-p-link { color: #a3a3ad; font-size: 12px; }
       .x-p-label { padding: 4px 16px 0; color: #a3a3ad; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .x-p-people { display: flex; justify-content: center; gap: 10px; padding: 14px 12px 10px; }
       .x-p-person { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 46px; }
-      .x-av { position: relative; width: 38px; height: 38px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; box-shadow: 0 0 0 2px #141418, 0 0 0 2px transparent; transition: box-shadow .15s; }
-      .x-av--j { background: linear-gradient(135deg, #7c5cff, #b05cff); }
-      .x-av--e { background: linear-gradient(135deg, #e0609a, #9b4de0); }
-      .x-av--t { background: linear-gradient(135deg, #3d8bff, #5c5cff); }
-      .x-av--o { background: linear-gradient(135deg, #ff9b54, #d65cc0); }
-      .x-p-person.is-talking .x-av { box-shadow: 0 0 0 2px #141418, 0 0 0 4px #a48bff; }
+      .x-av { position: relative; width: 38px; height: 38px; border-radius: 50%; color: #16141f; font-weight: 700; font-size: 20px; line-height: 1; display: grid; place-items: center; box-shadow: 0 0 0 2px #141418, 0 0 0 2px transparent; transition: box-shadow .15s; }
+      .x-av--j { background: #e6e9f2; }
+      .x-av--e { background: #ffe0c7; }
+      .x-av--t { background: #fff0b8; }
+      .x-av--o { background: #e9e0ff; }
+      .x-av--a { background: #d6f2df; }
+      .x-av--r { background: #dce8ff; }
+      .x-p-person.is-talking .x-av { box-shadow: 0 0 0 2px #141418, 0 0 0 4px #b05cff; }
+      .x-author i { font-style: normal; margin-right: 4px; }
       .x-crown { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 15px; height: 15px; color: #ffc93c; }
       .x-tick { position: absolute; right: -4px; bottom: -4px; width: 17px; height: 17px; border-radius: 50%; background: var(--x-amber); color: #1a1205; border: 2px solid #141418; display: grid; place-items: center; transform: scale(0); transition: transform .3s cubic-bezier(.3,1.6,.5,1); }
       .x-tick svg { width: 9px; height: 9px; }
@@ -216,7 +230,7 @@
       .x-vround svg { width: 15px; height: 15px; }
       .x-vlabel { flex: 1; font-size: 12px; font-weight: 600; }
       .x-eq { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
-      .x-eq i { width: 3px; height: 100%; border-radius: 2px; background: #a48bff; transform-origin: bottom; animation: x-eq 1s ease-in-out infinite; }
+      .x-eq i { width: 3px; height: 100%; border-radius: 2px; background: #b05cff; transform-origin: bottom; animation: x-eq 1s ease-in-out infinite; }
       .x-eq i:nth-child(2) { animation-delay: -.3s; } .x-eq i:nth-child(3) { animation-delay: -.6s; } .x-eq i:nth-child(4) { animation-delay: -.15s; }
       @keyframes x-eq { 0%,100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
       .x-chat { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-height: 190px; overflow: hidden; }
@@ -224,11 +238,11 @@
       .x-msg.is-mine { align-self: flex-end; align-items: flex-end; }
       .x-author { font-size: 12px; font-weight: 600; margin: 0 0 2px 10px; }
       .x-bubble { padding: 6px 11px; border-radius: 16px 16px 16px 4px; background: #24242b; font-size: 13px; }
-      .x-msg.is-mine .x-bubble { background: #6b4cf0; color: #fff; border-radius: 16px 16px 4px 16px; }
+      .x-msg.is-mine .x-bubble { background: #6a48f0; color: #fff; border-radius: 16px 16px 4px 16px; }
       .x-sys { align-self: center; text-align: center; color: #a3a3ad; font-size: 12px; padding: 2px 10px; display: inline-flex; align-items: center; gap: 6px; animation: x-pop .35s ease-out both; }
       .x-sys .x-live { width: 6px; height: 6px; animation: none; }
       .x-typing { display: inline-flex; gap: 3px; padding: 9px 12px; border-radius: 16px 16px 16px 4px; background: #24242b; }
-      .x-msg.is-mine .x-typing { background: #7c5cff; border-radius: 16px 16px 4px 16px; }
+      .x-msg.is-mine .x-typing { background: #6a48f0; border-radius: 16px 16px 4px 16px; }
       .x-typing i { width: 5px; height: 5px; border-radius: 50%; background: #a3a3ad; animation: x-bounce 1s infinite; }
       .x-msg.is-mine .x-typing i { background: #fff; }
       .x-typing i:nth-child(2) { animation-delay: .15s; } .x-typing i:nth-child(3) { animation-delay: .3s; }
@@ -236,7 +250,7 @@
       @keyframes x-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
       .x-composer { display: flex; gap: 8px; padding: 10px 14px 14px; border-top: 1px solid #34343d; }
       .x-input { flex: 1; min-width: 0; padding: 9px 14px; border-radius: 999px; border: 1px solid #34343d; background: #1b1b21; color: #a3a3ad; font-size: 13px; white-space: nowrap; overflow: hidden; }
-      .x-send { width: 36px; height: 36px; flex: none; border-radius: 50%; background: #7c5cff; color: #fff; display: grid; place-items: center; }
+      .x-send { width: 36px; height: 36px; flex: none; border-radius: 50%; background: #6a48f0; color: #fff; display: grid; place-items: center; }
       .x-send svg { width: 15px; height: 15px; }
       @media (max-width: 820px) {
         .x-split { grid-template-columns: 1fr; min-height: 0; }
@@ -252,12 +266,12 @@
       .x-eyebrow { font: 500 12px var(--x-mono); color: var(--x-o); letter-spacing: .08em; text-transform: uppercase; }
       .x-h2 { font: 700 clamp(32px, 4.6vw, 54px)/1.06 var(--x-inter); letter-spacing: -0.03em; margin-top: 14px; text-wrap: balance; }
       .x-card { background: var(--x-s1); border: 1px solid var(--x-line); border-radius: 20px; box-shadow: var(--x-shadow); transition: border-color .25s, transform .25s; }
-      .x-card:hover { border-color: #3b3552; }
+      .x-card:hover { border-color: #3d3852; }
       .x-card h3 { font: 600 18px/1.25 var(--x-inter); letter-spacing: -0.02em; }
       .x-card p { color: var(--x-mute); font-size: 14.5px; margin-top: 6px; }
       .x-vig { position: relative; display: grid; place-items: center; background: var(--x-s2); border: 1px solid var(--x-line); border-radius: 14px; height: 150px; overflow: hidden; margin-bottom: 20px; }
-      .x-vig::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, rgba(124,92,255,.14), transparent 70%); pointer-events: none; }
-      .x-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: #221f31; border: 1px solid #36304a; font-size: 13px; font-weight: 500; color: var(--x-text); white-space: nowrap; position: relative; }
+      .x-vig::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, rgba(124,92,255,.13), transparent 70%); pointer-events: none; }
+      .x-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: #201e2b; border: 1px solid #353147; font-size: 13px; font-weight: 500; color: var(--x-text); white-space: nowrap; position: relative; }
       .x-chip--dash { background: transparent; border-style: dashed; color: var(--x-mute); }
 
       /* steps */
@@ -269,19 +283,19 @@
       @media (max-width: 600px) { .x-steps { grid-template-columns: 1fr; } }
       .x-ext-mark { width: 18px; height: 18px; }
       .x-ok { color: var(--x-amber); }
-      .x-tb { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px; background: #121019; border: 1px solid var(--x-line); }
+      .x-tb { display: flex; align-items: center; gap: 6px; padding: 6px; border-radius: 999px; background: #100f16; border: 1px solid var(--x-line); }
       .x-tb .x-chip { font-size: 12px; padding: 6px 10px; gap: 6px; }
-      .x-tb i { width: 22px; height: 22px; border-radius: 50%; background: #262236; }
+      .x-tb i { width: 22px; height: 22px; border-radius: 50%; background: #262333; }
       .x-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 0 10px; }
       .x-fakebtn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; white-space: nowrap; }
       .x-fakebtn--w { background: #fff; color: #111; }
-      .x-fakebtn--v { background: var(--x-grad); color: #fff; animation: x-glow 2.4s ease-in-out infinite; }
+      .x-fakebtn--v { background: var(--x-btn); color: #fff; animation: x-glow 2.4s ease-in-out infinite; }
       @keyframes x-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(176,92,255,0); } 50% { box-shadow: 0 0 0 5px rgba(176,92,255,.25); } }
       .x-linkchip { font: 12px var(--x-mono); }
       .x-toast { position: absolute; top: -32px; right: 6px; font: 600 12px var(--x-inter); color: #1a1205; background: var(--x-amber); padding: 4px 9px; border-radius: 999px; animation: x-toast 3s ease-in-out infinite; }
       @keyframes x-toast { 0%,15% { opacity: 0; transform: translateY(6px); } 25%,75% { opacity: 1; transform: none; } 90%,100% { opacity: 0; transform: translateY(-4px); } }
       .x-bars { width: 76%; display: grid; gap: 14px; }
-      .x-bar { height: 4px; border-radius: 4px; background: #2e2a40; position: relative; }
+      .x-bar { height: 4px; border-radius: 4px; background: #312d42; position: relative; }
       .x-bar span { position: absolute; inset: 0 auto 0 0; width: 58%; border-radius: 4px; background: var(--x-grad); animation: x-grow 4s ease-in-out infinite; }
       .x-bar span::after { content: ""; position: absolute; right: -5px; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--x-amber); box-shadow: 0 0 10px rgba(255,181,71,.6); }
       @keyframes x-grow { 0% { width: 30%; } 50% { width: 66%; } 100% { width: 30%; } }
@@ -292,14 +306,14 @@
       .x-feat h3, .x-feat p { margin-inline: 8px; }
       .x-feat--wide { grid-column: span 2; }
       .x-feat--wide .x-vig { height: 210px; }
-      @media (max-width: 900px) { .x-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 900px) { .x-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .x-bento { grid-auto-flow: row dense; } .x-feat--wide:last-child { grid-column: auto; } }
       @media (max-width: 600px) { .x-bento { grid-template-columns: 1fr; } .x-feat--wide { grid-column: auto; } .x-feat--wide .x-vig { height: 180px; } }
 
       /* feature vignettes */
       .x-sync { width: min(82%, 520px); display: grid; gap: 16px; }
       .x-scrub { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 12px; }
       .x-scrub__who { font: 12px var(--x-mono); color: var(--x-mute); }
-      .x-scrub__track { position: relative; height: 6px; border-radius: 6px; background: #2e2a40; }
+      .x-scrub__track { position: relative; height: 6px; border-radius: 6px; background: #312d42; }
       .x-scrub__fill { position: absolute; inset: 0 auto 0 0; width: 60%; border-radius: 6px; background: var(--x-grad); }
       .x-scrub__fill::after { content: ""; position: absolute; right: -7px; top: -4px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(124,92,255,.35); }
       .x-scrub--drift .x-scrub__fill { animation: x-drift 4s cubic-bezier(.6,0,.2,1) infinite; }
@@ -308,19 +322,19 @@
       .x-drift__a { color: var(--x-text); }
       .x-voice { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; width: 80%; }
       .x-ring { position: relative; border-radius: 50%; }
-      .x-ring::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid #a48bff; animation: x-ring 1.8s ease-out infinite; }
+      .x-ring::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid #b05cff; animation: x-ring 1.8s ease-out infinite; }
       .x-ring--2::after { animation-delay: .6s; } .x-ring--3::after { animation-delay: 1.2s; }
       @keyframes x-ring { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
       .x-ring .x-av { box-shadow: none; }
       .x-mute { flex-basis: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; color: var(--x-mute); }
-      .x-switch { position: relative; width: 34px; height: 20px; border-radius: 999px; background: #34303f; flex: none; }
+      .x-switch { position: relative; width: 34px; height: 20px; border-radius: 999px; background: #353147; flex: none; }
       .x-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
       .x-switch--host { animation: x-sw-bg 4s ease-in-out infinite; }
       .x-switch--host::after { animation: x-sw-knob 4s ease-in-out infinite; }
-      @keyframes x-sw-bg { 0%,30% { background: #34303f; } 40%,90% { background: #7c5cff; } 100% { background: #34303f; } }
+      @keyframes x-sw-bg { 0%,30% { background: #353147; } 40%,90% { background: #7c5cff; } 100% { background: #353147; } }
       @keyframes x-sw-knob { 0%,30% { transform: none; } 40%,90% { transform: translateX(14px); } 100% { transform: none; } }
       .x-host { font-size: 12.5px; }
-      .x-dock { display: flex; width: 78%; height: 100px; border-radius: 10px; overflow: hidden; border: 1px solid #36304a; background: #141418; }
+      .x-dock { display: flex; width: 78%; height: 100px; border-radius: 10px; overflow: hidden; border: 1px solid #353147; background: #141418; }
       .x-dock__player { flex: 1; position: relative; min-width: 0; }
       .x-dock__player img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
       .x-dock__panel { width: 34%; flex: none; border-left: 1px solid #34343d; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; padding: 8px 7px; overflow: hidden; animation: x-dock 5s ease-in-out infinite; }
@@ -329,30 +343,70 @@
       @keyframes x-dock { 0%,40% { width: 34%; padding-inline: 7px; } 50%,85% { width: 0; padding-inline: 0; border-left-width: 0; } 95%,100% { width: 34%; padding-inline: 7px; } }
       .x-binge { display: grid; justify-items: center; gap: 12px; }
       .x-arrow { color: var(--x-mute); }
-      .x-ep { color: #c48aff; }
+      .x-ep { color: #c3a6ff; }
       .x-binge__line { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--x-mute); animation: x-fadeup 4s ease-in-out infinite; }
       @keyframes x-fadeup { 0%,20% { opacity: 0; transform: translateY(5px); } 32%,85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-      .x-plats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 14px; }
+      .x-plats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 12px; }
+      .x-plat { padding: 5px 12px 5px 5px; }
+      .x-plat__ic { width: 30px; height: 30px; flex: none; border-radius: 50%; background: #0d0c12; border: 1px solid #353147; display: grid; place-items: center; }
+      .x-plat__ic img { width: 20px; height: 20px; object-fit: contain; display: block; }
+      .x-plats .x-chip--dash { padding-block: 10px; }
       .x-fifty { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; justify-content: center; }
-      .x-fifty__num { font: 800 84px/1 var(--x-inter); letter-spacing: -0.05em; background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #c4a6ff; -webkit-text-fill-color: transparent; }
+      .x-fifty__num { font: 800 84px/1 var(--x-inter); letter-spacing: -0.05em; background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #b05cff; -webkit-text-fill-color: transparent; }
       .x-stack { display: flex; }
       .x-stack .x-av { box-shadow: 0 0 0 3px var(--x-s2); margin-left: -10px; }
       .x-stack .x-av:first-child { margin-left: 0; }
-      .x-av--more { background: #2c2840; color: var(--x-text); font-size: 12px; }
+      .x-av--more { background: #2a2638; color: var(--x-text); font-size: 12px; }
+
+      /* new feature vignettes */
+      .x-e2e { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 0 10px; }
+      .x-e2e__col { display: grid; gap: 6px; justify-items: center; }
+      .x-e2e__lab { font: 12px var(--x-mono); color: var(--x-mute); }
+      .x-e2e__bubble { padding: 8px 13px; border-radius: 16px 16px 16px 4px; background: #252232; font-size: 13px; white-space: nowrap; }
+      .x-e2e__cipher { font: 12px var(--x-mono); color: var(--x-mute); letter-spacing: .02em; }
+      .x-e2e__lock { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--x-btn); color: #fff; box-shadow: 0 0 0 0 rgba(176,92,255,.35); animation: x-glow 2.6s ease-in-out infinite; }
+      .x-e2e__lock svg { width: 16px; height: 16px; }
+      .x-e2e__key { flex-basis: 100%; text-align: center; font: 12px var(--x-mono); color: var(--x-mute); }
+      .x-e2e__key b { color: var(--x-o); font-weight: 500; }
+      .x-flyup { position: relative; width: 100%; height: 100%; }
+      .x-flyup .x-chip { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); font-size: 16px; padding: 7px 14px; }
+      .x-fly { position: absolute; bottom: 30px; font-size: 22px; line-height: 1; opacity: 0; will-change: transform, opacity; animation: x-fly 3.5s ease-out infinite; }
+      .x-fly:nth-of-type(1) { left: 22%; } .x-fly:nth-of-type(2) { left: 36%; animation-delay: .7s; } .x-fly:nth-of-type(3) { left: 50%; animation-delay: 1.4s; }
+      .x-fly:nth-of-type(4) { left: 64%; animation-delay: 2.1s; } .x-fly:nth-of-type(5) { left: 76%; animation-delay: 2.8s; }
+      @keyframes x-fly { 0% { opacity: 0; transform: translateY(0) scale(.6); } 15% { opacity: 1; transform: translateY(-16px) scale(1); } 75% { opacity: .85; } 100% { opacity: 0; transform: translateY(-96px) scale(1.05); } }
+      .x-gif { width: 82%; display: grid; gap: 10px; }
+      .x-gif .x-chip { justify-self: start; font-size: 12px; padding: 6px 12px; color: var(--x-mute); }
+      .x-gif__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .x-gif__row i { height: 48px; border-radius: 8px; background: linear-gradient(110deg, #262333 30%, #383250 50%, #262333 70%); background-size: 220% 100%; animation: x-shim 2.4s linear infinite; }
+      .x-gif__row i:nth-child(2) { animation-delay: .3s; } .x-gif__row i:nth-child(3) { animation-delay: .6s; }
+      @keyframes x-shim { from { background-position: 120% 0; } to { background-position: -100% 0; } }
+      .x-gif__by { font: 12px var(--x-mono); color: var(--x-mute); justify-self: end; }
+      .x-pfp { display: grid; gap: 12px; justify-items: center; }
+      .x-pfp__msg { display: flex; align-items: flex-end; gap: 8px; }
+      .x-pfp__msg .x-av { width: 32px; height: 32px; font-size: 17px; box-shadow: none; }
+      .x-pfp__picker { display: flex; gap: 4px; padding: 5px 8px; border-radius: 999px; background: #100f16; border: 1px solid var(--x-line); font-size: 18px; line-height: 1; }
+      .x-pfp__picker span { padding: 4px; border-radius: 8px; }
+      .x-pfp__picker span:nth-child(3) { background: #352c52; }
+      .x-size { display: grid; gap: 12px; justify-items: center; }
+      .x-seg { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: #100f16; border: 1px solid var(--x-line); }
+      .x-seg span { min-width: 44px; padding: 6px 10px; border-radius: 999px; text-align: center; font-weight: 600; color: var(--x-mute); line-height: 1.2; }
+      .x-seg span:nth-child(1) { font-size: 12px; } .x-seg span:nth-child(2) { font-size: 15px; } .x-seg span:nth-child(3) { font-size: 18px; }
+      .x-seg span:nth-child(2) { background: var(--x-btn); color: #fff; }
+      .x-size__link { font-size: 13px; color: #c3a6ff; text-decoration: underline; text-underline-offset: 3px; }
       @media (max-width: 420px) { .x-stack .x-av:nth-child(n+5):not(.x-av--more) { display: none; } .x-fifty__num { font-size: 64px; } }
 
       /* image card */
       .x-night { position: relative; border-radius: 24px; overflow: hidden; border: 1px solid var(--x-line); min-height: clamp(380px, 52vw, 560px); display: flex; align-items: flex-end; }
       .x-night img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-      .x-night::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,10,18,0) 30%, rgba(11,10,18,.88)), linear-gradient(90deg, rgba(11,10,18,.4), transparent 60%); }
+      .x-night::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,10,16,0) 30%, rgba(11,10,16,.88)), linear-gradient(90deg, rgba(11,10,16,.4), transparent 60%); }
       .x-night__copy { position: relative; z-index: 1; padding: clamp(24px, 5vw, 56px); }
       .x-night__quote { font: 700 clamp(36px, 6vw, 72px)/1.02 var(--x-inter); letter-spacing: -0.03em; max-width: 12ch; }
-      .x-night__small { color: #d6d2e3; margin-top: 14px; font-size: 16px; max-width: 46ch; }
+      .x-night__small { color: #dcd9e6; margin-top: 14px; font-size: 16px; max-width: 46ch; }
 
       /* faq */
       .x-faq { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
       .x-faq details { background: var(--x-s1); border: 1px solid var(--x-line); border-radius: 16px; transition: border-color .2s, background .2s; }
-      .x-faq details[open] { border-color: #3b3552; background: var(--x-s2); }
+      .x-faq details[open] { border-color: #3d3852; background: var(--x-s2); }
       .x-faq summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; min-height: 44px; font-weight: 600; font-size: 16px; letter-spacing: -0.01em; }
       .x-faq summary::-webkit-details-marker { display: none; }
       .x-faq summary::after { content: ""; flex: none; width: 10px; height: 10px; border-right: 2px solid var(--x-mute); border-bottom: 2px solid var(--x-mute); transform: rotate(45deg) translate(-2px, -2px); transition: transform .25s; }
@@ -361,10 +415,10 @@
 
       /* install */
       .x-band { position: relative; overflow: hidden; text-align: center; border-radius: 28px; border: 1px solid var(--x-line); background: var(--x-s1); padding: clamp(56px, 9vw, 104px) clamp(20px, 5vw, 64px); }
-      .x-band { background: linear-gradient(#08070e, #0e0c16); }
+      .x-band { background: linear-gradient(#07060c, #0e0d15); }
       .x-band::before {
         content: ""; position: absolute; left: 50%; top: 0; width: 170%; height: 120%; transform: translate(-50%, -62%); border-radius: 50%; pointer-events: none;
-        background: radial-gradient(closest-side, rgba(124,92,255,0) 58%, rgba(124,92,255,.08) 74%, rgba(150,96,255,.22) 88%, rgba(176,92,255,.42) 97%, rgba(176,92,255,0) 100%);
+        background: radial-gradient(closest-side, rgba(40,20,90,0) 58%, rgba(40,20,90,.3) 74%, rgba(124,92,255,.2) 88%, rgba(176,92,255,.38) 97%, rgba(176,92,255,0) 100%);
         filter: blur(22px); animation: x-breathe-band 10s ease-in-out infinite alternate;
       }
       .x-band::after {
@@ -380,8 +434,9 @@
       .x-beta b { color: var(--x-o); font-weight: 500; margin-right: 6px; }
       .x-join { display: flex; gap: 8px; max-width: 480px; margin: 22px auto 0; }
       .x-join[hidden] { display: none; }
-      .x-join input { flex: 1; min-width: 0; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--x-line); background: #0e0d15; color: var(--x-text); font: 14px var(--x-inter); outline: none; }
-      .x-join input:focus { border-color: var(--x-v); }
+      .x-join input { flex: 1; min-width: 0; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--x-line); background: #0d0c12; color: var(--x-text); font: 14px var(--x-inter); outline: none; }
+      .x-join input:focus { border-color: var(--x-o); }
+      .x-ver { display: inline-block; margin-top: 14px; font: 12px var(--x-mono); color: var(--x-mute); background: var(--x-s2); border: 1px solid var(--x-line); border-radius: 999px; padding: 5px 12px; }
       .x-join__err { color: var(--x-amber); font-size: 13px; margin-top: 10px; min-height: 1em; }
       @media (max-width: 420px) { .x-join { flex-direction: column; } .x-cta .x-btn { width: 100%; } }
 
@@ -393,7 +448,7 @@
       .x-foot__links a { color: var(--x-mute); text-decoration: none; font-size: 14px; padding: 0 10px; min-height: 44px; display: inline-flex; align-items: center; }
       .x-foot__links a:hover { color: var(--x-text); }
       .x-foot__links a.x-gh { padding: 0; justify-content: center; margin-left: 4px; }
-      .x-foot__legal { color: #8a859c; font-size: 12px; }
+      .x-foot__legal { color: #918da3; font-size: 12px; }
 
       /* reveal */
       .x-js .x-rv { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
@@ -487,6 +542,9 @@
                 <div class="x-player" id="x-player">
                   <img src="still-space.jpg" alt="Film still: a cinematic scene playing in the video player" />
                   <span class="x-paused-tag"><span class="x-live" aria-hidden="true"></span>Paused for everyone</span>
+                  <span class="x-react x-react--1" aria-hidden="true">😂</span>
+                  <span class="x-react x-react--2" aria-hidden="true">🥰</span>
+                  <span class="x-react x-react--3" aria-hidden="true">😂</span>
                   <span class="x-bigplay" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg></span>
                   <div class="x-player__ui">
                     <div class="x-prog"><span id="x-prog"></span></div>
@@ -508,10 +566,10 @@
                   </div>
                   <p class="x-p-label">Watching</p>
                   <div class="x-p-people">
-                    <div class="x-p-person is-talking"><span class="x-av x-av--j">J<svg class="x-crown" viewBox="0 0 24 24" fill="currentColor" aria-label="Host"><path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z" /></svg><span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Jake</span></div>
-                    <div class="x-p-person is-talking"><span class="x-av x-av--e">E<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Emma</span></div>
-                    <div class="x-p-person is-talking"><span class="x-av x-av--t">T<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Tyler</span></div>
-                    <div class="x-p-person"><span class="x-av x-av--o">O<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Olivia</span></div>
+                    <div class="x-p-person is-talking"><span class="x-av x-av--j">🐼<svg class="x-crown" viewBox="0 0 24 24" fill="currentColor" aria-label="Host"><path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z" /></svg><span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Jake</span></div>
+                    <div class="x-p-person is-talking"><span class="x-av x-av--e" aria-hidden="true">🦊<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Emma</span></div>
+                    <div class="x-p-person is-talking"><span class="x-av x-av--t" aria-hidden="true">🍕<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Tyler</span></div>
+                    <div class="x-p-person"><span class="x-av x-av--o" aria-hidden="true">🐰<span class="x-tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2.5 6.5l2.3 2.2L9.5 3.5" /></svg></span></span><span class="x-p-name">Olivia</span></div>
                   </div>
                   <div class="x-p-voice">
                     <div class="x-vbar">
@@ -559,7 +617,7 @@
               </div>
               <span class="x-num">03</span>
               <h3>Send the invite link</h3>
-              <p>Friends open it, install if they need to, and land in your party.</p>
+              <p>Friends open the full link, install if they need to, and land in your party. The link carries the key that unlocks your encrypted chat.</p>
             </li>
             <li class="x-card x-step x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -592,14 +650,26 @@
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
                 <div class="x-voice">
-                  <div class="x-ring"><span class="x-av x-av--e">E</span></div>
-                  <div class="x-ring x-ring--2"><span class="x-av x-av--j">J</span></div>
-                  <div class="x-ring x-ring--3"><span class="x-av x-av--t">T</span></div>
+                  <div class="x-ring"><span class="x-av x-av--e">🦊</span></div>
+                  <div class="x-ring x-ring--2"><span class="x-av x-av--j">🐼</span></div>
+                  <div class="x-ring x-ring--3"><span class="x-av x-av--t">🍕</span></div>
                   <span class="x-mute"><span class="x-switch"></span>Mute</span>
                 </div>
               </div>
               <h3>Voice chat</h3>
-              <p>Talk over the movie like you're on the same couch. Voice goes peer-to-peer between friends.</p>
+              <p>Talk over the movie like you're on the same couch. Voice goes peer-to-peer between friends, and the voice setup is encrypted too.</p>
+            </article>
+            <article class="x-card x-feat x-feat--wide x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-e2e">
+                  <div class="x-e2e__col"><span class="x-e2e__lab">You see</span><span class="x-e2e__bubble">this scene 😭</span></div>
+                  <span class="x-e2e__lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" fill="currentColor" fill-opacity=".25" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg></span>
+                  <div class="x-e2e__col"><span class="x-e2e__lab">Our server sees</span><span class="x-chip x-e2e__cipher">Yk3+9fQa…</span></div>
+                  <p class="x-e2e__key">key lives only in <b>/j/gqxnzbom#k=…</b></p>
+                </div>
+              </div>
+              <h3>End-to-end encrypted chat</h3>
+              <p>Messages, GIFs, reactions, names and profile pictures are encrypted in your browser. The key lives only in your invite link, so even our server can't read your chat.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -610,6 +680,47 @@
               </div>
               <h3>Chat beside the video</h3>
               <p>Split-screen panel that shrinks the player instead of covering it. Hide it anytime for full screen.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-flyup">
+                  <i class="x-fly">😂</i><i class="x-fly">😭</i><i class="x-fly">💀</i><i class="x-fly">🥰</i><i class="x-fly">😱</i>
+                  <span class="x-chip">🎉</span>
+                </div>
+              </div>
+              <h3>Reactions that fly</h3>
+              <p>Tap 🎉 and send 😂 😭 💀 🥰 😱 floating up everyone's screen. Swap in your own five favourites.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-gif">
+                  <span class="x-chip">🔍 plot twist</span>
+                  <div class="x-gif__row"><i></i><i></i><i></i></div>
+                  <span class="x-gif__by">Powered by KLIPY</span>
+                </div>
+              </div>
+              <h3>GIFs for every scene</h3>
+              <p>Search GIFs right from the chat, with suggestions based on what you're watching. Powered by KLIPY.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-pfp">
+                  <div class="x-pfp__msg"><span class="x-av x-av--o">🐰</span><span class="x-e2e__bubble">same 🥰</span></div>
+                  <div class="x-pfp__picker"><span>😀</span><span>😂</span><span>🥰</span><span>😭</span><span>💀</span></div>
+                </div>
+              </div>
+              <h3>Emoji and profile pictures</h3>
+              <p>An emoji picker in the chat bar, and a cute animal or food avatar beside every message.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-size">
+                  <div class="x-seg"><span>Aa</span><span>Aa</span><span>Aa</span></div>
+                  <span class="x-size__link">netflix.com/title/80057281</span>
+                </div>
+              </div>
+              <h3>Your chat, your way</h3>
+              <p>Small, medium or large chat text, and links in chat are clickable.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -630,16 +741,21 @@
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
-                <div class="x-plats"><span class="x-chip">Netflix</span><span class="x-chip">JioHotstar</span><span class="x-chip x-chip--dash">+ more soon</span></div>
+                <div class="x-plats">
+                  <span class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" alt="" /></span>Netflix</span>
+                  <span class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.png" alt="" /></span>JioHotstar</span>
+                  <span class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" alt="" /></span>YouTube</span>
+                  <span class="x-chip x-chip--dash">+ more soon</span>
+                </div>
               </div>
-              <h3>Netflix and JioHotstar</h3>
-              <p>Works on both today. More platforms are on the way.</p>
+              <h3>Netflix, JioHotstar and YouTube</h3>
+              <p>Works on all three today. More platforms are on the way.</p>
             </article>
             <article class="x-card x-feat x-feat--wide x-rv">
               <div class="x-vig" aria-hidden="true">
                 <div class="x-fifty">
                   <span class="x-fifty__num">50</span>
-                  <span class="x-stack"><span class="x-av x-av--j">J</span><span class="x-av x-av--e">E</span><span class="x-av x-av--t">T</span><span class="x-av x-av--o">O</span><span class="x-av x-av--e">A</span><span class="x-av x-av--t">R</span><span class="x-av x-av--more">+44</span></span>
+                  <span class="x-stack"><span class="x-av x-av--j">🐼</span><span class="x-av x-av--e">🦊</span><span class="x-av x-av--t">🍕</span><span class="x-av x-av--o">🐰</span><span class="x-av x-av--a">🐸</span><span class="x-av x-av--r">🍩</span><span class="x-av x-av--more">+44</span></span>
                 </div>
               </div>
               <h3>Up to 50 per party</h3>
@@ -666,9 +782,11 @@
           <div class="x-faq">
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
             <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
-            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix and JioHotstar in Google Chrome on a computer (Chromium browsers like Edge and Brave should work too). Phones and TVs aren't supported.</p></details>
-            <details class="x-rv"><summary>How does voice chat work?</summary><p>Click Join voice chat in the panel and allow your microphone. Audio travels directly between the people in the party.</p></details>
-            <details class="x-rv"><summary>What happens to our chat?</summary><p>Party chat lives only while the party does. Ended parties and their messages are cleared within 6 hours.</p></details>
+            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar and YouTube in Google Chrome on a computer (Chromium browsers like Edge and Brave should work too). Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>How does voice chat work?</summary><p>Click Join voice chat in the panel and allow your microphone. Audio travels directly between the people in the party, and the connection setup is encrypted too.</p></details>
+            <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name and profile picture with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
+            <details class="x-rv"><summary>Why do friends need the full link?</summary><p>The invite link carries your party's encryption key after the # sign, which is never sent to any server. A bare party code can't unlock the chat, so always share the full link.</p></details>
+            <details class="x-rv"><summary>Do I need to update?</summary><p>Parties now need NetParty 1.7 or newer. If a friend's version is older, they'll be asked to update, and installing the latest download takes 30 seconds.</p></details>
             <details class="x-rv"><summary>Can someone else control playback?</summary><p>By default anyone can play, pause or seek. The host can switch on 'Only I can play, pause and skip' in the popup.</p></details>
           </div>
         </section>
@@ -680,8 +798,9 @@
               <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download>Add to Chrome — it's free</a>
               <button class="x-btn x-btn--ghost" type="button" id="x-join-toggle" aria-expanded="false" aria-controls="x-join">Join a party</button>
             </div>
+            <p><span class="x-ver">Version 1.7.0</span></p>
             <form class="x-join" id="x-join" hidden novalidate>
-              <input id="x-join-input" aria-label="Invite link or party code" type="text" placeholder="Paste an invite link or party code" autocomplete="off" spellcheck="false" />
+              <input id="x-join-input" aria-label="Full invite link" type="url" inputmode="url" placeholder="Paste the full invite link" autocomplete="off" spellcheck="false" />
               <button class="x-btn x-btn--primary" type="submit">Join</button>
             </form>
             <p class="x-join__err" id="x-join-err" aria-live="polite"></p>
@@ -711,7 +830,7 @@
             <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
           </nav>
         </div>
-        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix or JioHotstar. Netflix and JioHotstar are trademarks of their respective owners.</p>
+        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, JioHotstar or YouTube. Netflix, JioHotstar and YouTube are trademarks of their respective owners.</p>
       </footer>
     </div>
     <script src="hark.js"></script>
@@ -752,18 +871,19 @@
           status.textContent = (playing ? "▶ Playing at " : "❚❚ Paused at ") + fmt(secs);
           prog.style.width = (62 + (secs - START) * 0.12) + "%";
         }
-        var people = { Emma: { h: 330 }, Tyler: { h: 220 }, Jake: { h: 260 } };
+        var people = { Emma: { h: 25, e: "🦊" }, Tyler: { h: 48, e: "🍕" }, Jake: { h: 210, e: "🐼" } };
         function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
         function trim() { while (chat.children.length > 6) chat.removeChild(chat.firstChild); }
+        function author(who) { var a = el("span", "x-author"); a.appendChild(el("i", "", people[who].e)); a.appendChild(document.createTextNode(who)); a.style.color = "hsl(" + people[who].h + " 80% 72%)"; return a; }
         function msg(who, text, mine) {
           var m = el("div", "x-msg" + (mine ? " is-mine" : ""));
-          if (!mine) { var a = el("span", "x-author", who); a.style.color = "hsl(" + people[who].h + " 70% 72%)"; m.appendChild(a); }
+          if (!mine) m.appendChild(author(who));
           m.appendChild(el("span", "x-bubble", text));
           chat.appendChild(m); trim(); return m;
         }
         function typing(who, mine) {
           var m = el("div", "x-msg" + (mine ? " is-mine" : ""));
-          if (!mine) { var a = el("span", "x-author", who); a.style.color = "hsl(" + people[who].h + " 70% 72%)"; m.appendChild(a); }
+          if (!mine) m.appendChild(author(who));
           var t = el("span", "x-typing"); t.innerHTML = "<i></i><i></i><i></i>"; m.appendChild(t);
           chat.appendChild(m); trim(); return m;
         }
@@ -787,7 +907,12 @@
           at(6300, function () { swap(t3, "Jake", "pausing for snacks", true); });
           at(7000, function () { secs = START + 7; setPlaying(false); sys("Jake paused at 1:12:08", true); });
           at(10500, function () { setPlaying(true); sys("Jake resumed", true); });
-          at(14000, run);
+          var t4, t5;
+          at(11800, function () { t4 = typing("Emma"); });
+          at(12900, function () { swap(t4, "Emma", "this scene 😭"); });
+          at(13700, function () { t5 = typing("Tyler"); });
+          at(14700, function () { swap(t5, "Tyler", "no way 💀"); });
+          at(18500, run);
         }
 
         if (reduce) {
@@ -797,6 +922,8 @@
           msg("Jake", "pausing for snacks", true);
           sys("Jake paused at 1:12:08", true);
           sys("Jake resumed", true);
+          msg("Emma", "this scene 😭");
+          msg("Tyler", "no way 💀");
         } else {
           tick = setInterval(function () { if (playing) { secs++; paint(); } }, 1000);
           run();
@@ -814,14 +941,14 @@
         });
         form.addEventListener("submit", function (e) {
           e.preventDefault();
-          var v = input.value.trim();
-          if (!v) { err.textContent = "Paste an invite link or party code first."; return; }
-          if (/^https?:\/\//i.test(v)) { window.location.href = v; return; }
-          if (/^[a-z0-9]+$/i.test(v)) { window.location.href = "/j/" + v; return; }
-          if (/^[\w.-]+\.[a-z]{2,}\//i.test(v)) { window.location.href = "https://" + v; return; }
-          var m = v.match(/\/j\/([a-z0-9]+)/i);
-          if (m) { window.location.href = "/j/" + m[1]; return; }
-          err.textContent = "That doesn't look like a party code or invite link.";
+          /* client-side redirect only: the value is never sent anywhere */
+          var v = input.value.trim(), u = null;
+          try { u = new URL(v); } catch (x) { u = null; }
+          var okOrigin = u && (u.origin === "https://netparty.tech" || (location.origin !== "null" && u.origin === location.origin));
+          var okPath = u && /^\/j\/[A-Za-z0-9_-]+\/?$/.test(u.pathname);
+          var okKey = u && /^#(?:.*&)?k=[^&]+/.test(u.hash);
+          if (okOrigin && okPath && okKey) { err.textContent = ""; window.location.href = v; return; }
+          err.textContent = "Paste the full invite link — the code alone can't unlock the encrypted chat.";
         });
       })();
     </script>

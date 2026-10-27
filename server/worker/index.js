@@ -12,6 +12,9 @@ import siteJs from "./site/hark.js.txt";
 import imgSpace from "./site/still-space.jpg";
 import imgNeon from "./site/still-neon.jpg";
 import imgFriends from "./site/friends.jpg";
+import imgJio from "./site/jiohotstar-star.png";
+import svgNetflix from "./site/netflix.svg";
+import svgYoutube from "./site/youtube.svg";
 
 const HTML = "text/html; charset=utf-8";
 const MAINTAIN_MS = 15 * 60 * 1000;
@@ -25,7 +28,51 @@ const SITE = {
   "/still-space.jpg": [imgSpace, "image/jpeg"],
   "/still-neon.jpg": [imgNeon, "image/jpeg"],
   "/friends.jpg": [imgFriends, "image/jpeg"],
+  "/jiohotstar-star.png": [imgJio, "image/png"],
+  "/netflix.svg": [svgNetflix, "image/svg+xml"],
+  "/youtube.svg": [svgYoutube, "image/svg+xml"],
 };
+
+// Security headers for the landing site. Inline <script> blocks are allowed only by
+// their SHA-256 hash, so the CSP follows the page automatically after a recopy.
+const BASE_SECURITY = {
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "x-frame-options": "DENY",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()",
+  "cross-origin-opener-policy": "same-origin",
+};
+const siteCsp = new Map();
+async function cspFor(html) {
+  if (siteCsp.has(html)) return siteCsp.get(html);
+  const hashes = [];
+  for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(m[1])));
+    let bin = "";
+    for (const b of d) bin += String.fromCharCode(b);
+    hashes.push(`'sha256-${btoa(bin)}'`);
+  }
+  const csp = [
+    "default-src 'none'",
+    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+  siteCsp.set(html, csp);
+  return csp;
+}
+function withSecurity(res, extra = {}) {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries({ ...BASE_SECURITY, ...extra })) if (!h.has(k)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h, webSocket: res.webSocket });
+}
 
 export class PartyHub {
   constructor(state, env) {
@@ -135,14 +182,16 @@ export default {
     if (!isWs && url.pathname.startsWith("/api/gifs/")) return gifs(request, env, ctx, url);
     if (!isWs && (request.method === "GET" || request.method === "HEAD")) {
       const page = SITE[url.pathname];
-      if (page)
-        return new Response(request.method === "HEAD" ? null : page[0], {
-          headers: { "content-type": page[1], "cache-control": page[1] === HTML ? "public, max-age=300" : "public, max-age=86400" },
-        });
+      if (page) {
+        const headers = { "content-type": page[1], "cache-control": page[1] === HTML ? "public, max-age=300" : "public, max-age=86400" };
+        if (page[1] === HTML) headers["content-security-policy"] = await cspFor(page[0]);
+        if (page[1] === "image/svg+xml") headers["content-security-policy"] = "default-src 'none'; style-src 'unsafe-inline'";
+        return withSecurity(new Response(request.method === "HEAD" ? null : page[0], { headers }));
+      }
       if (url.pathname === "/download/netparty-extension.zip")
-        return new Response(extensionZip, {
+        return withSecurity(new Response(extensionZip, {
           headers: { "content-type": "application/zip", "content-disposition": 'attachment; filename="netparty-extension.zip"', "cache-control": "public, max-age=300" },
-        });
+        }));
     }
     // invite pages also offer the zip from a live party's invite page
     const dl = url.pathname.match(/^\/j\/([a-z0-9]{4,16})\/netparty\.zip$/i);
