@@ -42,7 +42,8 @@
       ::selection { background: rgba(124,92,255,.45); }
       :focus-visible { outline: 2px solid var(--x-o); outline-offset: 3px; border-radius: 8px; }
       .x-mono { font-family: var(--x-mono); }
-      html, .page { overflow-x: clip; }
+      /* clip only at the root so the 100vw hero glow and orbit can span the viewport; clip (not hidden) keeps the sticky nav working */
+      html, body { overflow-x: clip; }
       .x-grad-text { background: var(--x-grad); -webkit-background-clip: text; background-clip: text; color: #b05cff; -webkit-text-fill-color: transparent; }
 
       /* buttons */
@@ -440,6 +441,26 @@
       .x-foot__links a:hover { color: var(--x-text); }
       .x-foot__links a.x-gh { padding: 0; justify-content: center; margin-left: 4px; }
       .x-foot__legal { color: #918da3; font-size: 12px; }
+
+      /* desktop */
+      @media (min-width: 1024px) {
+        .x-hero { padding-top: 28px; }
+        .x-orbit-wrap { padding-block: clamp(20px, 2.2vw, 36px); }
+        .x-lead { font-size: clamp(18px, 1.6vw, 19px); }
+        .x-mock { margin-top: 40px; }
+      }
+      @media (min-width: 1280px) {
+        .x-card h3 { font-size: 20px; }
+        .x-card p { font-size: 15.5px; max-width: 70ch; }
+      }
+      @media (min-width: 1440px) {
+        :root { --page-max: 1240px; }
+        .x-mock { max-width: 1120px; }
+      }
+      @media (min-width: 1800px) {
+        :root { --page-max: 1320px; }
+        .x-mock { max-width: 1180px; }
+      }
 
       /* reveal */
       .x-js .x-rv { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
