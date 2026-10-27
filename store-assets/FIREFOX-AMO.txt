@@ -88,6 +88,13 @@ Firefox:
 (Other honest option: Games & Entertainment, whose description mentions "control video playback".)
 
 ======================================================================
+6b. CHECKBOXES ON THE DESCRIBE PAGE
+======================================================================
+"This add-on is experimental": leave UNTICKED.
+"This add-on requires payment, non-free services or software, or additional hardware": TICK it.
+Netflix and JioHotstar need each viewer's own paid subscription (YouTube works free). Being upfront avoids a policy rejection.
+
+======================================================================
 7. TAGS  (AMO only accepts tags from its fixed list, addons.mozilla.org/api/v5/addons/tags/)
 ======================================================================
 chat, streaming, youtube, privacy
