@@ -14,6 +14,7 @@ import imgNeon from "./site/still-neon.jpg";
 import imgJio from "./site/jiohotstar-star.png";
 import svgNetflix from "./site/netflix.svg";
 import svgYoutube from "./site/youtube.svg";
+import svgPrime from "./site/primevideo.svg";
 import imgOg from "./site/og.jpg";
 import imgIcon512 from "./site/icon-512.png";
 import imgFavicon48 from "./site/favicon-48.png";
@@ -23,15 +24,15 @@ const HTML = "text/html; charset=utf-8";
 // link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
 const OG_TAGS = `<meta property="og:image" content="https://netparty.tech/og.jpg" />
 <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, JioHotstar and YouTube" />
+<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, JioHotstar, YouTube and Prime Video" />
 <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://netparty.tech/og.jpg" />
 `;
 const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/i, OG_TAGS + "</head>"));
 
 // SEO layer, applied at load so a recopy of the Hark build keeps it: keyword title and
 // description, canonical, robots, icons, alt text, and JSON-LD built from the visible FAQ.
-const SEO_TITLE = "NetParty: Free Watch Party for Netflix, JioHotstar & YouTube";
-const SEO_DESC = "Watch Netflix, JioHotstar and YouTube together in perfect sync. Free watch party extension with encrypted chat, voice chat and reactions. No sign-up.";
+const SEO_TITLE = "NetParty: Free Watch Party for Netflix, Prime Video, JioHotstar & YouTube";
+const SEO_DESC = "Watch Netflix, Prime Video, JioHotstar and YouTube together in perfect sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
 const stripTags = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 function withSeo(html) {
   const faq = [...html.matchAll(/<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/gi)]
@@ -44,7 +45,7 @@ function withSeo(html) {
       applicationCategory: "BrowserApplication", operatingSystem: "Windows, macOS, Linux, ChromeOS",
       image: "https://netparty.tech/og.jpg", publisher: { "@id": "https://netparty.tech/#org" },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      featureList: "Synced play, pause and seek; end-to-end encrypted chat; voice chat; emoji reactions; GIFs; host controls",
+      featureList: "Synced play, pause and seek; end-to-end encrypted chat; voice and video chat; emoji reactions; GIFs; host controls",
       license: "https://opensource.org/licenses/MIT" },
   ];
   if (faq.length) graph.push({ "@type": "FAQPage", mainEntity: faq });
@@ -64,6 +65,7 @@ function withSeo(html) {
     .replace('<img src="netflix.svg" alt=""', '<img src="netflix.svg" alt="Netflix"')
     .replace('<img src="jiohotstar-star.png" alt=""', '<img src="jiohotstar-star.png" alt="JioHotstar"')
     .replace('<img src="youtube.svg" alt=""', '<img src="youtube.svg" alt="YouTube"')
+    .replace('<img src="primevideo.svg" alt=""', '<img src="primevideo.svg" alt="Prime Video"')
     .replace('<img src="still-neon.jpg" alt=""', '<img src="still-neon.jpg" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
@@ -95,6 +97,7 @@ const SITE = {
   "/jiohotstar-star.png": [imgJio, "image/png"],
   "/netflix.svg": [svgNetflix, "image/svg+xml"],
   "/youtube.svg": [svgYoutube, "image/svg+xml"],
+  "/primevideo.svg": [svgPrime, "image/svg+xml"],
   "/og.jpg": [imgOg, "image/jpeg"],
 };
 

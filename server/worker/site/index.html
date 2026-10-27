@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NetParty — Watch together, in sync</title>
-    <meta name="description" content="NetParty is a free browser extension for watch parties: synced play, pause and seek, with text chat and voice chat beside the video. No account needed." />
+    <meta name="description" content="NetParty is a free browser extension for watch parties: synced play, pause and seek, with text, voice and video chat beside the video. No account needed." />
     <meta property="og:title" content="NetParty — Watch together, in sync" />
-    <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat and voice right beside the video. Free browser extension." />
+    <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat, voice and video right beside the video. Free browser extension." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://netparty.tech/" />
     <meta name="theme-color" content="#0B0A10" />
@@ -333,6 +333,7 @@
       .x-ring--2::after { animation-delay: .6s; } .x-ring--3::after { animation-delay: 1.2s; }
       @keyframes x-ring { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
       .x-ring .x-av { box-shadow: none; }
+      .x-cam { display: inline-flex; align-items: center; gap: 5px; margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--x-line); }
       .x-mute { flex-basis: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 12px; color: var(--x-mute); }
       .x-switch { position: relative; width: 34px; height: 20px; border-radius: 999px; background: #353147; flex: none; }
       .x-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
@@ -358,6 +359,7 @@
       .x-plat { height: 44px; padding: 0 16px 0 6px; font-size: 14px; font-weight: 600; gap: 9px; }
       .x-plat__ic { width: 32px; height: 32px; flex: none; border-radius: 50%; background: #0d0c12; border: 1px solid #353147; display: grid; place-items: center; }
       .x-plat__ic img { width: 22px; height: 22px; object-fit: contain; display: block; }
+      .x-plat__ic img[src="primevideo.svg"] { width: 27px; }
       @media (max-width: 600px) { .x-works__lab { flex-basis: 100%; text-align: center; margin: 0 0 2px; } }
       @media (max-width: 420px) {
         .x-works { gap: 6px; }
@@ -614,6 +616,7 @@
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" alt="" /></span>Netflix</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.png" alt="" /></span>JioHotstar</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" alt="" /></span>YouTube</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="primevideo.svg" alt="" /></span>Prime Video</li>
           </ul>
           <div class="x-cta x-rv">
             <a class="x-btn x-btn--primary" href="#install" data-install>Add to browser — it's free</a>
@@ -743,11 +746,11 @@
                   <div class="x-ring"><span class="x-av x-av--e">🦊</span></div>
                   <div class="x-ring x-ring--2"><span class="x-av x-av--j">🐼</span></div>
                   <div class="x-ring x-ring--3"><span class="x-av x-av--t">🍕</span></div>
-                  <span class="x-mute"><span class="x-switch"></span>Mute</span>
+                  <span class="x-mute"><span class="x-switch"></span>Mute<span class="x-cam"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10l5-3v10l-5-3z"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>Camera</span></span>
                 </div>
               </div>
-              <h3>Voice chat</h3>
-              <p>Talk over the movie like you're on the same couch. Voice goes peer-to-peer between friends, and the voice setup is encrypted too.</p>
+              <h3>Voice and video chat</h3>
+              <p>Talk over the movie, and turn your camera on to see everyone's reactions. Voice and video go peer-to-peer between friends, and the setup is encrypted too.</p>
             </article>
             <article class="x-card x-feat x-feat--wide x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -830,8 +833,8 @@
           <div class="x-faq">
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
             <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
-            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar and YouTube on a computer, in Google Chrome, Brave and other Chromium browsers, or in Microsoft Edge from the Edge Add-ons store. Firefox and Opera are coming soon. Phones and TVs aren't supported.</p></details>
-            <details class="x-rv"><summary>How does voice chat work?</summary><p>Click Join voice chat in the panel and allow your microphone. Audio travels directly between the people in the party, and the connection setup is encrypted too.</p></details>
+            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar, YouTube and Prime Video on a computer, in Google Chrome, Brave and other Chromium browsers, or in Microsoft Edge from the Edge Add-ons store. Firefox and Opera are coming soon. Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>How do voice and video chat work?</summary><p>Click Join voice chat in the panel and allow your microphone, then press the camera button if you want video. Audio and video travel directly between the people in the party, and the connection setup is encrypted too.</p></details>
             <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name and profile picture with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
             <details class="x-rv"><summary>Why do friends need the full link?</summary><p>The invite link carries your party's encryption key after the # sign, which is never sent to any server. A bare party code can't unlock the chat, so always share the full link.</p></details>
             <details class="x-rv"><summary>Do I need to update?</summary><p>Parties now need NetParty 1.7 or newer. If a friend's version is older, they'll be asked to update, and installing the latest download takes 30 seconds.</p></details>
@@ -911,7 +914,7 @@
             <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
           </nav>
         </div>
-        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, JioHotstar or YouTube. Netflix, JioHotstar and YouTube are trademarks of their respective owners.</p>
+        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, JioHotstar, YouTube or Amazon. Netflix, JioHotstar, YouTube and Prime Video are trademarks of their respective owners.</p>
       </footer>
     </div>
     <script src="hark.js"></script>
