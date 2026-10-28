@@ -1,3 +1,4 @@
+@font-face { font-family: "NetParty Inter"; src: url("fonts/inter-var.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 /* dark by default; light when the computer prefers it (Theme: System) or Theme is Light.
    Text pairs meet WCAG AA in both. */
 :root { --bg:#121216; --card:#1f1f26; --line:#33333c; --text:#f3f3f6; --dim:#9d9da8; --accent:#7c5cff; --accent2:#a48bff; --fill:#6c4cf5; --fill-hover:#7c5cff; --bad:#ff6b7a; --opt:#2c2c35; --opt-hover:#3a3a46; --avatar-bg:#f0e9ff; color-scheme: dark; }
@@ -6,7 +7,7 @@
   :root:not([data-theme=dark]) { --bg:#ffffff; --card:#f4f2fa; --line:#dcd8ea; --text:#17151f; --dim:#5f5b6e; --accent2:#5a3fd6; --fill-hover:#5a3fd6; --bad:#c62f3e; --opt:#ebe8f5; --opt-hover:#dcd6f0; --avatar-bg:#ebe3ff; color-scheme: light; }
 }
 * { box-sizing: border-box; }
-body { width: 320px; margin: 0; padding: 16px; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+body { width: 320px; margin: 0; padding: 16px; font: 14px/1.45 "NetParty Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
 header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 header img { width: 36px; height: 36px; display: block; }
 h1 { font-size: 17px; margin: 0; }

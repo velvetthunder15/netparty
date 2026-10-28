@@ -76,6 +76,14 @@ await hp.keyboard.type("after rename");
 await hp.keyboard.press("Enter");
 check("new own line uses the new name", !!(await until(async () => (await lines(hp)).some((x) => x.text === "after rename" && x.mine && x.name === "Chirag R" && x.pic === "🍕"), 5000)));
 
+// ---------------------------------------------------------------- Inter in the panel (bundled, under our own family name)
+const fontOk = (p) => p.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some((f) => f.family.replace(/"/g, "") === "NetParty Inter" && f.status === "loaded") && document.fonts.check('14px "NetParty Inter"'); });
+check("Inter font loads on the host page", !!(await until(() => fontOk(hp), 5000)));
+check("Inter font loads on the guest page", !!(await until(() => fontOk(gp), 5000)));
+const fam = await shadow(hp, (r) => { return getComputedStyle(r.querySelector(".np-bubble")).fontFamily; });
+check("chat text uses Inter, then the system font", /^"?NetParty Inter"?, system-ui/.test(fam), fam);
+check("the site's own fonts are untouched", (await hp.evaluate(() => getComputedStyle(document.body).fontFamily)).indexOf("NetParty") < 0);
+
 // ---------------------------------------------------------------- lines within a minute stack (no repeated name/picture)
 for (const t of ["burst one", "burst two"]) {
   await hp.locator(".np-input").click();

@@ -1,0 +1,11 @@
+NetParty 1.9.2 - release notes ("What's new")
+
+=== Edge Add-ons / Opera (under 500 characters) ===
+- New look: the chat and popup now use the Inter font, so NetParty looks the same on every computer.
+
+=== Firefox Add-ons (AMO) ===
+What's new in 1.9.2
+
+- The chat panel and popup now use the Inter font, bundled with the add-on (SIL Open Font License), so NetParty looks the same on Windows, macOS and Linux. Websites' own fonts are not changed.
+
+Nothing changes about what NetParty sends or stores.

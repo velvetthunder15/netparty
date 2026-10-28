@@ -4,6 +4,13 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [1.9.2] - 2026-10-29
+### Changed
+- **New font**: the chat panel and the popup now use Inter, bundled with the extension (SIL Open Font License,
+  `extension/fonts/OFL.txt`), so NetParty looks the same on Windows, macOS, Linux and in Firefox instead of
+  following each system's font. It is loaded under its own name, so the site's fonts are never touched, and the
+  system font is still used for anything Inter doesn't cover (and until it loads).
+
 ## [1.9.1] - 2026-10-28
 ### Changed
 - **Resize the popped-out cameras from any edge or corner**, not only the small grip in the corner. The

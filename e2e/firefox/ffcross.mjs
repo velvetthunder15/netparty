@@ -28,6 +28,9 @@ await hp.evaluate(() => document.getElementById("netparty-root").shadowRoot.quer
 await hp.keyboard.type("firefox says hi XMARK");
 await hp.keyboard.press("Enter");
 check("chat Firefox → Chromium", !!(await until(async () => (await bubbles(gp))?.includes("firefox says hi XMARK"))));
+const ffFont = async (p) => { try { return await p.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some((f) => f.family.replace(/"/g, "") === "NetParty Inter" && f.status === "loaded"); }); } catch { return false; } };
+check("Inter font loads in Firefox", !!(await until(() => ffFont(hp), 8000)));
+check("Inter font loads in Chromium (guest)", !!(await until(() => ffFont(gp), 8000)));
 await hp.evaluate(() => { const v = document.querySelector("video"); v.currentTime = 50; v.play(); });
 await sleep(3000);
 const a = await hp.evaluate(() => document.querySelector("video").currentTime), b = await gp.evaluate(() => document.querySelector("video").currentTime);

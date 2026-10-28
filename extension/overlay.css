@@ -31,7 +31,7 @@
   --shadow: rgba(0, 0, 0, 0.5);
   --np-fs: 14px; /* chat text size: 12 / 14 / 16 */
   --emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
+  font: 14px/1.4 "NetParty Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
   color: var(--text);
   color-scheme: dark;
   position: fixed;

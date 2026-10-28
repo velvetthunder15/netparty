@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Watch Netflix, JioHotstar, YouTube and Prime Video in sync with friends, with end-to-end encrypted chat, voice and video.",
   "minimum_chrome_version": "116",
   "action": {
@@ -123,7 +123,8 @@
     {
       "resources": [
         "page.js",
-        "overlay.css"
+        "overlay.css",
+        "fonts/inter-var.woff2"
       ],
       "matches": [
         "https://www.netflix.com/*",

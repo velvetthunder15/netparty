@@ -2741,10 +2741,26 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       avatarPicker.toggle(anchor, focusName);
     }
 
+    // Inter (SIL OFL, fonts/OFL.txt) under our own family name, so it never clashes with the site's fonts.
+    // @font-face is ignored inside a shadow root, so it goes in the document's font set; the bytes are read
+    // by the extension itself, so the site's font-src CSP doesn't apply. Until it loads (or if it can't),
+    // the panel uses the system font.
+    let fontLoaded = false;
+    function loadFont() {
+      if (fontLoaded) return;
+      fontLoaded = true;
+      fetch(chrome.runtime.getURL("fonts/inter-var.woff2"))
+        .then((r) => r.arrayBuffer())
+        .then((buf) => new FontFace("NetParty Inter", buf, { weight: "100 900", style: "normal" }).load())
+        .then((face) => document.fonts.add(face))
+        .catch(() => {});
+    }
+
     function build() {
       host = el("div", { id: "netparty-root" });
       shadow = host.attachShadow({ mode: "open" });
       shadow.append(el("link", { rel: "stylesheet", href: chrome.runtime.getURL("overlay.css") }));
+      loadFont();
 
       badge = el("span", { class: "np-badge" });
       toggleBtn = el("button", { type: "button", class: "np-toggle", title: "Party chat (NetParty)", "aria-label": "Party chat (NetParty)", onclick: () => (open ? hide() : show()) }, svg(ICON.chat), badge);
