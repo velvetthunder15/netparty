@@ -11,6 +11,9 @@
   body { margin: 0; background: #0B0A12; color: #D9D6E8; font: 16px/1.65 Inter, system-ui, -apple-system, Segoe UI, sans-serif; }
   main { max-width: 720px; margin: 0 auto; padding: 56px 22px 80px; }
   a { color: #B79CFF; }
+  html, a { -webkit-tap-highlight-color: transparent; }
+  a { touch-action: manipulation; transition: opacity .16s ease; }
+  a:active { opacity: .6; }
   .top { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; font-weight: 700; font-size: 18px; margin-bottom: 40px; }
   .top svg { width: 28px; height: 28px; }
   h1 { color: #fff; font-size: 36px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.02em; }

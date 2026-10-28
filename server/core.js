@@ -758,7 +758,7 @@ main{max-width:460px;padding:32px 24px}
 .logo{font-weight:800;color:#a48bff;letter-spacing:.02em;margin-bottom:18px}
 h1{font-size:24px;line-height:1.25;margin:0 0 8px}.sub{color:#9d9da8;margin:0 0 22px}
 .btn{display:block;text-align:center;padding:14px;border-radius:12px;background:#7c5cff;color:#fff;font-weight:700;text-decoration:none}
-.btn:hover{background:#a48bff}.note{color:#9d9da8;font-size:14px}[hidden]{display:none!important}
+@media (hover:hover){.btn:hover{background:#a48bff}}html,a,button{-webkit-tap-highlight-color:transparent}a,button{touch-action:manipulation;transition:background .2s,scale .16s ease,opacity .16s ease}.btn:active{scale:.97;background:#6a4cf0}a:not(.btn):active{opacity:.6}.note{color:#9d9da8;font-size:14px}[hidden]{display:none!important}
 .warn{padding:12px 14px;border:1px solid #ff6b81;border-radius:12px;background:#2a1820;color:#ffd5dc}
 details{margin-top:18px;padding:14px 16px;border:1px solid #33333c;border-radius:12px;background:#1b1b22}
 summary{cursor:pointer;font-weight:600}ol{padding-left:20px;margin:10px 0 0}li{margin:6px 0}
