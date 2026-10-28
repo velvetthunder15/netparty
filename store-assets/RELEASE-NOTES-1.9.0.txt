@@ -1,0 +1,18 @@
+NetParty 1.9.0 - release notes ("What's new")
+
+=== Edge Add-ons / Opera (under 500 characters) ===
+- Video chat is bigger: cameras now sit inside the chat panel as large tiles, and the chat stays usable below them.
+- Pop out: move the cameras into a floating window you can drag anywhere, resize and dock back. Works in fullscreen.
+- Change your name right from the chat: click your picture (or the name on your camera tile).
+- Camera tiles show who is talking and who is muted.
+
+=== Firefox Add-ons (AMO) ===
+What's new in 1.9.0
+
+- Bigger video chat: when cameras are on, they now sit inside the chat panel as large 16:9 tiles instead of a small strip over the movie. The chat keeps room for your messages, and the panel's buttons get compact while cameras are showing.
+- Pop out: one click moves the cameras into a floating window over the video. Drag it anywhere (also over the chat), resize it from its corner, fold it away, or dock it back into the chat. It works in fullscreen, the arrow keys can move and resize it, and NetParty remembers your choice for the tab.
+- With the chat closed, your friends' cameras stay on screen in that floating window.
+- Change your name without opening the popup: click your picture in the chat (or the name on your own camera tile) to open "Your profile", type a new name and press Enter. Everyone in the party sees it right away.
+- Camera tiles show who is talking and who is muted.
+
+Nothing changes about what NetParty sends or stores: video still goes peer to peer between friends, and the camera is only used after you press the camera button.

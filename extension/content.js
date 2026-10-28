@@ -1762,7 +1762,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   const ui = (() => {
     const E = globalThis.NP_EMOJI || { avatars: ["🙂"], reactions: ["😂", "😭", "💀", "🥰", "😱"], categories: [] };
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
-    let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer;
+    let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer, headEl, leaveIcon;
     let open = false;
     let unread = 0;
     let toastTimer = 0;
@@ -1800,6 +1800,12 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       cam: '<path fill="currentColor" d="M4 6h11a2 2 0 0 1 2 2v1.6l4-2.6v10l-4-2.6V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>',
       camOff: '<path fill="currentColor" d="M3.3 2 2 3.3 4.7 6H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h11c.4 0 .8-.1 1.1-.3l4.6 4.6 1.3-1.3zM21 7l-4 2.6V8a2 2 0 0 0-2-2H9.2L21 17.8z"/>',
       chevron: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/>',
+      popout: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M14 4h6v6M20 4l-8 8M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>',
+      dockIn: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path fill="currentColor" d="M14 6h6v12h-6z"/>',
+      grip: '<circle fill="currentColor" cx="9" cy="6" r="1.7"/><circle fill="currentColor" cx="15" cy="6" r="1.7"/><circle fill="currentColor" cx="9" cy="12" r="1.7"/><circle fill="currentColor" cx="15" cy="12" r="1.7"/><circle fill="currentColor" cx="9" cy="18" r="1.7"/><circle fill="currentColor" cx="15" cy="18" r="1.7"/>',
+      resize: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M20 9 9 20M20 15l-5 5"/>',
+      leave: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9"/>',
+      check: '<path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/>',
     };
     const iconBtn = (icon, title, onclick, cls = "") =>
       el("button", { type: "button", class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
@@ -1839,6 +1845,16 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     window.__netpartyKey = (e) => {
       if (e.isComposing || !shadow) return;
       const active = shadow.activeElement;
+      if (camUi.key(e)) return;
+      if (active && active === avatarPicker.nameInput && (e.key === "Enter" || e.key === "Escape")) {
+        // Enter saves the name, Esc throws the edit away; either way the profile closes
+        e.preventDefault();
+        if (e.key === "Enter") avatarPicker.saveName();
+        else avatarPicker.revert();
+        pops.close();
+        input.focus();
+        return;
+      }
       if (e.key === "Enter" && !e.shiftKey && active === input) {
         e.preventDefault();
         sendChat();
@@ -2286,16 +2302,52 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       };
     })();
 
-    // ---- your profile picture (also in the popup)
+    // ---- your profile: name + picture (also in the popup)
     const avatarPicker = (() => {
-      let node;
+      let node, nameIn;
+      // same as the popup: the saved name, or empty (placeholder) while it's an automatic "Guest N"
+      const shownName = () => {
+        const n = cleanName(party.name);
+        return n && !/^Guest \d+$/.test(n) ? n : "";
+      };
+      // like the popup's saveName: empty input is ignored, otherwise chrome.storage.sync { name }
+      // (the storage listener sends the new profile to the party)
+      function saveName() {
+        if (!nameIn) return;
+        const v = cleanName(nameIn.value);
+        if (!v) {
+          nameIn.value = shownName();
+          return;
+        }
+        if (nameIn.value !== v) nameIn.value = v;
+        if (v === cleanName(party.name)) return;
+        party.name = v;
+        chrome.storage.sync.set({ name: v }).catch(() => {});
+        refreshNames();
+        peopleSig = "";
+        render();
+      }
       return {
-        toggle(anchor) {
+        get nameInput() {
+          return nameIn;
+        },
+        saveName,
+        revert() {
+          if (nameIn) nameIn.value = shownName();
+        },
+        toggle(anchor, focusName = false) {
           if (!node) {
+            nameIn = el("input", {
+              class: "np-name-input", type: "text", maxlength: "24", autocomplete: "off", spellcheck: "false",
+              placeholder: "Your name (what friends see)", "aria-label": "Your name",
+            });
+            nameIn.addEventListener("blur", saveName);
             node = popEl(
               "np-avatar-pop",
-              "Your picture",
-              el("div", { class: "np-pop-title" }, "Your picture"),
+              "Your profile",
+              el("div", { class: "np-pop-title" }, "Your profile"),
+              el("label", { class: "np-field" }, el("span", { class: "np-field-label" }, "Name"), nameIn),
+              el("div", { class: "np-field-label np-field-sub" }, "Picture"),
               el(
                 "div",
                 { class: "np-avatar-grid" },
@@ -2315,8 +2367,16 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
             );
             panel.append(node);
           }
+          if (pops.current !== node) nameIn.value = shownName();
           for (const b of node.querySelectorAll(".np-avatar-opt")) b.classList.toggle("np-on", b.dataset.avatar === party.avatar);
-          pops.open(node, anchor, peopleEl.offsetTop + peopleEl.offsetHeight);
+          pops.open(node, anchor, 0);
+          if (pops.current !== node) return;
+          // just below what opened it (your picture in the people row, or your camera tile)
+          const pr = panel.getBoundingClientRect(), ar = anchor?.getBoundingClientRect();
+          let top = ar && panel.contains(anchor) ? ar.bottom - pr.top + 6 : headEl.offsetHeight + 4;
+          top = Math.max(8, Math.min(top, panel.clientHeight - node.offsetHeight - 8));
+          node.style.top = Math.round(top) + "px";
+          if (focusName) nameIn.focus();
         },
       };
     })();
@@ -2340,6 +2400,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       root.dataset.font = font;
       fontBtn.title = `Chat text size: ${FONTS[font][1]} (click to change)`;
       fontBtn.setAttribute("aria-label", fontBtn.title);
+      camUi.relayout();
     }
     const cycleFont = () => {
       const next = { s: "m", m: "l", l: "s" }[font];
@@ -2376,49 +2437,150 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       return out;
     }
 
-    // ---- camera tiles: a small floating, draggable, collapsible strip over the video
+    // ---- camera tiles. Docked (the default): inside the chat panel, a 16:9 grid as big as the
+    // panel allows while the chat keeps ~4 lines + the composer (the panel's other chrome gets
+    // compact, .np-camdock). Popped out: a floating window over the page, dragged by its bar
+    // (anywhere, also over the chat), resized from its corner (tiles stay 16:9), collapsible.
+    // While the chat panel is closed, docked cameras float in that window's place (dock = open the chat).
+    // Docked/popped, position, width and collapsed are kept per tab in sessionStorage "netpartyCams".
     const camUi = (() => {
-      let body, countEl, collapseBtn;
-      const tiles = new Map(); // id -> { node, video, track, label, pic }
-      let pos = null, collapsed = false;
+      let body, countEl, collapseBtn, modeBtn, moveBtn, camIcon, bar, grip;
+      const tiles = new Map(); // id -> { node, video, track, label, nameEl, pic, mic }
+      const GAP = 4, MIN_W = 240, DEF_W = 440, STEP = 24;
+      let mode = "dock", pos = null, fw = null, collapsed = false;
+      let count = 0, where = null, raf = 0;
       try {
         const saved = JSON.parse(sessionStorage.getItem("netpartyCams") || "null");
         if (saved && typeof saved === "object") {
           collapsed = !!saved.collapsed;
+          if (saved.mode === "float") mode = "float";
           if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) pos = { x: saved.x, y: saved.y };
+          if (Number.isFinite(saved.w) && saved.w >= MIN_W) fw = Math.round(saved.w);
         }
       } catch {}
-      const save = () => sessionStorage.setItem("netpartyCams", JSON.stringify({ collapsed, ...(pos || {}) }));
-      // keep it on screen; it may sit over the video or over the docked chat, wherever the user drops it
+      const save = () => sessionStorage.setItem("netpartyCams", JSON.stringify({ mode, collapsed, ...(pos || {}), ...(fw ? { w: fw } : {}) }));
+      const effective = () => (mode === "dock" && open ? "dock" : "float");
+      const floating = () => where === "float";
+      // the biggest 16:9 tiles for n cameras in a W×H box
+      function fit(n, W, H) {
+        let best = { cols: 1, tw: 0 };
+        for (let cols = 1; cols <= n; cols++) {
+          const rows = Math.ceil(n / cols);
+          const tw = Math.floor(Math.min((W - GAP * (cols - 1)) / cols, ((H - GAP * (rows - 1)) / rows) * (16 / 9)));
+          if (tw > best.tw + 1) best = { cols, tw };
+        }
+        return best;
+      }
+      // keep the floating window on screen; it may sit over the video or over the docked chat
       function clamp() {
-        if (!pos || !camLayer || camLayer.hidden) return;
+        if (!floating() || camLayer.hidden) return;
         const r = camLayer.getBoundingClientRect();
-        const maxX = innerWidth - r.width - 4;
-        pos.x = Math.round(Math.max(4, Math.min(pos.x, maxX)));
+        if (!pos) pos = { x: 16, y: innerHeight - r.height - 96 };
+        pos.x = Math.round(Math.max(4, Math.min(pos.x, innerWidth - r.width - 4)));
         pos.y = Math.round(Math.max(4, Math.min(pos.y, innerHeight - r.height - 4)));
         camLayer.style.left = pos.x + "px";
         camLayer.style.top = pos.y + "px";
         camLayer.style.bottom = "auto";
       }
-      function setCollapsed(v) {
-        collapsed = v;
-        camLayer.classList.toggle("np-cams-min", collapsed);
+      function layout() {
+        if (!camLayer || camLayer.hidden || !count) return;
+        if (!floating()) {
+          camLayer.style.cssText = "";
+          if (collapsed || !panel.clientHeight) return;
+          const ph = panel.clientHeight;
+          let chrome = 0;
+          for (const n of panel.children) if (n !== chatEl && n !== camLayer && !n.classList.contains("np-pop")) chrome += n.offsetHeight;
+          const minChat = Math.round(4 * FONTS[font][0] * 1.45 + 24); // ~4 lines of chat stay visible
+          const extra = camLayer.offsetHeight - body.offsetHeight; // the bar + padding
+          const H = Math.max(80, Math.min(ph * 0.62, ph - chrome - minChat) - extra);
+          body.style.setProperty("--tw", fit(count, body.clientWidth, H).tw + "px");
+          return;
+        }
+        // floating: one tile, or two per row; the height follows the width (16:9 tiles)
+        const cols = count > 1 ? 2 : 1, rows = Math.ceil(count / cols);
+        camLayer.style.width = (fw || DEF_W) + "px";
+        const frame = camLayer.offsetWidth - body.clientWidth; // padding + border
+        const fixedH = camLayer.offsetHeight - (collapsed ? 0 : body.offsetHeight);
+        const maxTw = ((innerHeight - 8 - fixedH - GAP * (rows - 1)) / rows) * (16 / 9);
+        const maxW = Math.min(innerWidth - 8, cols * maxTw + GAP * (cols - 1) + frame);
+        const w = Math.round(Math.max(Math.min(MIN_W, maxW), Math.min(fw || DEF_W, maxW)));
+        camLayer.style.width = w + "px";
+        body.style.setProperty("--tw", Math.floor((w - frame - GAP * (cols - 1)) / cols) + "px");
+        clamp();
+      }
+      // (window resizes, panel size, text size; changes we make ourselves lay out right away,
+      // so a background tab where animation frames wait still gets the right layout)
+      const relayout = () => {
+        if (!raf)
+          raf = requestAnimationFrame(() => {
+            raf = 0;
+            layout();
+          });
+      };
+      function labels() {
+        const dock = !floating();
+        modeBtn.replaceChildren(svg(dock ? ICON.popout : ICON.dockIn));
+        modeBtn.title = dock ? "Pop out cameras" : open ? "Dock cameras in the chat" : "Dock cameras in the chat (opens the chat)";
+        modeBtn.setAttribute("aria-label", modeBtn.title);
         collapseBtn.setAttribute("aria-expanded", String(!collapsed));
         collapseBtn.title = collapsed ? "Show cameras" : "Hide cameras";
         collapseBtn.setAttribute("aria-label", collapseBtn.title);
-        save();
-        requestAnimationFrame(clamp);
+        bar.title = dock ? "" : "Drag to move";
       }
-      function build() {
+      // docked in the panel, or floating in the overlay's root (moving keeps the same video elements)
+      function place() {
+        const w = effective();
+        panel.classList.toggle("np-camdock", count > 0 && w === "dock");
+        if (w === where) return;
+        const hadFocus = camLayer.contains(shadow.activeElement) ? shadow.activeElement : null;
+        where = w;
+        if (w === "dock") panel.insertBefore(camLayer, chatEl);
+        else root.insertBefore(camLayer, toggleBtn);
+        camLayer.classList.toggle("np-cams-float", w === "float");
+        camLayer.classList.toggle("np-cams-docked", w === "dock");
+        camLayer.setAttribute("aria-label", w === "dock" ? "Cameras" : "Cameras (floating window)");
+        camLayer.style.cssText = "";
+        for (const t of tiles.values()) if (t.video.srcObject) t.video.play().catch(() => {});
+        labels();
+        hadFocus?.focus({ preventScroll: true });
+      }
+      function setCollapsed(v) {
+        collapsed = v;
+        camLayer.classList.toggle("np-cams-min", collapsed);
+        labels();
+        save();
+        layout();
+      }
+      function toggleMode() {
+        collapsed = false;
+        camLayer.classList.remove("np-cams-min");
+        if (floating() && mode === "dock") {
+          // docked, but floating because the chat is closed: open the chat
+          save();
+          show();
+          modeBtn.focus({ preventScroll: true });
+          return;
+        }
+        mode = floating() ? "dock" : "float";
+        save();
+        render();
+        modeBtn.focus({ preventScroll: true });
+      }
+      function init() {
         countEl = el("span", { class: "np-cams-count" });
-        collapseBtn = el("button", { type: "button", class: "np-cams-btn", onclick: () => setCollapsed(!collapsed) }, svg(ICON.chevron));
-        const bar = el("div", { class: "np-cams-bar", title: "Drag to move" }, svg(ICON.cam), countEl, el("span", { class: "np-grow" }), collapseBtn);
+        camIcon = svg(ICON.cam);
+        moveBtn = el("button", { type: "button", class: "np-cams-btn np-cams-move", title: "Move (drag, or arrow keys)", "aria-label": "Move the cameras window (arrow keys)" }, svg(ICON.grip));
+        collapseBtn = el("button", { type: "button", class: "np-cams-btn np-cams-collapse", onclick: () => setCollapsed(!collapsed) }, svg(ICON.chevron));
+        modeBtn = el("button", { type: "button", class: "np-cams-btn np-cams-mode", onclick: toggleMode });
+        bar = el("div", { class: "np-cams-bar" }, moveBtn, camIcon, countEl, el("span", { class: "np-grow" }), collapseBtn, modeBtn);
         body = el("div", { class: "np-cams-body" });
-        camLayer = el("div", { class: "np-cams", role: "region", "aria-label": "Cameras", hidden: "" }, bar, body);
-        // drag by the bar
+        grip = el("button", { type: "button", class: "np-cams-grip", title: "Resize (drag, or arrow keys)", "aria-label": "Resize the cameras window (arrow keys)" }, svg(ICON.resize));
+        camLayer = el("div", { class: "np-cams np-cams-float", role: "region", "aria-label": "Cameras", hidden: "" }, bar, body, grip);
+        where = "float";
+        // drag the floating window by its bar
         let drag = null;
         bar.addEventListener("pointerdown", (e) => {
-          if (e.button !== 0 || e.target.closest("button")) return;
+          if (e.button !== 0 || !floating() || (e.target.closest("button") && !e.target.closest(".np-cams-move"))) return;
           const r = camLayer.getBoundingClientRect();
           drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
           bar.setPointerCapture(e.pointerId);
@@ -2438,21 +2600,75 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         };
         bar.addEventListener("pointerup", end);
         bar.addEventListener("pointercancel", end);
+        // resize from the corner (the width; the height follows so tiles stay 16:9)
+        let rs = null;
+        grip.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          const r = camLayer.getBoundingClientRect();
+          rs = { x: e.clientX, y: e.clientY, w: r.width, k: r.width / r.height, id: e.pointerId };
+          grip.setPointerCapture(e.pointerId);
+          camLayer.classList.add("np-resizing");
+          e.preventDefault();
+        });
+        grip.addEventListener("pointermove", (e) => {
+          if (!rs || e.pointerId !== rs.id) return;
+          const dx = e.clientX - rs.x, dy = (e.clientY - rs.y) * rs.k;
+          fw = Math.round(Math.max(MIN_W, rs.w + (Math.abs(dx) >= Math.abs(dy) ? dx : dy)));
+          layout();
+        });
+        const rsEnd = (e) => {
+          if (!rs || e.pointerId !== rs.id) return;
+          rs = null;
+          camLayer.classList.remove("np-resizing");
+          fw = Math.round(camLayer.getBoundingClientRect().width); // what it settled at on this screen
+          save();
+        };
+        grip.addEventListener("pointerup", rsEnd);
+        grip.addEventListener("pointercancel", rsEnd);
         // clicks and drags on the tiles must not reach the player (pause, seek, fullscreen)
         for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"]) camLayer.addEventListener(evt, (e) => e.stopPropagation());
-        addEventListener("resize", () => requestAnimationFrame(clamp));
+        addEventListener("resize", relayout);
+        new ResizeObserver(relayout).observe(panel);
         setCollapsed(collapsed);
+        return camLayer;
+      }
+      // arrow keys on the move / resize handles (keys reach us through early.js, never the site)
+      function key(e) {
+        const a = shadow.activeElement;
+        if (!camLayer || !a || !camLayer.contains(a)) return false;
+        if (e.key === "Escape") return floating(); // don't close the chat from the floating window
+        const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+        if (!d || !floating() || (a !== moveBtn && a !== grip)) return false;
+        e.preventDefault();
+        const step = e.shiftKey ? STEP * 4 : STEP;
+        if (a === moveBtn) {
+          const r = camLayer.getBoundingClientRect();
+          pos = { x: r.left + d[0] * step, y: r.top + d[1] * step };
+          clamp();
+        } else {
+          fw = Math.max(MIN_W, Math.round(camLayer.getBoundingClientRect().width + (d[0] || d[1]) * step));
+          layout();
+          fw = Math.round(camLayer.getBoundingClientRect().width);
+        }
+        save();
+        return true;
       }
       function tile(id, self) {
         const video = el("video", { class: "np-cam-video" + (self ? " np-self" : ""), autoplay: "", playsinline: "", "aria-hidden": "true" });
         video.muted = true; // voices play through the voice chat's own audio
         const pic = el("div", { class: "np-cam-pic np-emo", "aria-hidden": "true" });
-        const label = el("div", { class: "np-cam-name" });
+        const nameEl = el("span", { class: "np-cam-label" });
+        const mic = svg(ICON.micOff);
+        mic.classList.add("np-cam-mic");
+        // your own tile's name opens "Your profile" (the people row may be compacted away)
+        const label = self
+          ? el("button", { type: "button", class: "np-cam-name np-cam-me", title: "Change your name and picture", "aria-label": "Change your name and picture", onclick: (e) => openProfile(e.currentTarget, e.detail === 0) }, mic, nameEl, svg(ICON.edit))
+          : el("div", { class: "np-cam-name" }, mic, nameEl);
         const node = el("div", { class: "np-cam", "data-uid": id }, pic, video, label);
-        return { node, video, pic, label, track: null };
+        return { node, video, pic, label, nameEl, mic, track: null };
       }
       function render() {
-        if (!camLayer) build();
+        if (!camLayer) return;
         const list = [];
         if (voice.camOn && voice.camTrack) list.push({ id: party.me, track: voice.camTrack, live: true, self: true });
         list.push(...voice.cams());
@@ -2463,8 +2679,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
             t.node.remove();
             tiles.delete(id);
           }
-        camLayer.hidden = !list.length;
-        if (!list.length) return;
+        count = list.length;
+        camLayer.hidden = !count;
+        place();
+        if (!count) return;
         for (const c of list) {
           let t = tiles.get(c.id);
           if (!t) tiles.set(c.id, (t = tile(c.id, c.self)));
@@ -2475,18 +2693,40 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           }
           t.node.classList.toggle("np-cam-wait", !c.live);
           const name = c.self ? "You" : nameOf(c.id);
-          if (t.label.textContent !== name) t.label.textContent = name;
+          if (t.nameEl.textContent !== name) t.nameEl.textContent = name;
           const p = picOf(c.id);
           if (t.pic.textContent !== p) t.pic.textContent = p;
           t.pic.style.setProperty("--h", hue(c.id));
+          const info = c.self ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(c.id);
+          t.node.classList.toggle("np-speaking", !!info.speaking && !info.muted);
+          t.node.classList.toggle("np-cam-muted", !!info.muted);
           t.node.title = c.live ? name : name + " · connecting video…";
-          body.append(t.node); // keeps the order: you first
         }
-        countEl.textContent = list.length === 1 ? "1 camera" : list.length + " cameras";
-        requestAnimationFrame(clamp);
+        // you first, then everyone else (only re-appended when the order changed)
+        const order = list.map((c) => tiles.get(c.id).node);
+        if (order.length !== body.childElementCount || order.some((n, i) => body.children[i] !== n)) body.append(...order);
+        countEl.textContent = count === 1 ? "1 camera" : count + " cameras";
+        layout();
       }
-      return { render };
+      return {
+        init,
+        render,
+        key,
+        relayout,
+        get floating() {
+          return floating();
+        },
+      };
     })();
+    // "Your profile" from your camera tile: it lives in the chat panel, so open the chat first
+    function openProfile(anchor, focusName) {
+      if (!open) {
+        show();
+        setTimeout(() => avatarPicker.toggle(camLayer.contains(anchor) && panel.contains(anchor) ? anchor : peopleEl.querySelector(".np-me"), true), 60);
+        return;
+      }
+      avatarPicker.toggle(anchor, focusName);
+    }
 
     function build() {
       host = el("div", { id: "netparty-root" });
@@ -2500,15 +2740,19 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
       codeEl = el("span", { class: "np-code" });
       metaEl = el("div", { class: "np-meta" });
+      const copyInvite = async () => {
+        const link = inviteLink();
+        if (!link) return false;
+        await navigator.clipboard.writeText(link).catch(() => {});
+        return true;
+      };
       const copyBtn = el(
         "button",
         {
           type: "button",
           class: "np-pill",
           onclick: async () => {
-            const link = inviteLink();
-            if (!link) return;
-            await navigator.clipboard.writeText(link).catch(() => {});
+            if (!(await copyInvite())) return;
             copyBtn.lastChild.textContent = "Copied!";
             setTimeout(() => (copyBtn.lastChild.textContent = "Copy invite"), 1500);
           },
@@ -2516,12 +2760,33 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         svg(ICON.link),
         el("span", {}, "Copy invite"),
       );
-      const head = el(
+      const leaveClick = () => {
+        const isHost = party.me === party.hostId;
+        if (confirm(isHost ? "End the party for everyone?" : "Leave this party?")) leaveParty({ end: true });
+      };
+      // compact header (while cameras are docked): Copy invite and Leave party as icon buttons
+      const copyIcon = el("button", {
+        type: "button", class: "np-icon np-head-act np-copy-icon", title: "Copy invite link", "aria-label": "Copy invite link",
+        onclick: async () => {
+          if (!(await copyInvite())) return;
+          copyIcon.replaceChildren(svg(ICON.check));
+          copyIcon.title = "Invite link copied";
+          copyIcon.setAttribute("aria-label", copyIcon.title);
+          setTimeout(() => {
+            copyIcon.replaceChildren(svg(ICON.link));
+            copyIcon.title = "Copy invite link";
+            copyIcon.setAttribute("aria-label", copyIcon.title);
+          }, 1500);
+        },
+      }, svg(ICON.link));
+      leaveIcon = el("button", { type: "button", class: "np-icon np-head-act np-leave-icon", title: "Leave party", "aria-label": "Leave party", onclick: leaveClick }, svg(ICON.leave));
+      const head = (headEl = el(
         "div",
         { class: "np-head" },
         el("div", { class: "np-title" }, el("div", { class: "np-brand" }, "NetParty ", codeEl), metaEl),
+        el("div", { class: "np-head-acts" }, copyIcon, leaveIcon),
         iconBtn(ICON.close, "Hide chat (Esc)", hide, "np-close"),
-      );
+      ));
 
       peopleEl = el("div", { class: "np-people" });
       voiceBox = el("div", { class: "np-voice" });
@@ -2552,10 +2817,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         {
           type: "button",
           class: "np-link-btn",
-          onclick: () => {
-            const isHost = party.me === party.hostId;
-            if (confirm(isHost ? "End the party for everyone?" : "Leave this party?")) leaveParty({ end: true });
-          },
+          onclick: leaveClick,
         },
         "Leave party",
       );
@@ -2574,9 +2836,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       // keep clicks and scrolls inside the panel from reaching the player
       for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"])
         panel.addEventListener(evt, (e) => e.stopPropagation());
-      camUi.render(); // builds the (hidden) camera strip
+      camUi.init(); // the (hidden) camera view
       root = el("div", { class: "np-root" }, floatLayer, camLayer, toggleBtn, toastEl, panel);
       shadow.append(root);
+      camUi.render();
       setFont(font);
       setTheme(theme);
       reactions.set(reactionPref);
@@ -2699,6 +2962,7 @@ html.np-docked [data-np-shrink] {
       toastEl.classList.remove("np-show");
       peopleSig = voiceBox.dataset.sig = "";
       render();
+      camUi.render(); // docked cameras move back into the panel
       dockCheck();
       if (!gifProbed && party.roomId) {
         gifProbed = true;
@@ -2712,7 +2976,10 @@ html.np-docked [data-np-shrink] {
       pops.close();
       root?.classList.remove("np-open");
       render();
-      if (host) dockCheck();
+      if (host) {
+        camUi.render(); // docked cameras float while the chat is closed
+        dockCheck();
+      }
     }
 
     function toast(name, text) {
@@ -2736,6 +3003,11 @@ html.np-docked [data-np-shrink] {
       badge.textContent = unread > 9 ? "9+" : unread ? String(unread) : "";
       badge.style.display = unread ? "" : "none";
       codeEl.textContent = party.roomId ? "· " + party.roomId : "";
+      const leaveLabel = party.me && party.me === party.hostId ? "End the party for everyone" : "Leave party";
+      if (leaveIcon.title !== leaveLabel) {
+        leaveIcon.title = leaveLabel;
+        leaveIcon.setAttribute("aria-label", leaveLabel);
+      }
       metaEl.textContent = metaText();
       metaEl.classList.toggle("np-ad", adPlaying());
 
@@ -2759,7 +3031,7 @@ html.np-docked [data-np-shrink] {
             if (inVoice) avatar.append(el("span", { class: "np-mic" + (info.muted ? " np-off" : ""), title: info.muted ? "Muted" : "In voice" }, svg(info.muted ? ICON.micOff : ICON.mic)));
             const label = nameOf(m.id) + (m.host ? " (host)" : "");
             const tile = isMe
-              ? el("button", { type: "button", class: "np-person np-me", title: "You · change your picture", "aria-label": "Change your picture", onclick: (e) => avatarPicker.toggle(e.currentTarget) })
+              ? el("button", { type: "button", class: "np-person np-me", title: "Change your name and picture", "aria-label": "Change your name and picture", "aria-haspopup": "dialog", onclick: (e) => avatarPicker.toggle(e.currentTarget, e.detail === 0) })
               : el("div", { class: "np-person", title: label });
             tile.classList.toggle("np-speaking", inVoice && info.speaking && !info.muted);
             if (!isMe && inVoice && voice.active) tile.dataset.link = info.connected ? "connected" : "connecting";

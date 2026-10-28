@@ -35,8 +35,10 @@ Features
 - Links in chat are clickable (open in a new tab)
 - Chat text size: Small / Medium / Large (Aa in the chat bar, or the popup's Chat settings)
 - Voice chat: peer-to-peer WebRTC audio, mute, volume, speaking indicator
-- Video chat (1.8): turn your camera on next to voice; small draggable, collapsible tiles show everyone with a
-  camera on. 640x360 at up to 24 fps, at most 4 cameras at once, peer to peer (see the TURN note below)
+- Video chat (1.8): turn your camera on next to voice; everyone with a camera on shows as a 16:9 tile, docked in
+  the chat panel by default (1.9) or popped out into a floating window you can drag, resize and fold.
+  640x360 at up to 24 fps, at most 4 cameras at once, peer to peer (see the TURN note below)
+- Change your name or picture from the panel: click your picture (or your camera tile's name) → Your profile
 - Light and dark themes for the chat panel and popup: follows your system, or pick one in Settings → Theme
 - Every chat line shows the sender's picture and name, your own included
 - Host-only control lock, host hand-off when the host leaves, auto-reconnect
@@ -68,7 +70,8 @@ No server setup needed: the extension uses the hosted server by default.
 | Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
 | Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
-| Video | In voice, the camera button turns your camera on/off. Drag the camera strip by its bar; the arrow folds it away |
+| Video | In voice, the camera button turns your camera on/off. Tiles sit in the chat panel; the pop-out button floats them over the video (drag by the bar, resize from the corner, arrow folds it away, dock button puts them back). With the chat closed they float until you reopen it |
+| Your name / picture | Click your picture in the panel (or the name on your camera tile) → **Your profile**: type a name and press Enter, or pick a picture. Or icon → name field |
 | Theme | Icon → **Settings** → **Theme**: System (default, follows your computer), Light or Dark |
 | Emoji / GIF / react | Chat bar: 🙂 opens emoji, **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
 | Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Settings** |
@@ -230,7 +233,8 @@ messages honestly (it can't read or forge them, but it could drop or delay them)
   `run.mjs` (invite → join → chat → sync), `lifecycle.mjs`, `features.mjs` (avatars, emoji, reactions,
   text size, links, GIFs; `CSP=strict` for a strict image CSP), `youtube.mjs` (start, sync, ads, video change, dock),
   `prime.mjs` (mock Prime Video / Amazon pages: start, invite, sync both ways, ads, dock, title change, leaving),
-  `v18.mjs` (own avatar, light/dark + contrast audit, video chat with fake cameras, camera denied, HiDPI);
+  `v18.mjs` (own avatar, light/dark + contrast audit, video chat with fake cameras: docked view, pop out, drag,
+  resize, dock back, fullscreen, reload, panel closed; profile name editing; camera denied, HiDPI);
   `e2e/firefox/` runs the Firefox build (incl. Firefox ↔ Chromium voice and video)
 
 Protocol frames: `{ type, reqId?, data }`; replies echo `reqId`.
@@ -297,6 +301,13 @@ No Teleparty or REA code is included; NetParty is an original implementation.
   seat or the host role.
 - The server stores only ciphertext, and an idle saved party is deleted within 6 hours (checked every 15 min).
 - The invite page names who invited you by decrypting it in your browser, and refuses links without a valid key.
+
+## v1.9.0
+
+- **Cameras docked in the chat panel** by default: big 16:9 tiles (up to ~62% of the panel), chat keeps 4+ lines,
+  compact panel chrome while they show. **Pop out** into a floating, resizable window (drag anywhere, fold, dock back;
+  keyboard too; works in fullscreen); the choice, place and size are kept per tab. Chat closed → cameras float.
+- **Your profile** in the panel now edits your name as well as your picture.
 
 ## v1.8.0
 

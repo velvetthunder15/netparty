@@ -4,6 +4,36 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [1.9.0] - 2026-10-28
+### Added
+- **Cameras docked in the chat**: when anyone's camera is on, the tiles now sit inside the chat panel by default
+  as a 16:9 grid sized to the panel: one camera is one big tile across the panel, more cameras take whichever
+  arrangement gives the biggest tiles (in the narrow docked column that is a single column). The camera view takes
+  up to about 62% of the panel's height, always leaving room for at least four lines of chat and the composer.
+  While cameras are docked the panel's other chrome gets compact: a one-line header with Copy invite and
+  Leave party as icon buttons, the Watching row as small avatars without names, and a tighter voice bar. The
+  normal layout comes back when no camera is on.
+- **Pop out**: a button on the camera view detaches it into a floating window over the page (440 px wide by
+  default, two tiles per row). Drag it anywhere by its bar (also over the chat), resize it from its corner (tiles
+  stay 16:9), fold it away, and dock it back into the chat with its dock button. The move and resize handles also
+  work with the arrow keys (Shift for bigger steps). It works in fullscreen. Docked or popped out, position, size
+  and folded state are remembered for the tab.
+- With the chat closed, docked cameras show in that floating window so you keep seeing your friends; its dock
+  button opens the chat with the cameras docked again. Fold the window to keep just a small bar.
+- **Change your name from the panel**: clicking your picture in the Watching row (or the name on your own camera
+  tile) opens **Your profile**, which now has a name field next to the pictures. Enter or leaving the field saves
+  it (same 24-character limit as the popup; empty is ignored; Esc cancels) and everyone in the party sees it.
+- Camera tiles show who is speaking (green ring) and who is muted.
+
+### Changed
+- The camera strip is replaced by the docked view and the pop-out window (the old strip was 160x90 tiles).
+- Your picture button is now labelled "Change your name and picture".
+- New controls use soft-touch styling: no tap highlight and a gentle press; motion is off with prefers-reduced-motion.
+- Tests: `e2e/v18.mjs` now also covers the docked default (1, 2 and 3 cameras at 1280x720 to 1920x1080, both
+  themes, no overflow, chat keeps four lines), the chat closed, pop out, drag, resize (mouse and keyboard), dock
+  back, fullscreen, the choice surviving a reload, clicks on tiles never reaching the player, and the profile name
+  field reaching the other peer.
+
 ## [1.8.1] - 2026-10-28
 ### Changed
 - The camera strip can now be dragged over the chat panel as well as the video, so it never has to cover the movie.
@@ -133,7 +163,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   sync), text chat and peer-to-peer voice chat, with a small WebSocket sync server (Node, then a Cloudflare
   Worker + Durable Object).
 
-[1.8.0]: https://github.com/velvetthunder15/netparty/compare/181acb5...HEAD
+[1.9.0]: https://github.com/velvetthunder15/netparty/compare/c76cd9c...HEAD
+[1.8.1]: https://github.com/velvetthunder15/netparty/commit/c76cd9c
+[1.8.0]: https://github.com/velvetthunder15/netparty/commit/2868f10
 [1.7.1]: https://github.com/velvetthunder15/netparty/commit/181acb5
 [1.7.0]: https://github.com/velvetthunder15/netparty/commit/b50670c
 [1.6.0]: https://github.com/velvetthunder15/netparty/commit/5df6623

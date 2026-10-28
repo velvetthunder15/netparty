@@ -55,7 +55,7 @@
   }
 }
 * { box-sizing: border-box; }
-button { font: inherit; color: inherit; cursor: pointer; }
+button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 svg { width: 18px; height: 18px; display: block; }
 
 /* floating chat button (over the video, so the same in both themes) */
@@ -200,6 +200,7 @@ button.np-person:focus-visible { outline: none; }
 .np-tool.np-emo { font-size: 18px; }
 .np-tool:hover, .np-tool.np-on { background: var(--card); color: var(--text); }
 .np-tool:focus-visible, .np-chip:focus-visible, .np-emo-btn:focus-visible, .np-react-btn:focus-visible, .np-avatar-opt:focus-visible, .np-cams-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.np-cams-btn:focus-visible { outline-offset: -2px; }
 .np-tool-gif { font-size: 11px; letter-spacing: 0.04em; border: 1.5px solid currentColor; height: 22px; min-width: 0; padding: 0 5px; border-radius: 6px; margin: 0 4px; }
 .np-tool-gif:hover, .np-tool-gif.np-on { background: none; color: var(--text); }
 .np-tool.np-disabled { opacity: 0.4; cursor: default; }
@@ -272,33 +273,97 @@ button.np-person:focus-visible { outline: none; }
 .np-avatar-opt:hover { background: var(--hover); }
 .np-avatar-opt.np-on { box-shadow: 0 0 0 2px var(--accent); }
 
-/* ---- camera tiles: floating strip over the video, draggable by its bar, collapsible */
-.np-cams {
-  position: fixed; left: 16px; bottom: 96px; z-index: 2; padding: 4px; border-radius: 12px;
-  background: var(--pop); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 26px var(--shadow);
-  user-select: none; -webkit-user-select: none;
+/* ---- your profile (name + picture) */
+.np-field { display: flex; flex-direction: column; gap: 4px; padding: 4px 12px 6px; }
+.np-field-label { font-size: 11px; color: var(--dim); }
+.np-field-sub { padding: 4px 12px 0; }
+.np-name-input {
+  width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--input);
+  color: var(--text); font: inherit; font-size: 13px; outline: none;
 }
+.np-name-input::placeholder { color: var(--dim); opacity: 1; }
+.np-name-input:focus { border-color: var(--accent); }
+
+/* ---- camera tiles: docked in the chat panel (default) or a floating window over the page.
+   Tiles are 16:9 at var(--tw) wide, worked out in content.js from the space there is. */
+.np-cams { color: var(--text); user-select: none; -webkit-user-select: none; }
 .np-cams[hidden] { display: none; }
-.np-cams-bar { display: flex; align-items: center; gap: 6px; padding: 1px 2px 4px 6px; font-size: 12px; font-weight: 600; color: var(--dim); cursor: grab; touch-action: none; }
-.np-dragging .np-cams-bar { cursor: grabbing; }
-.np-cams-bar > svg { width: 15px; height: 15px; }
-.np-cams-btn { width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--dim); display: grid; place-items: center; padding: 0; }
+.np-cams-float {
+  position: fixed; left: 16px; bottom: 96px; z-index: 2; padding: 4px; border-radius: 12px;
+  background: var(--pop); border: 1px solid var(--line); box-shadow: 0 8px 26px var(--shadow);
+}
+.np-cams-docked { position: relative; flex: none; padding: 0 6px 6px; border-bottom: 1px solid var(--line); }
+.np-cams-bar { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 1px 2px 3px 6px; font-size: 12px; font-weight: 600; color: var(--dim); }
+.np-cams-docked .np-cams-bar { padding-left: 8px; }
+.np-cams-float .np-cams-bar { cursor: grab; touch-action: none; padding-left: 0; }
+.np-dragging .np-cams-bar, .np-dragging .np-cams-move { cursor: grabbing; }
+.np-cams-bar > svg { width: 15px; height: 15px; flex: none; }
+.np-cams-float .np-cams-bar > svg, .np-cams-docked .np-cams-move { display: none; }
+.np-cams-count { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-cams-btn {
+  width: 28px; height: 28px; flex: none; border: 0; border-radius: 8px; background: none; color: var(--dim);
+  display: grid; place-items: center; padding: 0; transition: transform 0.12s, background-color 0.12s;
+}
 .np-cams-btn:hover { background: var(--card); color: var(--text); }
 .np-cams-btn svg { width: 16px; height: 16px; transition: transform 0.15s; }
-.np-cams-min .np-cams-btn svg { transform: rotate(180deg); }
-.np-cams-body { display: grid; grid-template-columns: repeat(2, 160px); gap: 4px; }
-.np-cams-body:has(> :only-child) { grid-template-columns: 160px; }
-.np-cams-min .np-cams-body { display: none; }
-.np-cam { position: relative; width: 160px; height: 90px; border-radius: 8px; overflow: hidden; background: #000; }
-.np-cam-pic { position: absolute; inset: 0; display: grid; place-items: center; font-size: 34px; background: hsl(var(--h, 260) 40% 28%); }
+.np-cams-move { cursor: grab; touch-action: none; width: 22px; }
+.np-cams-move svg { width: 14px; height: 14px; }
+.np-cams-min .np-cams-collapse svg { transform: rotate(180deg); }
+.np-cams-body { display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 4px; }
+.np-cams-min .np-cams-body, .np-cams-min .np-cams-grip, .np-cams-docked .np-cams-grip { display: none; }
+.np-cam { position: relative; flex: none; width: var(--tw, 160px); aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; }
+.np-cam::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow 0.12s; }
+.np-cam.np-speaking::after { box-shadow: inset 0 0 0 2px var(--good); }
+.np-cam-pic { position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(26px, calc(var(--tw, 160px) * 0.2), 72px); background: hsl(var(--h, 260) 40% 28%); }
 .np-cam-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: transparent; transition: opacity 0.2s; }
 .np-cam-video.np-self { transform: scaleX(-1); }
 .np-cam-wait .np-cam-video { opacity: 0; }
 .np-cam-name {
-  position: absolute; left: 4px; bottom: 4px; max-width: calc(100% - 8px); padding: 1px 6px; border-radius: 6px;
-  background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 11px; font-weight: 600;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  position: absolute; left: 4px; bottom: 4px; max-width: calc(100% - 8px); display: flex; align-items: center; gap: 4px;
+  padding: 1px 6px; border: 0; border-radius: 6px; background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 11px; font-weight: 600; line-height: 1.4;
 }
+.np-cam-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-cam-name svg { width: 11px; height: 11px; flex: none; }
+.np-cam-mic { display: none; color: #ff8a95; }
+.np-cam-muted .np-cam-mic { display: block; }
+button.np-cam-me { cursor: pointer; transition: transform 0.12s, background-color 0.12s; }
+button.np-cam-me:hover { background: rgba(0, 0, 0, 0.8); }
+button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.np-cams-grip {
+  position: absolute; right: 6px; bottom: 6px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px;
+  display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); color: #fff; cursor: nwse-resize; touch-action: none;
+  transition: transform 0.12s, background-color 0.12s;
+}
+.np-cams-grip:hover, .np-resizing .np-cams-grip { background: var(--fill); }
+.np-cams-grip svg { width: 14px; height: 14px; }
+.np-cams-grip:focus-visible { outline: 2px solid #fff; outline-offset: 1px; box-shadow: 0 0 0 4px var(--accent); }
+.np-cams-btn:active, .np-cams-grip:active, button.np-cam-me:active, .np-head-act:active { transform: scale(0.92); }
+
+/* ---- compact panel chrome while cameras are docked in it */
+.np-head-acts { display: none; }
+.np-camdock .np-head { align-items: center; gap: 2px; padding: 8px 8px 4px 14px; }
+.np-camdock .np-title { flex: 1; min-width: 0; }
+.np-camdock .np-brand { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-camdock .np-meta { margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-camdock .np-head-acts { display: flex; gap: 2px; }
+.np-head-act { width: 32px; height: 32px; transition: transform 0.12s, background-color 0.12s; }
+.np-head-act svg { width: 17px; height: 17px; }
+.np-leave-icon:hover { color: var(--bad); }
+.np-camdock .np-close { width: 32px; height: 32px; }
+.np-camdock .np-actions, .np-camdock .np-section-label { display: none; }
+.np-camdock .np-people { gap: 8px; padding: 8px 14px 6px; }
+.np-camdock .np-person { width: auto; }
+.np-camdock .np-pname { display: none; }
+.np-camdock .np-avatar { width: 30px; height: 30px; font-size: 18px; }
+.np-camdock .np-crown { top: -8px; }
+.np-camdock .np-crown svg { width: 12px; height: 12px; }
+.np-camdock .np-mic { width: 16px; height: 16px; right: -4px; bottom: -4px; border-width: 1.5px; }
+.np-camdock .np-mic svg { width: 9px; height: 9px; }
+.np-camdock .np-voice { padding: 0 10px 8px; border-bottom: 0; }
+.np-camdock .np-voice-bar { padding: 5px 8px; }
+.np-camdock .np-voice-bar .np-round { width: 32px; height: 32px; }
+.np-camdock .np-chat { padding: 8px 14px; }
+.np-camdock .np-composer { padding: 6px 12px 10px; }
 
 /* ---- floating reactions over the video (not over the docked chat column) */
 .np-float { position: fixed; left: 0; top: 0; bottom: 0; right: 0; pointer-events: none; overflow: hidden; z-index: 1; }
@@ -306,5 +371,7 @@ button.np-person:focus-visible { outline: none; }
 .np-fly { position: absolute; bottom: 72px; font-size: 44px; will-change: transform, opacity; opacity: 0; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
 
 @media (prefers-reduced-motion: reduce) {
-  .np-toggle, .np-toast, .np-avatar, .np-react-btn, .np-cam-video, .np-cams-btn svg { transition: none; }
+  .np-toggle, .np-toast, .np-avatar, .np-react-btn, .np-cam-video, .np-cam::after, .np-cams-btn, .np-cams-btn svg,
+  .np-cams-grip, button.np-cam-me, .np-head-act { transition: none; }
+  .np-cams-btn:active, .np-cams-grip:active, button.np-cam-me:active, .np-head-act:active { transform: none; }
 }
