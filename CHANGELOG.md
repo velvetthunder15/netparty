@@ -4,6 +4,15 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [1.9.1] - 2026-10-28
+### Changed
+- **Resize the popped-out cameras from any edge or corner**, not only the small grip in the corner. The
+  cursor shows the direction, the opposite edge stays where it was, and tiles stay 16:9. The size is still
+  remembered for the tab, and the corner grip still works with the arrow keys.
+- **Messages sent close together stack**: when the same person sends more lines within a minute of their
+  first one, those lines sit under it without repeating the name and picture, so quick bursts don't fill the
+  chat. Anyone else's message, or a gap of a minute or more, starts a new group with the name and picture.
+
 ## [1.9.0] - 2026-10-28
 ### Added
 - **Cameras docked in the chat**: when anyone's camera is on, the tiles now sit inside the chat panel by default

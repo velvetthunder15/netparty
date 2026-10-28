@@ -2440,7 +2440,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     // ---- camera tiles. Docked (the default): inside the chat panel, a 16:9 grid as big as the
     // panel allows while the chat keeps ~4 lines + the composer (the panel's other chrome gets
     // compact, .np-camdock). Popped out: a floating window over the page, dragged by its bar
-    // (anywhere, also over the chat), resized from its corner (tiles stay 16:9), collapsible.
+    // (anywhere, also over the chat), resized from any edge or corner (tiles stay 16:9), collapsible.
     // While the chat panel is closed, docked cameras float in that window's place (dock = open the chat).
     // Docked/popped, position, width and collapsed are kept per tab in sessionStorage "netpartyCams".
     const camUi = (() => {
@@ -2575,7 +2575,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         bar = el("div", { class: "np-cams-bar" }, moveBtn, camIcon, countEl, el("span", { class: "np-grow" }), collapseBtn, modeBtn);
         body = el("div", { class: "np-cams-body" });
         grip = el("button", { type: "button", class: "np-cams-grip", title: "Resize (drag, or arrow keys)", "aria-label": "Resize the cameras window (arrow keys)" }, svg(ICON.resize));
-        camLayer = el("div", { class: "np-cams np-cams-float", role: "region", "aria-label": "Cameras", hidden: "" }, bar, body, grip);
+        // invisible resize edges all round the floating window (the corner grip stays, for keyboards too)
+        const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((d) => el("div", { class: "np-cams-edge np-cams-edge-" + d, "data-dir": d, "aria-hidden": "true" }));
+        camLayer = el("div", { class: "np-cams np-cams-float", role: "region", "aria-label": "Cameras", hidden: "" }, bar, body, grip, ...edges);
         where = "float";
         // drag the floating window by its bar
         let drag = null;
@@ -2600,22 +2602,29 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         };
         bar.addEventListener("pointerup", end);
         bar.addEventListener("pointercancel", end);
-        // resize from the corner (the width; the height follows so tiles stay 16:9)
+        // resize from any edge or corner: the width changes and the height follows (tiles stay 16:9);
+        // the opposite edge or corner stays where it was
         let rs = null;
-        grip.addEventListener("pointerdown", (e) => {
-          if (e.button !== 0) return;
+        const rsStart = (e, dir, handle) => {
+          if (e.button !== 0 || !floating() || collapsed) return;
           const r = camLayer.getBoundingClientRect();
-          rs = { x: e.clientX, y: e.clientY, w: r.width, k: r.width / r.height, id: e.pointerId };
-          grip.setPointerCapture(e.pointerId);
+          rs = { x: e.clientX, y: e.clientY, w: r.width, k: r.width / r.height, l: r.left, t: r.top, r: r.right, b: r.bottom, dir, id: e.pointerId, handle };
+          handle.setPointerCapture(e.pointerId);
           camLayer.classList.add("np-resizing");
           e.preventDefault();
-        });
-        grip.addEventListener("pointermove", (e) => {
+        };
+        const rsMove = (e) => {
           if (!rs || e.pointerId !== rs.id) return;
-          const dx = e.clientX - rs.x, dy = (e.clientY - rs.y) * rs.k;
-          fw = Math.round(Math.max(MIN_W, rs.w + (Math.abs(dx) >= Math.abs(dy) ? dx : dy)));
+          const d = rs.dir;
+          const dx = (d.includes("e") ? 1 : d.includes("w") ? -1 : 0) * (e.clientX - rs.x);
+          const dy = (d.includes("s") ? 1 : d.includes("n") ? -1 : 0) * (e.clientY - rs.y) * rs.k;
+          const grow = !d.match(/[ns]/) ? dx : !d.match(/[ew]/) ? dy : Math.abs(dx) >= Math.abs(dy) ? dx : dy;
+          fw = Math.round(Math.max(MIN_W, rs.w + grow));
           layout();
-        });
+          const r = camLayer.getBoundingClientRect();
+          pos = { x: d.includes("w") ? rs.r - r.width : rs.l, y: d.includes("n") ? rs.b - r.height : rs.t };
+          clamp();
+        };
         const rsEnd = (e) => {
           if (!rs || e.pointerId !== rs.id) return;
           rs = null;
@@ -2623,8 +2632,12 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           fw = Math.round(camLayer.getBoundingClientRect().width); // what it settled at on this screen
           save();
         };
-        grip.addEventListener("pointerup", rsEnd);
-        grip.addEventListener("pointercancel", rsEnd);
+        for (const h of [grip, ...edges]) {
+          h.addEventListener("pointerdown", (e) => rsStart(e, h === grip ? "se" : h.dataset.dir, h));
+          h.addEventListener("pointermove", rsMove);
+          h.addEventListener("pointerup", rsEnd);
+          h.addEventListener("pointercancel", rsEnd);
+        }
         // clicks and drags on the tiles must not reach the player (pause, seek, fullscreen)
         for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"]) camLayer.addEventListener(evt, (e) => e.stopPropagation());
         addEventListener("resize", relayout);
@@ -3111,11 +3124,15 @@ html.np-docked [data-np-shrink] {
         body = el("div", { class: "np-bubble np-bubble-gif" }, img, el("span", { class: "np-time" }, time));
       } else if (text) body = el("div", { class: "np-bubble" }, ...linkify(text), el("span", { class: "np-time" }, time));
       else return;
-      // everyone's lines, ours included, carry the sender's picture and name (ours on the right)
+      // everyone's lines, ours included, carry the sender's picture and name (ours on the right);
+      // more lines from the same person within a minute stack under the first without repeating them
+      const ts = Number(d.ts) || Date.now();
+      const prev = chatEl?.lastElementChild;
+      const cont = !!prev && prev.classList.contains("np-msg") && prev.dataset.uid === d.id && ts - Number(prev.dataset.ts) >= -5000 && ts - Number(prev.dataset.ts) < 60000;
       addLine(
         el(
           "div",
-          { class: "np-msg" + (mine ? " np-mine" : "") },
+          { class: "np-msg" + (mine ? " np-mine" : "") + (cont ? " np-cont" : ""), "data-uid": d.id, "data-ts": String(cont ? prev.dataset.ts : ts) },
           el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
           el("div", { class: "np-mcol" }, el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), body),
         ),

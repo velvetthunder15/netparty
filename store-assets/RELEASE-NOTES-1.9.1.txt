@@ -1,0 +1,13 @@
+NetParty 1.9.1 - release notes ("What's new")
+
+=== Edge Add-ons / Opera (under 500 characters) ===
+- Resize the popped-out camera window from any edge or corner.
+- Quick messages stack: lines you send within a minute show your name and picture only once.
+
+=== Firefox Add-ons (AMO) ===
+What's new in 1.9.1
+
+- The popped-out camera window can now be resized from any edge or corner, not just the small corner grip. Tiles stay 16:9 and the size is remembered for the tab.
+- Messages sent close together stack: when someone sends several lines within a minute, their name and picture show once at the top instead of on every line.
+
+Nothing changes about what NetParty sends or stores.

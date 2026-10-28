@@ -76,6 +76,31 @@ await hp.keyboard.type("after rename");
 await hp.keyboard.press("Enter");
 check("new own line uses the new name", !!(await until(async () => (await lines(hp)).some((x) => x.text === "after rename" && x.mine && x.name === "Chirag R" && x.pic === "🍕"), 5000)));
 
+// ---------------------------------------------------------------- lines within a minute stack (no repeated name/picture)
+for (const t of ["burst one", "burst two"]) {
+  await hp.locator(".np-input").click();
+  await hp.keyboard.type(t);
+  await hp.keyboard.press("Enter");
+  await sleep(150);
+}
+const shown = (p) => shadow(p, (r) => { return [...r.querySelectorAll(".np-msg")].map((m) => ({ text: m.querySelector(".np-bubble").firstChild.textContent, cont: m.classList.contains("np-cont"), nameShown: getComputedStyle(m.querySelector(".np-author")).display !== "none", picShown: getComputedStyle(m.querySelector(".np-mav")).visibility !== "hidden", h: Math.round(m.getBoundingClientRect().height) })); });
+const pick = (l, ...t) => t.map((x) => l.find((y) => y.text === x));
+const [ar, b1, b2] = pick(await until(async () => { const l = await shown(hp); return l.some((x) => x.text === "burst two") && l; }, 5000), "after rename", "burst one", "burst two");
+check("first line of a burst keeps your name and picture", ar && !ar.cont && ar.nameShown && ar.picShown, JSON.stringify(ar));
+check("lines sent within a minute stack: no repeated name or picture", b1?.cont && b2?.cont && !b1.nameShown && !b1.picShown && !b2.nameShown && !b2.picShown, JSON.stringify([b1, b2]));
+check("stacked lines are shorter than the first (no name row)", b1.h < ar.h, JSON.stringify([ar.h, b1.h]));
+const [gar, gb1, gb2] = pick(await until(async () => { const l = await shown(gp); return l.some((x) => x.text === "burst two") && l; }, 5000), "after rename", "burst one", "burst two");
+check("the guest sees the same stacking", gar && !gar.cont && gar.nameShown && gb1?.cont && gb2?.cont && !gb1.nameShown && !gb2.picShown, JSON.stringify([gar, gb1, gb2]));
+await gp.locator(".np-input").click();
+await gp.keyboard.type("guest cuts in");
+await gp.keyboard.press("Enter");
+await sleep(300);
+await hp.locator(".np-input").click();
+await hp.keyboard.type("after the guest");
+await hp.keyboard.press("Enter");
+const [gCut, ag] = pick(await until(async () => { const l = await shown(hp); return l.some((x) => x.text === "after the guest") && l; }, 5000), "guest cuts in", "after the guest");
+check("someone else's line breaks the stack: both show name and picture again", gCut && !gCut.cont && gCut.nameShown && ag && !ag.cont && ag.nameShown && ag.picShown, JSON.stringify([gCut, ag]));
+
 // ---------------------------------------------------------------- theme
 const panelBg = (p) => shadow(p, (r) => { return getComputedStyle(r.querySelector(".np-panel")).backgroundColor; });
 const DARK = "rgb(20, 20, 24)", LIGHT = "rgb(255, 255, 255)";
@@ -378,6 +403,29 @@ await hp.keyboard.press("ArrowDown");
 await hp.keyboard.press("ArrowRight");
 const k2 = (await geom(hp)).cam;
 check("keyboard: ↓→ on the move handle moves it 24 px each way", Math.abs(k2.l - k1.l - 24) <= 1 && Math.abs(k2.t - k1.t - 24) <= 1, JSON.stringify([k1, k2]));
+// resize from any edge or corner: the opposite side stays put
+const edgeAt = (dir) => shadow(hp, (r, a) => { const b = r.querySelector(".np-cams-edge-" + a).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, cur: getComputedStyle(r.querySelector(".np-cams-edge-" + a)).cursor }; }, dir);
+const dragEdge = async (dir, dx, dy) => { const e = await edgeAt(dir); await hp.mouse.move(e.x, e.y); await hp.mouse.down(); await hp.mouse.move(e.x + dx, e.y + dy, { steps: 8 }); await hp.mouse.up(); return e; };
+// park it mid-screen first so every edge has room
+await hp.locator(".np-cams-move").focus();
+for (let i = 0; i < 6; i++) await hp.keyboard.press("Shift+ArrowRight");
+for (let i = 0; i < 2; i++) await hp.keyboard.press("Shift+ArrowDown");
+const e0 = await geom(hp);
+const ew = await dragEdge("w", -100, 0);
+const e1 = await geom(hp);
+check("left edge: drag out to widen, the right side stays put, tiles stay 16:9", ew.cur === "ew-resize" && e1.cam.w - e0.cam.w > 80 && Math.abs(e1.cam.l + e1.cam.w - (e0.cam.l + e0.cam.w)) <= 2 && e1.tiles.every(r169), JSON.stringify([e0.cam, e1.cam]));
+const en = await dragEdge("n", 0, 40);
+const e2 = await geom(hp);
+check("top edge: drag down to shrink, the bottom stays put", en.cur === "ns-resize" && e2.cam.w < e1.cam.w - 40 && Math.abs(e2.cam.t + e2.cam.h - (e1.cam.t + e1.cam.h)) <= 2 && e2.tiles.every(r169), JSON.stringify([e1.cam, e2.cam]));
+const enw = await dragEdge("nw", -80, -45);
+const e3 = await geom(hp);
+check("top-left corner: grows up and left, the bottom-right corner stays put", enw.cur === "nwse-resize" && e3.cam.w > e2.cam.w + 50 && Math.abs(e3.cam.l + e3.cam.w - (e2.cam.l + e2.cam.w)) <= 2 && Math.abs(e3.cam.t + e3.cam.h - (e2.cam.t + e2.cam.h)) <= 2, JSON.stringify([e2.cam, e3.cam]));
+const ee = await dragEdge("e", 60, 0);
+const e4 = await geom(hp);
+check("right edge and bottom-right corner resize too", ee.cur === "ew-resize" && e4.cam.w > e3.cam.w + 40 && Math.abs(e4.cam.l - e3.cam.l) <= 2, JSON.stringify([e3.cam, e4.cam]));
+check("edge resizes are remembered", await hp.evaluate(() => JSON.parse(sessionStorage.getItem("netpartyCams") || "{}").w) === Math.round(e4.cam.w) || Math.abs(await hp.evaluate(() => JSON.parse(sessionStorage.getItem("netpartyCams") || "{}").w) - e4.cam.w) <= 1);
+check("resizing didn't pause/play the video", (await hp.evaluate(() => document.querySelector("video").paused)) === vBefore);
+await hp.screenshot({ path: "v19-resized.png" });
 check("arrow keys never reached the site's hotkeys", (await hp.evaluate(() => document.querySelector("video").paused)) === vBefore);
 const kfocus = await shadow(hp, (r) => { const ae = r.activeElement; return ae && getComputedStyle(ae).outlineStyle !== "none" && ae.matches(":focus-visible"); });
 check("keyboard focus is visible on the camera window controls", kfocus);

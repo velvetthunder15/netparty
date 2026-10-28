@@ -302,6 +302,11 @@ No Teleparty or REA code is included; NetParty is an original implementation.
 - The server stores only ciphertext, and an idle saved party is deleted within 6 hours (checked every 15 min).
 - The invite page names who invited you by decrypting it in your browser, and refuses links without a valid key.
 
+## v1.9.1
+
+- The popped-out camera window resizes from **any edge or corner**.
+- Lines one person sends within a minute **stack** under one name and picture.
+
 ## v1.9.0
 
 - **Cameras docked in the chat panel** by default: big 16:9 tiles (up to ~62% of the panel), chat keeps 4+ lines,
