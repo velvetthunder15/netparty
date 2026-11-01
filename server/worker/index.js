@@ -9,9 +9,9 @@ import sitePrivacy from "./site/privacy.html";
 import siteCss from "./site/hark.css";
 import siteHeroCss from "./site/hark-hero.css";
 import siteJs from "./site/hark.js.txt";
-import imgSpace from "./site/still-space.jpg";
-import imgNeon from "./site/still-neon.jpg";
-import imgJio from "./site/jiohotstar-star.png";
+import imgSpace from "./site/still-space.webp";
+import imgNeon from "./site/still-neon.webp";
+import imgJio from "./site/jiohotstar-star.webp";
 import svgNetflix from "./site/netflix.svg";
 import svgYoutube from "./site/youtube.svg";
 import svgPrime from "./site/primevideo.svg";
@@ -19,6 +19,9 @@ import imgOg from "./site/og.jpg";
 import imgIcon512 from "./site/icon-512.png";
 import imgFavicon48 from "./site/favicon-48.png";
 import imgAppleTouch from "./site/apple-touch-icon.png";
+import fontInter from "./site/inter-latin.woff2";
+import fontMono from "./site/jbmono-latin.woff2";
+import fontsLicense from "./site/fonts-license.txt";
 
 const HTML = "text/html; charset=utf-8";
 // link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
@@ -62,11 +65,11 @@ function withSeo(html) {
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${SEO_TITLE}</title>`)
     .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${SEO_DESC}" />`)
     .replace(/<meta property="og:title"[^>]*>/i, `<meta property="og:title" content="${SEO_TITLE}" />`)
-    .replace('<img src="netflix.svg" alt=""', '<img src="netflix.svg" alt="Netflix"')
-    .replace('<img src="jiohotstar-star.png" alt=""', '<img src="jiohotstar-star.png" alt="JioHotstar"')
-    .replace('<img src="youtube.svg" alt=""', '<img src="youtube.svg" alt="YouTube"')
-    .replace('<img src="primevideo.svg" alt=""', '<img src="primevideo.svg" alt="Prime Video"')
-    .replace('<img src="still-neon.jpg" alt=""', '<img src="still-neon.jpg" alt="Friends chatting beside a synced video in NetParty"')
+    .replace('<img src="netflix.svg" width="22" height="22" alt=""', '<img src="netflix.svg" width="22" height="22" alt="Netflix"')
+    .replace('<img src="jiohotstar-star.webp" width="64" height="64" alt=""', '<img src="jiohotstar-star.webp" width="64" height="64" alt="JioHotstar"')
+    .replace('<img src="youtube.svg" width="22" height="22" alt=""', '<img src="youtube.svg" width="22" height="22" alt="YouTube"')
+    .replace('<img src="primevideo.svg" width="27" height="22" alt=""', '<img src="primevideo.svg" width="27" height="22" alt="Prime Video"')
+    .replace('<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt=""', '<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
 const withPrivacySeo = (html) => /rel="canonical"/.test(html) ? html : html.replace(/<\/head>/i,
@@ -75,7 +78,7 @@ const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url><loc>https://netparty.tech/</loc><lastmod>2026-11-01</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-10-27</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-10-28</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
 const siteIndexOg = withSeo(withOg(siteIndex));
@@ -92,13 +95,16 @@ const SITE = {
   "/hark.css": [siteCss, "text/css; charset=utf-8"],
   "/hark-hero.css": [siteHeroCss, "text/css; charset=utf-8"],
   "/hark.js": [siteJs, "text/javascript; charset=utf-8"],
-  "/still-space.jpg": [imgSpace, "image/jpeg"],
-  "/still-neon.jpg": [imgNeon, "image/jpeg"],
-  "/jiohotstar-star.png": [imgJio, "image/png"],
+  "/still-space.webp": [imgSpace, "image/webp"],
+  "/still-neon.webp": [imgNeon, "image/webp"],
+  "/jiohotstar-star.webp": [imgJio, "image/webp"],
   "/netflix.svg": [svgNetflix, "image/svg+xml"],
   "/youtube.svg": [svgYoutube, "image/svg+xml"],
   "/primevideo.svg": [svgPrime, "image/svg+xml"],
   "/og.jpg": [imgOg, "image/jpeg"],
+  "/inter-latin.woff2": [fontInter, "font/woff2"],
+  "/jbmono-latin.woff2": [fontMono, "font/woff2"],
+  "/fonts-license.txt": [fontsLicense, "text/plain; charset=utf-8"],
 };
 
 // Security headers for the landing site. Inline <script> blocks are allowed only by
@@ -124,8 +130,8 @@ async function cspFor(html) {
   const csp = [
     "default-src 'none'",
     `script-src 'self' ${hashes.join(" ")}`.trim(),
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data:",
     "connect-src 'self'",
     "base-uri 'none'",
@@ -199,7 +205,7 @@ export class PartyHub {
     if (url.pathname === "/health")
       return Response.json({ ok: true, rooms: this.hub.rooms.size });
     if (request.headers.get("Upgrade") !== "websocket")
-      return new Response("NetParty sync server. Connect over WebSocket.\n");
+      return new Response("Not found.\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", "x-robots-tag": "noindex" } });
 
     const [clientSide, serverSide] = Object.values(new WebSocketPair());
     serverSide.accept();
@@ -248,13 +254,19 @@ export default {
     if (url.hostname === "www.netparty.tech")
       return Response.redirect("https://netparty.tech" + url.pathname + url.search, 301);
     const isWs = request.headers.get("Upgrade") === "websocket";
+    // one canonical origin: plain http goes to https in a single hop
+    if (!isWs && url.protocol === "http:" && /(^|\.)netparty\.tech$/.test(url.hostname))
+      return Response.redirect("https://netparty.tech" + url.pathname + url.search, 301);
+    // old image names (pre-WebP) point at the new files
+    const OLD_IMG = { "/still-space.jpg": "/still-space.webp", "/still-neon.jpg": "/still-neon.webp", "/jiohotstar-star.png": "/jiohotstar-star.webp" };
+    if (!isWs && OLD_IMG[url.pathname]) return Response.redirect("https://netparty.tech" + OLD_IMG[url.pathname], 301);
     if (!isWs && url.pathname.startsWith("/api/gifs/")) return gifs(request, env, ctx, url);
     if (!isWs && (url.pathname === "/index.html" || url.pathname === "/privacy.html" || url.pathname === "/privacy/"))
       return Response.redirect("https://netparty.tech" + (url.pathname === "/index.html" ? "/" : "/privacy") + url.search, 301);
     if (!isWs && (request.method === "GET" || request.method === "HEAD")) {
       const page = SITE[url.pathname];
       if (page) {
-        const headers = { "content-type": page[1], "cache-control": page[1] === HTML ? "public, max-age=300" : "public, max-age=86400" };
+        const headers = { "content-type": page[1], "cache-control": page[1] === HTML ? "public, max-age=300" : page[1] === "font/woff2" ? "public, max-age=31536000, immutable" : "public, max-age=86400" };
         if (page[1] === HTML) headers["content-security-policy"] = await cspFor(page[0]);
         if (page[1] === "image/svg+xml") headers["content-security-policy"] = "default-src 'none'; style-src 'unsafe-inline'";
         return withSecurity(new Response(request.method === "HEAD" ? null : page[0], { headers }));

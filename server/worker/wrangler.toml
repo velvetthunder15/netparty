@@ -16,7 +16,7 @@ new_sqlite_classes = ["PartyHub"]
 # served only through a live party's invite page (see index.js)
 [[rules]]
 type = "Data"
-globs = ["**/*.zip", "**/*.jpg", "**/*.png"]
+globs = ["**/*.zip", "**/*.jpg", "**/*.png", "**/*.webp", "**/*.woff2"]
 fallthrough = false
 
 [[rules]]

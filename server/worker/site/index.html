@@ -11,15 +11,15 @@
     <meta property="og:url" content="https://netparty.tech/" />
     <meta name="theme-color" content="#0B0A10" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237C5CFF'/%3E%3Cstop offset='1' stop-color='%23B05CFF'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M4 6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-7l-5 4v-4.3A4 4 0 0 1 4 14z' fill='url(%23g)' opacity='.55'/%3E%3Cpath d='M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z' fill='url(%23g)'/%3E%3Cpath d='M17 14.5v7l6-3.5z' fill='%23fff'/%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap"
-    />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <link rel="preload" href="/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      /* self-hosted fonts (SIL Open Font License 1.1, see /fonts-license.txt) */
+      @font-face { font-family: "Inter"; font-style: normal; font-weight: 400 800; font-display: swap; src: url(/inter-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+      /* metric-matched fallback so the swap to Inter doesn't move the layout */
+      @font-face { font-family: "Inter Fallback"; src: local("Arial"), local("Helvetica"), local("Liberation Sans"), local("Roboto"); ascent-override: 90.44%; descent-override: 22.52%; line-gap-override: 0%; size-adjust: 107.12%; }
+      @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap; src: url(/jbmono-latin.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+    </style>
     <link rel="stylesheet" href="hark.css" />
-    <link rel="stylesheet" href="hark-hero.css" />
     <script>document.documentElement.classList.add("x-js");</script>
     <style>
       :root {
@@ -28,7 +28,7 @@
         --x-grad: linear-gradient(135deg, #7c5cff, #b05cff);
         --x-btn: linear-gradient(135deg, #6a48f0, #9645ec);
         --x-btn-hover: linear-gradient(135deg, #7552f6, #9a46ee);
-        --x-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --x-inter: "Inter", "Inter Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
         --x-mono: "JetBrains Mono", ui-monospace, monospace;
         --x-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 20px 50px -20px rgba(0,0,0,.7);
         color-scheme: dark;
@@ -102,7 +102,7 @@
       .x-corner { position: absolute; bottom: 14%; width: 62vw; height: 62vw; max-width: 900px; max-height: 900px; border-radius: 50%; background: radial-gradient(closest-side, rgba(124,92,255,.16), rgba(40,20,90,.32) 55%, transparent); filter: blur(30px); }
       .x-corner--l { left: -26vw; } .x-corner--r { right: -26vw; background: radial-gradient(closest-side, rgba(176,92,255,.12), rgba(50,18,90,.3) 55%, transparent); }
       .x-grain {
-        position: absolute; inset: -40%; opacity: .06; will-change: transform; animation: x-grain 1s steps(6) infinite;
+        position: absolute; inset: -320px; opacity: .06; will-change: transform; animation: x-grain 1s steps(6) infinite;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
       }
       @keyframes x-grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -4%); } 60% { transform: translate(-4%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(-1%, -3%); } }
@@ -623,17 +623,17 @@
               </div>
             </div>
           </div>
-          <p class="x-h1 x-rv">Watch together, perfectly <span class="x-grad-text">in sync.</span></p>
+          <p class="x-h1 x-rv">Watch together, <span class="x-grad-text">in sync.</span></p>
           <p class="x-lead x-rv">Start a party from any title, send one link, and everyone's play, pause and seek stay locked together, with chat and voice right beside the video.</p>
           <ul class="x-works x-rv" aria-label="Works on">
             <li class="x-works__lab" aria-hidden="true">Works on</li>
-            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" alt="" /></span>Netflix</li>
-            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.png" alt="" /></span>JioHotstar</li>
-            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" alt="" /></span>YouTube</li>
-            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="primevideo.svg" alt="" /></span>Prime Video</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" width="22" height="22" alt="" /></span>Netflix</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.webp" width="64" height="64" alt="" /></span>JioHotstar</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" width="22" height="22" alt="" /></span>YouTube</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="primevideo.svg" width="27" height="22" alt="" /></span>Prime Video</li>
           </ul>
           <div class="x-cta x-rv">
-            <a class="x-btn x-btn--primary" href="#install" data-install>Add to browser — it's free</a>
+            <a class="x-btn x-btn--primary" href="#install" data-install>Add to browser, free</a>
             <a class="x-btn x-btn--ghost" href="#how">See how it works</a>
           </div>
           <p class="x-fine x-rv">No account. No sign-up. Everyone uses their own streaming subscription.</p>
@@ -647,7 +647,7 @@
               </div>
               <div class="x-split">
                 <div class="x-player" id="x-player">
-                  <img src="still-space.jpg" alt="Film still: a cinematic scene playing in the video player" />
+                  <img src="still-space.webp" width="1100" height="614" fetchpriority="high" decoding="async" alt="Film still: a cinematic scene playing in the video player" />
                   <span class="x-paused-tag"><span class="x-live" aria-hidden="true"></span>Paused for everyone</span>
                   <span class="x-react x-react--1" aria-hidden="true">😂</span>
                   <span class="x-react x-react--2" aria-hidden="true">🥰</span>
@@ -740,7 +740,7 @@
         <section class="x-sec" id="features" aria-labelledby="feat-title">
           <div class="x-sec__head x-rv">
             <p class="x-eyebrow">Features</p>
-            <h2 class="x-h2" id="feat-title">Everything a movie night needs. Nothing it doesn't.</h2>
+            <h2 class="x-h2" id="feat-title">Sync, chat, voice and video in one panel.</h2>
           </div>
           <div class="x-bento">
             <article class="x-card x-feat x-feat--wide x-rv">
@@ -751,8 +751,8 @@
                   <p class="x-drift x-mono">drift <span class="x-drift__a">−1.4s</span> → <span class="x-ok">0.0s</span></p>
                 </div>
               </div>
-              <h3>Frame-tight sync</h3>
-              <p>A shared party clock keeps everyone within a couple of seconds, and quietly corrects drift while you watch.</p>
+              <h3>Playback sync</h3>
+              <p>A shared party clock keeps everyone within a couple of seconds and corrects drift while you watch.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -776,12 +776,12 @@
                 </div>
               </div>
               <h3>End-to-end encrypted chat</h3>
-              <p>Only your party can read your chat. Not even our server.</p>
+              <p>Only people with your invite link can read the chat. Our server can't.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
                 <div class="x-dock">
-                  <div class="x-dock__player"><img src="still-neon.jpg" alt="" /></div>
+                  <div class="x-dock__player"><img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="" /></div>
                   <div class="x-dock__panel"><i></i><i></i><i class="is-me"></i><i></i></div>
                 </div>
               </div>
@@ -823,7 +823,7 @@
                   <p class="x-binge__line"><span class="x-live"></span>Party moved to new episode</p>
                 </div>
               </div>
-              <h3>Binge-proof</h3>
+              <h3>Next episode, together</h3>
               <p>Next episode? The whole party moves with you. Reload the page and you keep your seat and the chat.</p>
             </article>
             <article class="x-card x-feat x-feat--wide x-rv">
@@ -842,7 +842,7 @@
         <section class="x-sec" id="faq" aria-labelledby="faq-title">
           <div class="x-sec__head x-rv">
             <p class="x-eyebrow">FAQ</p>
-            <h2 class="x-h2" id="faq-title">Questions, answered.</h2>
+            <h2 class="x-h2" id="faq-title">Watch party FAQ</h2>
           </div>
           <div class="x-faq">
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
@@ -858,7 +858,7 @@
 
         <section class="x-sec" id="install" aria-labelledby="install-title">
           <div class="x-band x-rv">
-            <h2 class="x-h2" id="install-title">Your next movie night <span class="x-grad-text">starts here.</span></h2>
+            <h2 class="x-h2" id="install-title">Install <span class="x-grad-text">NetParty</span></h2>
             <div class="x-inst">
               <div class="x-tabs" role="tablist" aria-label="Choose your browser">
                 <button type="button" role="tab" id="x-tab-chrome" aria-controls="x-pane-chrome" aria-selected="true" tabindex="0" data-browser="chrome"><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Chrome</span></button>
@@ -869,7 +869,7 @@
 
               <div class="x-pane" role="tabpanel" id="x-pane-chrome" aria-labelledby="x-tab-chrome" tabindex="0">
                 <p class="x-pane__name">Chrome</p>
-                <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Download for Chrome<span class="x-free"> — it's free</span></span></a>
+                <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Download for Chrome<span class="x-free"> (free)</span></span></a>
                 <p><span class="x-ver">Version 1.9.2</span></p>
                 <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
                 <ol class="x-beta">
@@ -917,7 +917,7 @@
         <div class="x-foot__top">
           <div>
             <a class="x-logo" href="#top"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
-            <p class="x-foot__tag">Free watch parties, for everyone.</p>
+            <p class="x-foot__tag">Free watch parties for Netflix, JioHotstar, YouTube and Prime Video.</p>
           </div>
           <nav class="x-foot__links" aria-label="Footer">
             <a href="#how">How it works</a>
