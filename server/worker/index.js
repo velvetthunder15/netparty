@@ -74,7 +74,7 @@ const withPrivacySeo = (html) => /rel="canonical"/.test(html) ? html : html.repl
 const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n\nSitemap: https://netparty.tech/sitemap.xml\n";
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://netparty.tech/</loc><lastmod>2026-10-27</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://netparty.tech/</loc><lastmod>2026-11-01</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
 <url><loc>https://netparty.tech/privacy</loc><lastmod>2026-10-27</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
@@ -142,7 +142,7 @@ function withSecurity(res, extra = {}) {
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h, webSocket: res.webSocket });
 }
 
-// invite page browser line: point Edge users at the store listing (Firefox/Opera not yet)
+// invite page browser line: point Edge users at the store listing (Firefox and Edge are on their stores; Opera not yet)
 export class PartyHub {
   constructor(state, env) {
     this.state = state;

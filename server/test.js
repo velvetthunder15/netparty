@@ -401,7 +401,7 @@ ok("host-only control lock");
   const html = await (await fetch(`${HTTP}/j/${pv.room}`)).text();
   assert.match(html, /Join on Prime Video/);
   assert.match(html, /own Prime Video account/);
-  assert.match(html, /NetParty extension \(1\.8 or newer\) in Chrome or Brave, or in Edge from the <a href="https:\/\/microsoftedge\.microsoft\.com\/addons\/detail\/netparty\/[a-z]+"[^>]*>Edge Add-ons store<\/a>\. Firefox and Opera are coming soon\./);
+  assert.match(html, /NetParty extension \(1\.8 or newer\) in Chrome or Brave, in Firefox from <a href="https:\/\/addons\.mozilla\.org\/en-US\/firefox\/addon\/netparty\/"[^>]*>Firefox Add-ons<\/a>, or in Edge from the <a href="https:\/\/microsoftedge\.microsoft\.com\/addons\/detail\/netparty\/[a-z]+"[^>]*>Edge Add-ons store<\/a>\. Opera is coming soon\./);
   assert.ok(html.includes(`https://www.primevideo.com/detail/0ABCDEFGH12345?autoplay=1&amp;npParty=${pv.room}`));
   // the Amazon store form keeps its own store (accounts are per store)
   await pv.req("state", { playing: true, position: 1000, at: Date.now(), videoId: "pv:www.amazon.co.uk/gp/video/detail/B0ABCDEF12", reason: "episode" });

@@ -659,6 +659,7 @@ export const siteFor = (videoId) => {
 };
 
 export const EDGE_STORE = "https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki";
+export const FIREFOX_STORE = "https://addons.mozilla.org/en-US/firefox/addon/netparty/";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // The invite page's only script. A constant (its SHA-256 is pinned in the page's CSP), so
@@ -741,7 +742,7 @@ export function joinPage(room, code, { hasDownload = false } = {}) {
 <a class="btn" id="go" hidden href="${esc(watch)}" data-watch="${esc(watch)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Join on ${site}</a>
 <noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party's encrypted chat with the key in your invite link.</p></noscript>
 <p class="note">🔒 Chat is end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
-<p class="note">${site === "YouTube" ? "You need" : `You need your own ${site} account and`} the NetParty extension (${site === "Prime Video" ? "1.8" : "1.7"} or newer) in Chrome or Brave, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Firefox and Opera are coming soon.</p>
+<p class="note">${site === "YouTube" ? "You need" : `You need your own ${site} account and`} the NetParty extension (${site === "Prime Video" ? "1.8" : "1.7"} or newer) in Chrome or Brave, in Firefox from <a href="${FIREFOX_STORE}" target="_blank" rel="noopener">Firefox Add-ons</a>, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Opera is coming soon.</p>
 <details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>
 <ol>
 ${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty</a> and unzip it.</li>` : `<li>Ask your friend to send you the NetParty zip, then unzip it.</li>`}

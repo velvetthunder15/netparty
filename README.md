@@ -1,6 +1,6 @@
 # NetParty — watch Netflix, JioHotstar, YouTube and Prime Video together
 
-A Chrome extension (also Edge, Brave; Firefox build in `scripts/`) + tiny sync server. Everyone in the party
+A Chrome extension (also Edge, Brave, and Firefox via [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/netparty/), built by `scripts/build-firefox.mjs`) + tiny sync server. Everyone in the party
 needs the extension and, for Netflix, JioHotstar and Prime Video, their own account on the service.
 
 Supported:
