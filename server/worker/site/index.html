@@ -497,6 +497,11 @@
       .x-foot__links a { color: var(--x-mute); text-decoration: none; font-size: 14px; padding: 0 10px; min-height: 44px; display: inline-flex; align-items: center; }
       @media (hover: hover) { .x-foot__links a:hover { color: var(--x-text); } }
       .x-foot__links a.x-gh { padding: 0; justify-content: center; margin-left: 4px; }
+      .x-bmc { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #FFDD00; color: #0d0c12; font-weight: 600; font-size: 14px; text-decoration: none; -webkit-tap-highlight-color: transparent; transition: filter .2s, scale .15s; }
+      .x-bmc svg { width: 18px; height: 18px; flex: none; }
+      @media (hover: hover) { .x-bmc:hover { filter: brightness(1.06); } }
+      .x-bmc:active { scale: .96; filter: brightness(.92); }
+      .x-bmc:focus-visible { outline: 2px solid #B05CFF; outline-offset: 3px; }
       .x-foot__legal { color: #918da3; font-size: 12px; }
 
       /* desktop */
@@ -918,6 +923,7 @@
           <div>
             <a class="x-logo" href="#top"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
             <p class="x-foot__tag">Free watch parties for Netflix, JioHotstar, YouTube and Prime Video.</p>
+            <a class="x-bmc" href="https://buymeacoffee.com/chiragrasal" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17" /><path d="M8 2.5c-.6.8-.6 1.7 0 2.5M12 2.5c-.6.8-.6 1.7 0 2.5" /><path d="M5 21h11" /></svg>Buy me a coffee</a>
           </div>
           <nav class="x-foot__links" aria-label="Footer">
             <a href="#how">How it works</a>
