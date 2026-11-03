@@ -18,6 +18,10 @@ import svgPrime from "./site/primevideo.svg";
 import imgOg from "./site/og.jpg";
 import imgIcon512 from "./site/icon-512.png";
 import imgFavicon48 from "./site/favicon-48.png";
+import imgFavicon96 from "./site/favicon-96.png";
+import imgFavicon192 from "./site/favicon-192.png";
+import svgFavicon from "./site/favicon.svg";
+import imgOgSquare from "./site/og-square.jpg";
 import imgAppleTouch from "./site/apple-touch-icon.png";
 import fontInter from "./site/inter-latin.woff2";
 import fontMono from "./site/jbmono-latin.woff2";
@@ -41,12 +45,14 @@ function withSeo(html) {
   const faq = [...html.matchAll(/<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/gi)]
     .map((m) => ({ "@type": "Question", name: stripTags(m[1]), acceptedAnswer: { "@type": "Answer", text: stripTags(m[2]) } }));
   const graph = [
-    { "@type": "WebSite", "@id": "https://netparty.tech/#website", url: "https://netparty.tech/", name: "NetParty", inLanguage: "en" },
+    { "@type": "WebSite", "@id": "https://netparty.tech/#website", url: "https://netparty.tech/", name: "NetParty", alternateName: ["NetParty Watch Party", "NetParty extension"], inLanguage: "en" },
+    { "@type": "WebPage", "@id": "https://netparty.tech/#webpage", url: "https://netparty.tech/", name: SEO_TITLE, isPartOf: { "@id": "https://netparty.tech/#website" },
+      primaryImageOfPage: { "@type": "ImageObject", url: "https://netparty.tech/og.jpg", width: 1200, height: 630 } },
     { "@type": "Organization", "@id": "https://netparty.tech/#org", name: "NetParty", url: "https://netparty.tech/",
       logo: "https://netparty.tech/icon-512.png", email: "support@netparty.tech", sameAs: ["https://github.com/velvetthunder15/netparty"] },
     { "@type": "SoftwareApplication", name: "NetParty", url: "https://netparty.tech/", description: SEO_DESC,
       applicationCategory: "BrowserApplication", operatingSystem: "Windows, macOS, Linux, ChromeOS",
-      image: "https://netparty.tech/og.jpg", publisher: { "@id": "https://netparty.tech/#org" },
+      image: ["https://netparty.tech/og.jpg", "https://netparty.tech/og-square.jpg"], publisher: { "@id": "https://netparty.tech/#org" },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
       featureList: "Synced play, pause and seek; end-to-end encrypted chat; voice and video chat; emoji reactions; GIFs; host controls",
       license: "https://opensource.org/licenses/MIT" },
@@ -57,11 +63,16 @@ function withSeo(html) {
 <meta name="robots" content="index, follow, max-image-preview:large" />
 <meta property="og:site_name" content="NetParty" /><meta property="og:locale" content="en_US" />
 <meta name="twitter:title" content="${SEO_TITLE}" /><meta name="twitter:description" content="${SEO_DESC}" />
-<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+<meta name="application-name" content="NetParty" /><meta name="apple-mobile-web-app-title" content="NetParty" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <script type="application/ld+json">${ld}</script>
 `;
   return html
+    .replace(/<link rel="icon"[^>]*>\s*/gi, "")
     .replace(/<title>[\s\S]*?<\/title>/i, `<title>${SEO_TITLE}</title>`)
     .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${SEO_DESC}" />`)
     .replace(/<meta property="og:title"[^>]*>/i, `<meta property="og:title" content="${SEO_TITLE}" />`)
@@ -72,12 +83,18 @@ function withSeo(html) {
     .replace('<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt=""', '<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
-const withPrivacySeo = (html) => /rel="canonical"/.test(html) ? html : html.replace(/<\/head>/i,
-  `<link rel="canonical" href="https://netparty.tech/privacy" /><link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />\n</head>`);
+const ICON_LINKS = `<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+`;
+const withPrivacySeo = (html) => html.replace(/<link rel="icon"[^>]*>\s*/gi, "").replace(/<\/head>/i,
+  (/rel="canonical"/.test(html) ? "" : `<link rel="canonical" href="https://netparty.tech/privacy" />\n`) + `<meta property="og:site_name" content="NetParty" />\n` + ICON_LINKS + "</head>");
 const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n\nSitemap: https://netparty.tech/sitemap.xml\n";
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://netparty.tech/</loc><lastmod>2026-11-01</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://netparty.tech/</loc><lastmod>2026-11-03</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
 <url><loc>https://netparty.tech/privacy</loc><lastmod>2026-10-28</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
@@ -91,6 +108,10 @@ const SITE = {
   "/icon-512.png": [imgIcon512, "image/png"],
   "/favicon-48.png": [imgFavicon48, "image/png"],
   "/favicon.ico": [imgFavicon48, "image/png"],
+  "/favicon-96.png": [imgFavicon96, "image/png"],
+  "/favicon-192.png": [imgFavicon192, "image/png"],
+  "/favicon.svg": [svgFavicon, "image/svg+xml"],
+  "/og-square.jpg": [imgOgSquare, "image/jpeg"],
   "/apple-touch-icon.png": [imgAppleTouch, "image/png"],
   "/hark.css": [siteCss, "text/css; charset=utf-8"],
   "/hark-hero.css": [siteHeroCss, "text/css; charset=utf-8"],
