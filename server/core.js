@@ -23,6 +23,7 @@ const limits = {
   react: [12, 3000], // reactions per connection per window (tapping 🎉 repeatedly sends several)
   chat: [20, 10_000],
   profile: [10, 10_000],
+  page: [10, 10_000],
 };
 
 // ---- ciphertext sizes. Wire format (built by the extension): base64url(0x01 | 12-byte IV |
@@ -35,6 +36,9 @@ export const MAX_PROFILE_CT = ctChars(pad64(MAX_NAME * 2 * 6 + 16 * 6 + 64)); //
 export const MAX_REACT_CT = ctChars(pad64(16 * 6 + 32)); // { e: one emoji }
 export const MAX_CHECK_CT = ctChars(128); // the room's key-check value
 export const MAX_SIGNAL_CT = 32_768; // WebRTC offer/answer or ICE candidate
+// "Sync any video" (2.0): the host's page address { u: url (≤ 2048 chars), d: duration } as one ciphertext
+export const MAX_PAGE_URL = 2048;
+export const MAX_PAGE_CT = ctChars(pad64(MAX_PAGE_URL * 6 + 128));
 const MIN_CT = ctChars(1);
 const isCt = (s, max) => typeof s === "string" && s.length >= MIN_CT && s.length <= max && /^[A-Za-z0-9_-]+$/.test(s);
 
@@ -42,7 +46,7 @@ export const NEED_UPDATE =
   "Update NetParty to version 1.7 or newer: party chat is now end-to-end encrypted, and this version can't start or join parties. Get it at netparty.tech.";
 export const LEGACY_ROOM =
   "This party was started with an older NetParty that doesn't encrypt chat. Ask the host to update NetParty and start a new party.";
-const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode"]);
+const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode", "rate"]);
 
 // ---- shared validators (also used by the GIF proxy in gifs.js; the extension has copies
 // and applies them to decrypted content)
@@ -86,6 +90,9 @@ export function isKlipyMediaUrl(s) {
 //   YouTube      "yt:<11-char id>"                 -> https://www.youtube.com/watch?v=<id>
 //   Prime Video  "pv:<host>/detail/<id>", "pv:<host>/dp/<id>" or "pv:<host>/gp/video/detail/<id>",
 //                <host> = www.primevideo.com or one of the Amazon stores in PRIME_HOSTS
+//   Any video    "av:<16 random base64url chars>" (2.0, a video on a page the host chose). It names no
+//                site and never becomes a link here: the page's address travels end-to-end encrypted
+//                (room.page) and only the guests' browsers can read it.
 export const PRIME_HOSTS = [
   "www.primevideo.com",
   ...["com", "co.uk", "de", "co.jp", "in", "ca", "com.au", "fr", "it", "es", "com.br", "com.mx", "nl"].map((t) => "www.amazon." + t),
@@ -95,6 +102,7 @@ export function validVideoId(v) {
   if (typeof v !== "string" || !v || v.length > 512) return false;
   if (/^\d{1,12}$/.test(v)) return true;
   if (v.startsWith("yt:")) return /^yt:[A-Za-z0-9_-]{11}$/.test(v);
+  if (v.startsWith("av:")) return /^av:[A-Za-z0-9_-]{16}$/.test(v);
   if (v.startsWith("hs:")) return /^hs:(\/[A-Za-z0-9._~%-]+)+\/\d{5,}\/watch$/.test(v);
   const pv = PV_RE.exec(v);
   if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
@@ -175,6 +183,7 @@ function snapshot(room, client) {
     hostOnly: room.hostOnly,
     state: room.state,
     kc: room.kc,
+    page: room.page || null,
     members: memberList(room),
     profiles: knownProfiles(room),
     history: room.history,
@@ -210,7 +219,7 @@ function save(room) {
     if (room.ended) return;
     prune(room);
     const { id, state, hostOnly, hostCid, history, kc } = room;
-    const rec = { id, e2ee: true, state, hostOnly, hostCid, kc, history, profiles: [...room.profiles], seats: [...room.seats], savedAt: Date.now() };
+    const rec = { id, e2ee: true, state, hostOnly, hostCid, kc, history, page: room.page || null, profiles: [...room.profiles], seats: [...room.seats], savedAt: Date.now() };
     Promise.resolve(store.put(id, rec)).catch(() => {});
   }, 300);
 }
@@ -248,6 +257,7 @@ async function lookup(code) {
             hostOnly: !!saved.hostOnly,
             hostCid: cleanCid(saved.hostCid),
             kc: isCt(saved.kc, MAX_CHECK_CT) ? saved.kc : null,
+            page: isCt(saved.page, MAX_PAGE_CT) ? saved.page : null,
             history: Array.isArray(saved.history) ? saved.history.slice(-HISTORY) : [],
             profiles: new Map(Array.isArray(saved.profiles) ? saved.profiles : []),
             seats: new Map(Array.isArray(saved.seats) ? saved.seats : []),
@@ -281,6 +291,8 @@ function systemLine(room, event, pid, exceptPid = null) {
 }
 const membersMsg = (room) => ({ type: "members", data: { members: memberList(room), hostId: room.hostId } });
 
+// playback speed (any-video parties sync it; the other sites always play at 1x)
+const validRate = (r) => Number.isFinite(r) && r >= 0.0625 && r <= 16;
 function validState(d) {
   return (
     d &&
@@ -288,6 +300,7 @@ function validState(d) {
     Number.isFinite(d.position) &&
     d.position >= 0 &&
     (d.at === undefined || Number.isFinite(d.at)) &&
+    (d.rate === undefined || validRate(d.rate)) &&
     (d.videoId === undefined || d.videoId === null || (typeof d.videoId === "string" && d.videoId.length <= 512))
   );
 }
@@ -381,6 +394,7 @@ const handlers = {
       hostOnly: !!data?.hostOnly,
       hostCid: cid,
       kc: data.kc,
+      page: isCt(data?.page, MAX_PAGE_CT) ? data.page : null,
       history: [],
       profiles: new Map(),
       seats: new Map(),
@@ -391,6 +405,7 @@ const handlers = {
         at: Number.isFinite(data?.at) ? data.at : now,
         videoId: cleanVideoId(data?.videoId),
         by: null,
+        ...(validRate(data?.rate) && data.rate !== 1 ? { rate: data.rate } : {}),
       },
     };
     rooms.set(id, room);
@@ -424,7 +439,7 @@ const handlers = {
     const room = await lookup(data?.roomId);
     if (room?.legacy) return reply(null, LEGACY_ROOM);
     if (!room || room.ended) return reply(null, "Party not found. It may have ended.");
-    reply({ e2ee: true, roomId: room.id, videoId: room.state.videoId, members: room.members.size, kc: room.kc });
+    reply({ e2ee: true, roomId: room.id, videoId: room.state.videoId, members: room.members.size, kc: room.kc, page: room.page || null });
   },
 
   leave(client, _data, reply) {
@@ -463,6 +478,7 @@ const handlers = {
       at: Number.isFinite(data.at) && Math.abs(data.at - Date.now()) < 10_000 ? data.at : Date.now(),
       videoId: cleanVideoId(data.videoId) || room.state.videoId,
       by: client.pid,
+      ...(data.rate !== undefined && data.rate !== 1 ? { rate: data.rate } : {}),
     };
     save(room);
     const reason = PLAYBACK_REASONS.has(data.reason) ? data.reason : null;
@@ -480,6 +496,21 @@ const handlers = {
     const line = { from: client.pid, ct: data.ct, ts: Date.now() };
     remember(room, { kind: "chat", ...line });
     broadcast(room, { type: "chat", data: line });
+    reply({ ok: true });
+  },
+
+  // any-video parties: the host's page { u, d } (address + duration), encrypted with the room key.
+  // Only the host sets it; everyone else gets it with the party and on every change. The invite
+  // page hands it to the guest's browser, which decrypts and checks it before offering a link.
+  page(client, data, reply) {
+    const room = inRoom(client);
+    if (!room) return reply(null, "Not in a party.");
+    if (client.pid !== room.hostId) return reply(null, "Only the host can share the page.");
+    if (!isCt(data?.ct, MAX_PAGE_CT)) return reply(null, "Bad page.");
+    if (limited(client, "page")) return reply(null, "Slow down.");
+    room.page = data.ct;
+    save(room);
+    broadcast(room, { type: "page", data: { ct: data.ct } }, client.pid);
     reply({ ok: true });
   },
 
@@ -646,6 +677,7 @@ return { connect, sweep, maintain, rooms, getRoom: (code) => rooms.get(String(co
 // the extension download only works while the party is live.
 export function watchUrlFor(videoId, roomId) {
   if (!validVideoId(videoId)) return null; // never build a link to anywhere else (no open redirect)
+  if (videoId.startsWith("av:")) return null; // any-video parties: the address is encrypted (room.page)
   const code = encodeURIComponent(roomId);
   if (videoId.startsWith("yt:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${code}`;
   // Prime Video: autoplay=1 opens the player on the title page
@@ -653,8 +685,10 @@ export function watchUrlFor(videoId, roomId) {
   const base = videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : "https://www.netflix.com/watch/" + videoId;
   return `${base}?npParty=${code}`;
 }
+export const isAnyVideo = (videoId) => typeof videoId === "string" && videoId.startsWith("av:") && validVideoId(videoId);
 export const siteFor = (videoId) => {
   const v = String(videoId || "");
+  if (isAnyVideo(v)) return "the host's site";
   return v.startsWith("hs:") ? "JioHotstar" : v.startsWith("yt:") ? "YouTube" : v.startsWith("pv:") ? "Prime Video" : "Netflix";
 };
 
@@ -697,7 +731,25 @@ const JOIN_SCRIPT = `(async () => {
   } catch {
     return fail("Can't decrypt this party's messages: the key in this invite link doesn't match. Ask your friend to copy the full invite link again.");
   }
-  btn.href = btn.dataset.watch + "#npKey=" + m[1];
+  if (btn.dataset.page !== undefined) {
+    // any-video party: the host's page address is end-to-end encrypted. Decrypt it here, accept only a
+    // plain http(s) address (no other scheme, no user:password@), and put it in the link's href property
+    // only. It is never written into the page's HTML.
+    let u = null;
+    try {
+      const p = await open(btn.dataset.page, "netparty/e2ee/v1|" + room + "|page|");
+      const s = p && p.u;
+      if (typeof s === "string" && s.length <= 2048 && !/[\\u0000-\\u0020\\u007f]/.test(s)) {
+        const x = new URL(s);
+        if ((x.protocol === "https:" || x.protocol === "http:") && !x.username && !x.password && x.href === s) u = x;
+      }
+    } catch {}
+    if (!u) return fail("Can't open the host's page from this invite link. Ask your friend for the page address.");
+    btn.href = u.href;
+    const site = document.getElementById("site");
+    if (site) site.textContent = u.hostname;
+    for (const n of document.querySelectorAll("[data-any-step]")) n.hidden = false;
+  } else btn.href = btn.dataset.watch + "#npKey=" + m[1];
   btn.hidden = false;
   if (btn.dataset.host && btn.dataset.hpid) {
     try {
@@ -730,11 +782,37 @@ export async function joinPageHeaders() {
 export function joinPage(room, code, { hasDownload = false } = {}) {
   const live = !!room && !room.ended && !room.legacy && room.e2ee === true;
   const site = siteFor(room?.state?.videoId);
+  const any = live && isAnyVideo(room.state.videoId);
   const watch = live ? watchUrlFor(room.state.videoId, room.id) : null;
   const hostProfile = live && room.hostId ? room.profiles.get(room.hostId) || "" : "";
+  const install = (verb) => `<details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>
+<ol>
+${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty</a> and unzip it.</li>` : `<li>Ask your friend to send you the NetParty zip, then unzip it.</li>`}
+<li>Open <code>chrome://extensions</code> and switch on <b>Developer mode</b> (top right).</li>
+<li>Click <b>Load unpacked</b> and pick the unzipped folder (the one with <code>manifest.json</code> inside).</li>
+<li>Come back here and press <b>${verb}</b>.</li>
+</ol></details>`;
+  const browsers = (need, ver) =>
+    `${need} the NetParty extension (${ver} or newer) in Chrome or Brave, in Firefox from <a href="${FIREFOX_STORE}" target="_blank" rel="noopener">Firefox Add-ons</a>, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Opera is coming soon.`;
   const body = !live
     ? `<h1>This party has ended</h1><p>Ask your friend for a fresh invite link.</p>`
-    : !watch
+    : any && !isCt(room.page, MAX_PAGE_CT)
+      ? `<h1>You're invited to a watch party</h1><p>The host hasn't shared the video's page yet. Try this link again in a moment.</p>`
+      : any
+        ? `<h1>You're invited to a watch party</h1>
+<p class="sub">${room.members.size ? room.members.size + " watching" : "Live"} on <span id="site">the host's site</span> · party <code>${esc(room.id)}</code></p>
+<p class="warn" id="warn" hidden></p>
+<a class="btn" id="go" hidden href="#" target="_blank" rel="noopener noreferrer" data-page="${esc(room.page)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Open the video</a>
+<noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party with the key in your invite link.</p></noscript>
+<ol class="steps" data-any-step hidden>
+<li>Press <b>Open the video</b>. The host's page opens in a new tab. Keep this tab open until you've joined.</li>
+<li>On that page, click the <b>NetParty</b> icon in your browser's toolbar.</li>
+<li>Press <b>Join party on this tab</b>.</li>
+</ol>
+<p class="note">🔒 Chat and the page's address are end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
+<p class="note">${browsers("You need an account on that site if it asks for one, and", "2.0")}</p>
+${install("Open the video")}`
+        : !watch
       ? `<h1>You're invited to a watch party</h1><p>The host hasn't opened a title yet. Try this link again in a moment.</p>`
       : `<h1>You're invited to a watch party</h1>
 <p class="sub">${room.members.size ? room.members.size + " watching" : "Live"} on ${site} · party <code>${esc(room.id)}</code></p>
@@ -742,14 +820,8 @@ export function joinPage(room, code, { hasDownload = false } = {}) {
 <a class="btn" id="go" hidden href="${esc(watch)}" data-watch="${esc(watch)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Join on ${site}</a>
 <noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party's encrypted chat with the key in your invite link.</p></noscript>
 <p class="note">🔒 Chat is end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
-<p class="note">${site === "YouTube" ? "You need" : `You need your own ${site} account and`} the NetParty extension (${site === "Prime Video" ? "1.8" : "1.7"} or newer) in Chrome or Brave, in Firefox from <a href="${FIREFOX_STORE}" target="_blank" rel="noopener">Firefox Add-ons</a>, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Opera is coming soon.</p>
-<details${hasDownload ? "" : " open"}><summary>Don't have NetParty yet?</summary>
-<ol>
-${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty</a> and unzip it.</li>` : `<li>Ask your friend to send you the NetParty zip, then unzip it.</li>`}
-<li>Open <code>chrome://extensions</code> and switch on <b>Developer mode</b> (top right).</li>
-<li>Click <b>Load unpacked</b> and pick the unzipped folder (the one with <code>manifest.json</code> inside).</li>
-<li>Come back here and press <b>Join on ${site}</b>.</li>
-</ol></details>`;
+<p class="note">${browsers(site === "YouTube" ? "You need" : `You need your own ${site} account and`, site === "Prime Video" ? "1.8" : "1.7")}</p>
+${install("Join on " + site)}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NetParty invite</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
 <meta property="og:title" content="You're invited to a NetParty"><meta property="og:description" content="Join the watch party: synced playback, encrypted chat and voice."><meta property="og:image" content="https://netparty.tech/og.jpg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://netparty.tech/og.jpg">
@@ -762,7 +834,7 @@ h1{font-size:24px;line-height:1.25;margin:0 0 8px}.sub{color:#9d9da8;margin:0 0 
 @media (hover:hover){.btn:hover{background:#a48bff}}html,a,button{-webkit-tap-highlight-color:transparent}a,button{touch-action:manipulation;transition:background .2s,scale .16s ease,opacity .16s ease}.btn:active{scale:.97;background:#6a4cf0}a:not(.btn):active{opacity:.6}.note{color:#9d9da8;font-size:14px}[hidden]{display:none!important}
 .warn{padding:12px 14px;border:1px solid #ff6b81;border-radius:12px;background:#2a1820;color:#ffd5dc}
 details{margin-top:18px;padding:14px 16px;border:1px solid #33333c;border-radius:12px;background:#1b1b22}
-summary{cursor:pointer;font-weight:600}ol{padding-left:20px;margin:10px 0 0}li{margin:6px 0}
+summary{cursor:pointer;font-weight:600}ol{padding-left:20px;margin:10px 0 0}li{margin:6px 0}.steps{margin:16px 0 4px}
 a{color:#a48bff}code{background:#26262e;padding:1px 6px;border-radius:6px;font-size:14px}
-</style></head><body><main><div class="logo">NetParty</div>${body}</main>${live && watch ? `<script>${JOIN_SCRIPT}</script>` : ""}</body></html>`;
+</style></head><body><main><div class="logo">NetParty</div>${body}</main>${live && (watch || (any && isCt(room.page, MAX_PAGE_CT))) ? `<script>${JOIN_SCRIPT}</script>` : ""}</body></html>`;
 }

@@ -3,7 +3,7 @@ import { chromium } from "/workspace/work/pw/node_modules/playwright/index.mjs";
 import fs from "node:fs";
 import http from "node:http";
 import { WebSocket, WebSocketServer } from "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server/node_modules/ws/wrapper.mjs";
-export const EXT = "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/extension";
+export const EXT = process.env.EXT_DIR || "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/extension";
 export const SERVER = process.env.SERVER || "ws://localhost:8787";
 export const out = (...a) => console.log(...a);
 let fails = 0, passes = 0;
@@ -16,7 +16,7 @@ export const summary = (label) => {
   out(fails ? `\n${fails} FAILED, ${passes} passed` : `\nALL ${passes} ${label} CHECKS PASSED`);
   return fails;
 };
-export async function launch(dir, { name, avatar, extra = {}, ctxOpts = {}, args = [], prompts = false } = {}) {
+export async function launch(dir, { name, avatar, extra = {}, ctxOpts = {}, args = [], prompts = false, ext = EXT } = {}) {
   fs.rmSync(dir, { recursive: true, force: true });
   const ctx = await chromium.launchPersistentContext(dir, {
     executablePath: "/usr/bin/chromium",
@@ -24,7 +24,7 @@ export async function launch(dir, { name, avatar, extra = {}, ctxOpts = {}, args
     viewport: { width: 1280, height: 720 },
     ...ctxOpts,
     args: [
-      `--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`,
+      `--disable-extensions-except=${ext}`, `--load-extension=${ext}`,
       "--host-resolver-rules=MAP www.netflix.com:443 127.0.0.1:8443, MAP www.hotstar.com:443 127.0.0.1:8443, MAP www.youtube.com:443 127.0.0.1:8443, MAP static.klipy.com:443 127.0.0.1:8443, MAP www.primevideo.com:443 127.0.0.1:8443, MAP www.amazon.co.uk:443 127.0.0.1:8443",
       "--ignore-certificate-errors", "--autoplay-policy=no-user-gesture-required", "--no-sandbox", "--no-proxy-server",
       // voice chat with a fake microphone; plain host candidates so two local browsers can connect

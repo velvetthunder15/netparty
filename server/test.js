@@ -152,7 +152,8 @@ ok("create e2ee party " + snap.roomId + " (pid " + a.pid + ")");
   await assert.rejects(x.req("join", { roomId: snap.roomId, name: "Old", cid: "abcdefgh12345678" }), /Update NetParty/);
   await assert.rejects(x.req("peek", { roomId: snap.roomId }), /Update NetParty/);
   const pk = await x.req("peek", { e2ee: 1, roomId: snap.roomId });
-  assert.deepEqual(Object.keys(pk).sort(), ["e2ee", "kc", "members", "roomId", "videoId"]);
+  assert.deepEqual(Object.keys(pk).sort(), ["e2ee", "kc", "members", "page", "roomId", "videoId"]);
+  assert.equal(pk.page, null, "no page for a Netflix party");
   assert.equal(pk.e2ee, true);
   assert.equal(pk.kc, snap.kc);
   assert.deepEqual(await open(KEY, "", "check", "", pk.kc), { check: "netparty" });
@@ -435,6 +436,72 @@ ok("host-only control lock");
   await g.req("end", {});
   g.close();
   ok(`video ids: ${bad.length} malformed / foreign-site ids never become invite links`);
+}
+
+{
+  // 2.0 "sync any video": videoId av:<16>, the page address only as ciphertext (host-only, size-capped),
+  // playback speed in the state, and an invite page that never contains the address in plaintext
+  const K = genKey();
+  const AV = "av:" + b64u(crypto.getRandomValues(new Uint8Array(12)));
+  assert.equal(AV.length, 19);
+  const PAGE_URL = "https://videos.example.org/watch/" + MARK + "?t=1";
+  const h = await member("avh", { key: K, create: { videoId: AV, playing: false, position: 0, at: Date.now(), rate: 1.5 } });
+  assert.equal(h.snap.state.videoId, AV);
+  assert.equal(h.snap.state.rate, 1.5);
+  assert.equal(h.snap.page, null);
+  let html = await (await fetch(`${HTTP}/j/${h.room}`)).text();
+  assert.match(html, /hasn't shared the video's page yet/);
+  assert.ok(!/<script>/.test(html), "no script until there is a page");
+  await assert.rejects(h.req("page", { u: PAGE_URL }), /Bad page/);
+  await assert.rejects(h.req("page", { ct: "x".repeat(20000) }), /Bad page/);
+  const pageCt = await seal(K, h.room, "page", "", { u: PAGE_URL, d: 634.5 });
+  await h.req("page", { ct: pageCt });
+  const g = await member("avg", { key: K, room: h.room });
+  assert.equal(g.snap.page, pageCt);
+  assert.deepEqual(await open(K, h.room, "page", "", g.snap.page), { u: PAGE_URL, d: 634.5 });
+  assert.equal(await open(K, "otherroom", "page", "", g.snap.page), null, "bound to its party");
+  await assert.rejects(g.req("page", { ct: pageCt }), /Only the host/);
+  const pk = await g.req("peek", { e2ee: 1, roomId: h.room });
+  assert.equal(pk.page, pageCt);
+  const ct2 = await seal(K, h.room, "page", "", { u: PAGE_URL + "&ep=2", d: 100 });
+  await h.req("page", { ct: ct2 });
+  assert.equal((await g.next("page")).data.ct, ct2);
+  // speed: relayed in the state; bad values refused; reason "rate"
+  await h.req("state", { playing: true, position: 1000, at: Date.now(), videoId: AV, rate: 2, reason: "rate" });
+  const s2 = await g.next("state");
+  assert.equal(s2.data.rate, 2);
+  assert.equal(s2.data.reason, "rate");
+  await h.req("state", { playing: true, position: 1000, at: Date.now(), videoId: AV });
+  assert.equal((await g.next("state")).data.rate, undefined, "1x is the default (no rate field)");
+  for (const rate of [0, -1, 100, "2", null]) await assert.rejects(h.req("state", { playing: true, position: 0, rate }), /Bad state/);
+  // the invite page: "Open the video", the encrypted page in a data attribute, no plaintext address
+  html = await (await fetch(`${HTTP}/j/${h.room}`)).text();
+  assert.match(html, /Open the video/);
+  assert.ok(html.includes(`data-page="${ct2}"`));
+  assert.ok(!html.includes(MARK) && !html.includes("videos.example.org"), "address in plaintext on the invite page");
+  assert.ok(!/Join on/.test(html));
+  assert.match(html, /2\.0 or newer/);
+  {
+    // the page's only script must be the one its CSP allows (by hash), byte for byte
+    const r = await fetch(`${HTTP}/j/${h.room}`);
+    const body = await r.text();
+    const js = body.match(/<script>([\s\S]*)<\/script>/)[1];
+    const hash = Buffer.from(await crypto.subtle.digest("SHA-256", enc.encode(js))).toString("base64");
+    assert.ok(r.headers.get("content-security-policy").includes(`'sha256-${hash}'`), "invite page script doesn't match its CSP hash");
+    assert.ok(!/[\u0000-\u0008]/.test(js), "control characters in the invite page script");
+  }
+  // bad av ids are dropped like any other bad id
+  for (const videoId of ["av:short", "av:" + "a".repeat(17), "av:abc/def/ghij+kl", "av:javascript:alert(1)"]) {
+    const m = await member("badav", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, null, videoId);
+    await m.req("end", {});
+    m.close();
+  }
+  for (const f of [...h.frames, ...g.frames]) assert.ok(!f.includes(MARK), "page address reached the server");
+  await h.req("end", {});
+  h.close();
+  g.close();
+  ok("any-video parties: av ids, encrypted page (host-only, size-capped, bound to the party), speed sync, invite page without the address");
 }
 
 {

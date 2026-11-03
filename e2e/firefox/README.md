@@ -9,6 +9,7 @@ only speaks wss://, just like with netparty.tech.
 | Script | Checks |
 | --- | --- |
 | `ffrun.mjs` | install + data-collection grant, start party, invite page, join via link (#key stripped), encrypted chat both ways, play/pause/seek sync both ways (page.js bridge), 🎉 reactions, panel Copy invite → clipboard, popup in-party view + avatar change, voice (fake mic, WebRTC in the content script), reloads (key from storage.session), leave/end, WebSocket leak audit. `SITE=` for JioHotstar/YouTube, `IDLE=<ms>` sets `extensions.background.idle.timeout`, `QUIET=<s>` idles mid-test and counts socket restarts |
+| `ffany.mjs` | 2.0 "Sync any video" in Firefox on the local test pages (`../anysite.mjs`): popup Sync this tab, invite page, Open the video → Join party on this tab, sync both ways, speed, drift nudge, element swap, Theater, Always allow + reload, cross-origin iframe (Allow), picker, mismatch, live stream. Uses a test copy of the build with `http://localhost/*` in `host_permissions` in place of the activeTab grant |
 | `ffpopup.mjs` | popup Start a party (link really on the clipboard) and Join by pasting the invite link |
 | `ffcross.mjs` | Firefox host + Chromium guest: join, chat both ways, sync both ways, voice, camera tiles both ways (1.8) |
 | `ffgif.mjs` | background GIF API fetch (CORS for moz-extension://) and KLIPY media, GIF picker renders |

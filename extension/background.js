@@ -142,9 +142,130 @@ chrome.tabs.onReplaced.addListener(async (added, removed) => {
   await chrome.storage.session.remove(ks.map(([k]) => k));
 });
 
+// ---- "Sync any video" (2.0)
+// NetParty runs on a page that isn't one of the supported services only after the user asks for it:
+// "Sync this tab" injects the scripts into that tab once (activeTab). "Always allow on this site" asks the
+// browser for that one site (an optional host permission) and registers the scripts for it here, so
+// reloads keep the party. Removing the site's access (in the popup or the browser's own settings)
+// unregisters them.
+const ANY_FILES_START = ["any-mode.js", "early.js"];
+const ANY_FILES_IDLE = ["any-mode.js", "emoji-data.js", "anyvideo.js", "content.js"];
+const anyId = (origin, part) => "npany-" + part + "-" + origin.replace(/[^A-Za-z0-9]/g, "_");
+const ORIGIN_RE = /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/;
+// the permission / match pattern for a site: scheme + host, any port (Firefox's match patterns can't name a port)
+const patternOf = (origin) => {
+  const u = new URL(origin);
+  return `${u.protocol}//${u.hostname}/*`;
+};
+async function anyOrigins() {
+  const { anyOrigins: list } = await chrome.storage.local.get("anyOrigins");
+  return Array.isArray(list) ? list.filter((o) => typeof o === "string" && ORIGIN_RE.test(o)) : [];
+}
+async function registerAny(origin) {
+  const matches = [patternOf(origin)];
+  const all = [
+    { id: anyId(origin, "a"), matches, js: ANY_FILES_START, runAt: "document_start", allFrames: false, persistAcrossSessions: true },
+    { id: anyId(origin, "b"), matches, js: ANY_FILES_IDLE, runAt: "document_idle", allFrames: false, persistAcrossSessions: true },
+  ];
+  const have = new Set((await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  const want = all.filter((s) => !have.has(s.id));
+  if (!want.length) return;
+  try {
+    await chrome.scripting.registerContentScripts(want);
+  } catch {
+    // older Firefox builds don't know persistAcrossSessions; syncAny() registers again at startup
+    await chrome.scripting.registerContentScripts(want.map(({ persistAcrossSessions, ...s }) => s));
+  }
+}
+async function unregisterAny(origin) {
+  const ids = [anyId(origin, "a"), anyId(origin, "b")];
+  const have = new Set((await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  const drop = ids.filter((id) => have.has(id));
+  if (drop.length) await chrome.scripting.unregisterContentScripts({ ids: drop }).catch(() => {});
+}
+// the sites the user allowed, still allowed by the browser, each with its scripts registered
+async function syncAny() {
+  const keep = [];
+  for (const o of await anyOrigins()) {
+    if (await chrome.permissions.contains({ origins: [patternOf(o)] }).catch(() => false)) {
+      keep.push(o);
+      await registerAny(o).catch(() => {});
+    } else await unregisterAny(o);
+  }
+  await chrome.storage.local.set({ anyOrigins: keep });
+  return keep;
+}
+async function allowAny(origin) {
+  if (!ORIGIN_RE.test(origin)) return { error: "bad origin" };
+  if (!(await chrome.permissions.contains({ origins: [patternOf(origin)] }))) return { error: "not allowed" };
+  const list = await anyOrigins();
+  if (!list.includes(origin)) await chrome.storage.local.set({ anyOrigins: [...list, origin] });
+  await registerAny(origin);
+  return { ok: true };
+}
+async function forgetAny(origin) {
+  if (!ORIGIN_RE.test(origin)) return { error: "bad origin" };
+  await chrome.storage.local.set({ anyOrigins: (await anyOrigins()).filter((o) => o !== origin) });
+  await unregisterAny(origin);
+  // the site's access too, unless the extension needs it anyway (a supported service)
+  const fixed = chrome.runtime.getManifest().host_permissions || [];
+  // (unless another allowed site shares the pattern, or the extension needs it anyway: a supported service)
+  const pat = patternOf(origin);
+  const shared = (await anyOrigins()).some((o) => patternOf(o) === pat);
+  if (!fixed.includes(pat) && !shared) await chrome.permissions.remove({ origins: [pat] }).catch(() => {});
+  return { ok: true };
+}
+chrome.permissions.onRemoved.addListener(() => syncAny().catch(() => {}));
+// the popup may close while the browser shows its permission prompt (Firefox): finish "Always allow" here.
+// Only for a site the popup just asked about (a player's site allowed for one video isn't registered).
+chrome.permissions.onAdded.addListener(async ({ origins = [] }) => {
+  for (const pat of origins) {
+    const k = "anyWant:" + pat;
+    const want = (await chrome.storage.session.get(k).catch(() => ({})))[k];
+    if (!want || typeof want.origin !== "string") continue;
+    await chrome.storage.session.remove(k).catch(() => {});
+    if (Date.now() - want.ts < 5 * 60 * 1000) await allowAny(want.origin).catch(() => {});
+  }
+});
+chrome.runtime.onStartup?.addListener(() => syncAny().catch(() => {}));
+chrome.runtime.onInstalled.addListener(() => syncAny().catch(() => {}));
+
+// A video inside a cross-origin iframe: anyvideo.js runs there as an agent (only after the user allowed
+// that frame's site). The tab's main script (top frame) and the agent talk through here, by tab and frame.
+async function relayToFrame(tabId, frameId, msg) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, msg, { frameId });
+  } catch {
+    return null;
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // only our own content scripts and pages
   if (sender.id !== chrome.runtime.id) return;
+  if (msg?.cmd === "npFrame") {
+    // agent (a subframe) -> the tab's main script
+    if (!sender.tab || !Number.isInteger(sender.frameId) || sender.frameId === 0) return;
+    let origin = null;
+    try {
+      origin = new URL(sender.url).origin;
+    } catch {}
+    relayToFrame(sender.tab.id, 0, { cmd: "npFrameEvt", frameId: sender.frameId, origin, op: msg.op, kind: msg.kind, rate: msg.rate, w: msg.w, h: msg.h });
+    return;
+  }
+  if (msg?.cmd === "npAgent") {
+    // the tab's main script -> one of its frames' agents
+    if (!sender.tab || sender.frameId !== 0 || !Number.isInteger(msg.frameId) || msg.frameId === 0) return sendResponse(null);
+    const { cmd, op, position, rate, nudge, on } = msg;
+    relayToFrame(sender.tab.id, msg.frameId, { cmd, op, position, rate, nudge, on }).then(sendResponse);
+    return true;
+  }
+  if (msg?.cmd === "anyAllow" || msg?.cmd === "anyForget") {
+    // from the popup (an extension page), never from a content script
+    if (!String(sender.url || "").startsWith(chrome.runtime.getURL(""))) return sendResponse({ error: "not allowed" });
+    (msg.cmd === "anyAllow" ? allowAny : forgetAny)(String(msg.origin || "")).then(sendResponse, (e) => sendResponse({ error: String(e?.message || e) }));
+    return true;
+  }
   if (msg?.cmd === "roomKey") {
     // content scripts only: the key belongs to the tab it came from
     if (!sender.tab || !Number.isInteger(sender.tab.id)) return sendResponse({ error: "no tab" });

@@ -13,16 +13,39 @@
       </div>
     </header>
 
-    <!-- not on Netflix / JioHotstar / YouTube / Prime Video -->
-    <section id="vOff" class="hidden">
-      <p class="lead">Open Netflix, JioHotstar, YouTube or Prime Video to start or join a party.</p>
-      <div class="three">
-        <button class="ghost" data-open="https://www.netflix.com/browse">Netflix</button>
-        <button class="ghost" data-open="https://www.hotstar.com/in/home">JioHotstar</button>
-        <button class="ghost" data-open="https://www.youtube.com/">YouTube</button>
-        <button class="ghost" data-open="https://www.primevideo.com/">Prime Video</button>
+    <!-- another website (2.0): sync a video on this page, only after a click -->
+    <section id="vAny" class="hidden">
+      <div id="anyJoinBox" class="hidden">
+        <button id="anyJoin" class="primary">Join party on this tab</button>
+        <p class="hint" id="anyJoinHint"></p>
+        <div class="divider"><span>or start your own</span></div>
+      </div>
+      <p class="lead" id="anyLead">Watch a video on this page together.</p>
+      <button id="anyStart" class="primary">Sync this tab</button>
+      <p class="hint">NetParty runs on this tab only after you click.</p>
+      <div id="anyCode" class="hidden">
+        <div class="divider"><span>or join with a link</span></div>
+        <div class="joinrow">
+          <input id="anyCodeIn" type="text" placeholder="Paste the full invite link" autocomplete="off" spellcheck="false" />
+          <button id="anyCodeGo" class="ghost small">Join</button>
+        </div>
       </div>
     </section>
+
+    <!-- the video is in a player from another site (a cross-origin frame) -->
+    <section id="vFrame" class="hidden">
+      <p class="lead" id="frameLead"></p>
+      <button id="frameAllow" class="primary">Allow</button>
+      <p class="hint">NetParty asks your browser for access to that site only.</p>
+    </section>
+
+    <p class="msg" id="anyMsg"></p>
+
+    <label class="toggle hidden" id="anyAlwaysRow" title="NetParty starts on this site by itself, so a reload keeps the party. You can turn this off here at any time.">
+      <input type="checkbox" id="anyAlways" />
+      <span>Always allow on this site</span>
+    </label>
+
 
     <!-- you: picture + name (before and during a party) -->
     <section id="vMe" class="hidden">
@@ -65,7 +88,20 @@
       <button id="leave" class="text danger">Leave party</button>
     </section>
 
+
     <div id="error" class="err"></div>
+
+    <!-- not on a website NetParty can run on -->
+    <section id="vOff" class="hidden">
+      <div class="divider off-div"><span>or open</span></div>
+      <p class="lead" id="offLead">Open Netflix, JioHotstar, YouTube or Prime Video to start or join a party, or open any page with a video and click NetParty there.</p>
+      <div class="three">
+        <button class="ghost" data-open="https://www.netflix.com/browse">Netflix</button>
+        <button class="ghost" data-open="https://www.hotstar.com/in/home">JioHotstar</button>
+        <button class="ghost" data-open="https://www.youtube.com/">YouTube</button>
+        <button class="ghost" data-open="https://www.primevideo.com/">Prime Video</button>
+      </div>
+    </section>
 
     <details id="prefs">
       <summary>Settings</summary>

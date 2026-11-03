@@ -2,7 +2,8 @@
 // Builds the Firefox (addons.mozilla.org) package from extension/ without touching it.
 //   node scripts/build-firefox.mjs            -> ../netparty-firefox-<version>.zip (project root)
 //   node scripts/build-firefox.mjs --dir out  -> also leaves the unpacked build in ./out
-// The source files are copied as they are; only manifest.json differs from the Chrome build:
+// The source files are copied as they are; only manifest.json differs from the Chrome build
+// (activeTab, scripting and optional_host_permissions for "Sync any video" work unchanged in Firefox MV3):
 //   - background: an event page ("scripts") instead of a service worker, still an ES module
 //   - no minimum_chrome_version
 //   - browser_specific_settings.gecko: add-on ID, minimum Firefox version and the data the
@@ -37,7 +38,9 @@ ff.browser_specific_settings = {
       //     setup incl. camera on/off (end-to-end encrypted, relayed by netparty.tech) and voice audio and
       //     camera video (peer to peer between friends, never through our server)
       //   websiteActivity: play / pause / seek events and positions on the streaming site
-      //   browsingActivity: the ID of the title being watched (Netflix / JioHotstar / YouTube / Prime Video ID)
+      //   browsingActivity: the ID of the title being watched (Netflix / JioHotstar / YouTube / Prime Video ID), or for a
+      //     video on another site the user chose to sync (2.0), that page's address, end-to-end encrypted and
+      //     shared only with the party's members
       //   websiteContent: the title's name read from the page, used as the GIF search when the GIF picker opens
       required: ["personalCommunications", "websiteActivity", "browsingActivity", "websiteContent"],
     },

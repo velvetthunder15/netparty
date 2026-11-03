@@ -1,0 +1,20 @@
+NetParty 2.0.0 - release notes ("What's new")
+
+=== Chrome Web Store / Edge Add-ons / Opera (under 500 characters) ===
+- New: sync videos on sites you choose. Open a video, click NetParty, press Sync this tab. Friends open the invite, press Open the video, then Join party on this tab.
+- NetParty runs on such a site only after you click (or with Always allow on this site).
+- The page address is end-to-end encrypted.
+- Theater mode keeps the chat beside the video.
+
+=== Firefox Add-ons (AMO) ===
+What's new in 2.0.0
+
+- Sync videos on sites you choose: on a site that isn't Netflix, JioHotstar, YouTube or Prime Video, click the NetParty icon and press Sync this tab. NetParty finds the video and starts a party.
+- Friends open the invite link, press Open the video, then click the NetParty icon on that page and press Join party on this tab.
+- NetParty only runs on such a site after you click, or on sites you set to Always allow (optional permission for that one site, removable at any time).
+- Players inside another site's frame ask for access to that player's site first.
+- If a friend is on a different video, NetParty tells them and offers to open the host's page.
+- Theater mode: the video fills the window next to the chat.
+- Live streams sync play and pause.
+
+Data: for these parties, the page address and the video's length are shared with your party, end-to-end encrypted. Our server can't read them. See https://netparty.tech/privacy

@@ -1,4 +1,4 @@
-# NetParty — watch Netflix, JioHotstar, YouTube and Prime Video together
+# NetParty — watch Netflix, JioHotstar, YouTube, Prime Video and videos on sites you choose together
 
 A Chrome extension (also Edge, Brave, and Firefox via [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/netparty/), built by `scripts/build-firefox.mjs`) + tiny sync server. Everyone in the party
 needs the extension and, for Netflix, JioHotstar and Prime Video, their own account on the service.
@@ -12,6 +12,10 @@ Supported:
   `amazon.<tld>/gp/video/detail/<ASIN>` (`.com`, `.co.uk`, `.de`, `.co.jp`, `.in`, `.ca`, `.com.au`, `.fr`, `.it`,
   `.es`, `.com.br`, `.com.mx`, `.nl`; the extension also runs on `/Amazon-Video/` pages). Start from the title's page;
   Amazon product pages (`amazon.<tld>/<name>/dp/<ASIN>`) aren't supported.
+- **Videos on sites you choose** (new in 2.0): on any other http(s) page, the popup's **Sync this tab** starts a
+  party for the page's video. NetParty runs there only after that click (`activeTab` + `scripting`), or on sites
+  you set to **Always allow on this site** (an optional host permission for that one site). See
+  [Sync any video](#sync-any-video).
 
 Features
 - **End-to-end encrypted chat**: messages, GIFs, reactions, names and pictures (and voice-call setup)
@@ -75,6 +79,8 @@ No server setup needed: the extension uses the hosted server by default.
 | Theme | Icon → **Settings** → **Theme**: System (default, follows your computer), Light or Dark |
 | Emoji / GIF / react | Chat bar: 🙂 opens emoji, **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
 | Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Settings** |
+| Sync another site | Open the video, icon → **Sync this tab**. Friends: invite link → **Open the video** → icon on that page → **Join party on this tab** |
+| Theater (other sites) | **Theater** in the panel: the video fills the window next to the chat (the player's own fullscreen hides the chat) |
 | Lock controls | Host: icon → **Only I can play, pause and skip** |
 | Change your name or picture | Icon → **You** (the picture opens the picker), or click your own picture in the chat panel |
 | Leave | Exit the title, or **Leave party**. If the host leaves, the party ends for everyone; a guest leaving just leaves. Next episode keeps the party going. |
@@ -182,7 +188,8 @@ How it works
   in `chrome.storage.session` for that tab (memory only, not synced, not readable by the site; deleted when
   the party ends, you leave, or the tab closes). Reloads, episode/video changes and reconnects keep it.
 - **What is encrypted.** Chat text, GIF messages (the KLIPY URL), reactions, display names and pictures (one
-  encrypted "profile" per member), and WebRTC voice setup (SDP and ICE candidates, which contain IP addresses).
+  encrypted "profile" per member), WebRTC voice setup (SDP and ICE candidates, which contain IP addresses), and
+  (2.0) the page address and video length of an any-video party.
   Each message gets a fresh 96-bit IV; the additional data binds it to the party code, the kind of message and
   the sender's public member id, so it can't be replayed into another party or passed off as someone else's.
   Plaintext is padded to 64-byte steps so sizes leak less. Format: `base64url(0x01 | IV | ciphertext+tag)`.
@@ -201,8 +208,8 @@ How it works
 
 What the server can still see: the party code; members' random ids and how many there are; when messages,
 reactions and voice-setup messages are sent and roughly how big they are; playback state (playing/paused,
-position, timestamps) and the video id of what's playing (the invite page needs it to send friends to the right
-title), plus who is in voice and muted/speaking; IP addresses and connection times (and Cloudflare's own request
+position, speed, timestamps) and the video id of what's playing (the invite page needs it to send friends to the right
+title; for a video on another site it's a random `av:` id), plus who is in voice and muted/speaking; IP addresses and connection times (and Cloudflare's own request
 logs); GIF search terms, which have to go to KLIPY through our `/api/gifs` proxy (not logged; nothing about the
 party or names is sent with them).
 
@@ -211,9 +218,45 @@ the streaming site's page, so that site's own scripts could in principle read wh
 (with its key) can end up in your browser history, like any link you open. The server is still trusted to relay
 messages honestly (it can't read or forge them, but it could drop or delay them).
 
+## Sync any video
+
+2.0 adds parties for videos on sites that aren't one of the supported services.
+
+- **Starting**: the popup shows **Sync this tab** on any http(s) page that isn't a supported service. The click injects
+  `any-mode.js`, `early.js`, `emoji-data.js`, `anyvideo.js` and `content.js` into that tab only
+  (`chrome.scripting.executeScript` under `activeTab`, so there is no new install-time host warning). Existing site
+  adapters are unchanged; `any-mode.js` switches `content.js` to the generic adapter.
+- **Finding the video** (`anyvideo.js`): `<video>` elements in the page, in open shadow roots and in same-origin
+  iframes. The playing one wins, else the clearly largest visible one (2.5x the next); otherwise a highlight overlay
+  asks the user to click one. play / pause / seeked / ratechange / timeupdate / durationchange are hooked, and when
+  the site replaces the element (an ad, the next episode) the new element where the old one was is picked up.
+- **Cross-origin players**: a video inside a cross-origin iframe needs that frame's site: the popup asks with
+  `chrome.permissions.request` (optional host permission, one origin) and injects `anyvideo.js` into the tab's frames
+  (`allFrames`); it then runs as an agent that the tab's main script drives through the background
+  (`npAgent` / `npFrame` messages, by tab and frame id). Refused: the popup says the video can't be synced.
+  Canvas-only players: "No video found on this page".
+- **Sync**: same protocol as the other sites. The party's `videoId` is `av:<16 random chars>` (never a link), and the
+  state may carry `rate` (playback speed). Small drift (over 250 ms) is closed by playing up to 10% faster or slower;
+  over 2.5 s the guest seeks. Live streams (infinite duration) sync play and pause only.
+- **The page address** is end-to-end encrypted: `{ u: address, d: duration in s, -1 = live }` sealed with the room key
+  (AAD `room|page|`), sent by the host with a `page` message whenever it changes. The server stores and relays the
+  ciphertext only. The invite page decrypts it in the guest's browser, accepts only `http:`/`https:` addresses with no
+  credentials that round-trip through `URL` unchanged, and sets it as the `href` of **Open the video** (never into HTML).
+- **Joining**: on that page the guest's popup offers **Join party on this tab**: it finds the full invite link in an
+  open invite tab (`…/j/<code>#k=<key>`, via the `tabs` permission) or a party key this tab already holds. Pasting
+  the invite link works too.
+- **Different video**: if both durations are known and differ by more than 3 s, the guest sees "You're on a different
+  video" with **Open host's page**, and sync pauses for them.
+- **Always allow on this site** registers the scripts for that origin (`chrome.scripting.registerContentScripts`),
+  so a reload rejoins. Unticking it (or removing the site's access in the browser) unregisters them.
+- **Theater mode**: inline `!important` styles make the video (or the iframe holding it) fill the window left of the
+  chat; the page's own styles are put back exactly afterwards. Optional document full screen keeps the chat.
+
 ## How it works
 
 - `extension/background.js` – holds the WebSocket per tab (outside Netflix's CSP)
+- `extension/any-mode.js`, `extension/anyvideo.js` – "Sync any video" (2.0): the flag for chosen pages and the
+  generic video adapter (finding, picker overlay, Theater, cross-origin frame agent)
 - `extension/early.js` – runs at page start: keeps the invite code if the site rewrites the URL, and
   routes keys typed in the panel away from the site's hotkeys
 - `extension/content.js` – party logic, clock sync, playback sync, chat (emoji, GIFs, links), reactions, voice and video
@@ -233,7 +276,10 @@ messages honestly (it can't read or forge them, but it could drop or delay them)
   `run.mjs` (invite → join → chat → sync), `lifecycle.mjs`, `features.mjs` (avatars, emoji, reactions,
   text size, links, GIFs; `CSP=strict` for a strict image CSP), `youtube.mjs` (start, sync, ads, video change, dock),
   `prime.mjs` (mock Prime Video / Amazon pages: start, invite, sync both ways, ads, dock, title change, leaving),
-  `v18.mjs` (own avatar, light/dark + contrast audit, video chat with fake cameras: docked view, pop out, drag,
+  `anyvideo.mjs` (2.0: local test pages on two origins, popup Sync this tab / Join party on this tab, encrypted page
+  address on the invite page, sync, speed, drift nudges, element swap, Theater, shadow DOM, same-origin and
+  cross-origin iframes, picker, mismatch, live, canvas-only, Always allow; see the file header for how activeTab is
+  stood in for), `v18.mjs` (own avatar, light/dark + contrast audit, video chat with fake cameras: docked view, pop out, drag,
   resize, dock back, fullscreen, reload, panel closed; profile name editing; camera denied, HiDPI);
   `e2e/firefox/` runs the Firefox build (incl. Firefox ↔ Chromium voice and video)
 

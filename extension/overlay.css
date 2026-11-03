@@ -393,3 +393,23 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   .np-cams-grip, button.np-cam-me, .np-head-act { transition: none; }
   .np-cams-btn:active, .np-cams-grip:active, button.np-cam-me:active, .np-head-act:active { transform: none; }
 }
+
+/* ---- any-video mode (2.0): Theater / Full screen, and notes about the video */
+.np-root [hidden] { display: none !important; }
+.np-any-row { display: flex; gap: 8px; padding: 0 16px 10px; flex-wrap: wrap; }
+.np-pill-soft { background: var(--card); color: var(--text); }
+.np-pill-soft:hover { background: var(--hover); }
+.np-pill-soft[aria-pressed="true"] { background: var(--fill); color: #fff; }
+.np-pill:disabled { opacity: 0.5; cursor: default; }
+.np-pill, .np-pill-soft { transition: transform 0.12s; }
+.np-pill:active:not(:disabled) { transform: scale(0.96); }
+.np-any-note { margin: 0 16px 10px; padding: 10px 12px; border-radius: 12px; background: var(--card); color: var(--text); font-size: 13px; line-height: 1.45; }
+.np-any-note.np-warn { border: 1px solid var(--warn); }
+.np-any-note b { font-weight: 700; }
+.np-any-open { margin-top: 8px; display: flex; }
+.np-theater-icon[aria-pressed="true"] { color: var(--accent2); }
+.np-camdock .np-any-row { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .np-pill, .np-pill-soft { transition: none; }
+  .np-pill:active:not(:disabled) { transform: none; }
+}

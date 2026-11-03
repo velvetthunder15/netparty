@@ -12,6 +12,7 @@ API (`http://127.0.0.1:8444`) and mock KLIPY media host (`static.klipy.com`), an
 | `features.mjs` | avatars, emoji picker, 🎉 reactions (rate limit, edit, fullscreen), text size, links, GIFs (no key → unavailable; mock KLIPY → search/chips/attribution/send), popup, voice over encrypted signaling, reload keeps decryption, bare code / missing / malformed / wrong key messages, and a leak audit of every WebSocket frame (names, pictures, messages, GIF URLs, reactions, SDP/ICE, key, cids). `CSP=strict` makes the fake Netflix send `img-src 'self' blob:` so GIFs go through the blob: fallback |
 | `prime.mjs` | fake Prime Video (`www.primevideo.com`, `www.amazon.co.uk/gp/video`: overlay player `#dv-web-player`, muted hero trailer, `?autoplay=1`): start button next to Play, invite → join (autoplay opens the guest's player), sync both ways through the player's `<video>` (never the trailer), Prime ad countdown pauses sync, dock narrows the fixed player, title change, closing the player leaves/ends, popup site detection |
 | `v18.mjs` | own messages show your picture + name, themes (System follows `prefers-color-scheme`, Light/Dark override, persisted in the popup), WCAG contrast audit of every visible text in panel/pickers/voice/camera strip/toast/popup in both themes, video chat between two Chromium browsers (and a third for 3 cameras) with fake cameras (live frames both ways, 640x360 ≤24 fps; 1.9: docked in the panel by default with tiles filling most of it at 1280–1920 in both themes, chat keeps 4 lines, no overflow; chat closed → floating; pop out, collapse, drag anywhere + clamp, resize by mouse and keys, dock back by keyboard, fullscreen, remembered across a reload, clicks on tiles never reach the page; camera off, leaving voice), "Your profile" name field (Enter/blur save, empty ignored, Esc, 24 chars, the other peer sees it), SDP/camera state never in plaintext, camera permission denied, HiDPI (2x/3x: no upscaled raster images) |
+| `anyvideo.mjs` | 2.0 "Sync any video" on local test pages (`anysite.mjs`, two origins: `http://localhost:8450` and `:8451`): popup Sync this tab, invite page decrypts the page address (and refuses javascript:/data:/file:/credentials/markup), Open the video → popup Join party on this tab, play/pause/seek/speed sync both ways within 1 s, drift closed by speed nudges or a hard seek, the site swapping the `<video>`, Theater, open shadow root, same-origin iframe, cross-origin iframe (Allow, and a refused prompt), two videos (picker), duration mismatch → Open host's page, live stream, canvas-only page, Always allow (registered scripts, reload keeps the party), leak audit. activeTab can't be granted by automation: the suite loads a test copy of the extension with `http://localhost/*` in `host_permissions` instead (see the file header). Needs `test-short.webm` (60 s) next to `test.webm` |
 | `youtube.mjs` | YouTube start button, invite → join (key in the fragment, stripped from the URL), encrypted chat, sync, ads, video change, dock geometry (default/theater/fullscreen), leaving |
 
 `lib.mjs` has `tap(port, target)`: a recording WebSocket/HTTP proxy in front of the server, so the suites can check
@@ -20,6 +21,7 @@ exactly what the server receives and sends.
 ```bash
 cd e2e && npm i playwright
 ffmpeg -f lavfi -i testsrc=size=640x360:rate=25 -t 120 -c:v libvpx test.webm
+ffmpeg -f lavfi -i testsrc=size=320x180:rate=15 -t 60 -c:v libvpx -b:v 200k test-short.webm
 ffmpeg -f lavfi -i testsrc=size=200x150:rate=5 -t 1.2 test.gif
 openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 30 \
   -subj "/CN=www.netflix.com" -addext "subjectAltName=DNS:www.netflix.com,DNS:www.hotstar.com,DNS:www.youtube.com,DNS:static.klipy.com"
@@ -27,6 +29,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 30
 SCRIPT=lifecycle.mjs HOT=1 ./go.sh
 SCRIPT=features.mjs ./go.sh; SCRIPT=features.mjs CSP=strict ./go.sh
 SCRIPT=youtube.mjs ./go.sh
+SCRIPT=anyvideo.mjs TMO=420 ./go.sh
 SCRIPT=prime.mjs ./go.sh; SCRIPT=v18.mjs TMO=300 ./go.sh
 ```
 The certificate needs `DNS:www.primevideo.com,DNS:www.amazon.co.uk` in its subjectAltName too.

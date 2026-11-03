@@ -4,6 +4,35 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.0.0] - 2026-11-03
+### Added
+- **Sync any video**: on a site that isn't Netflix, JioHotstar, YouTube or Prime Video, the popup offers
+  **Sync this tab**. NetParty runs on that tab only after the click (Chrome's `activeTab` and `scripting`
+  permissions, which add no install-time warning), finds the video and starts a party. It finds videos in the page,
+  in open shadow roots and in same-origin iframes. It picks the playing video, or the clearly largest one; when
+  several look alike it highlights them and you click the one you mean. When the site swaps the video element
+  (an ad, the next episode) NetParty follows the new one.
+- **Invite page for any-video parties**: the page's address travels end-to-end encrypted with the party key, so our
+  server never sees it. The invite page decrypts it in your friend's browser, accepts only plain http(s)
+  addresses, and shows **Open the video**. On that page, friends click the NetParty icon and press
+  **Join party on this tab** (the popup finds the invite they opened).
+- **Always allow on this site** (optional): asks the browser for that one site and registers NetParty there, so
+  reloads keep the party. Untick it in the popup to remove it again.
+- **Players inside another site's frame**: if the video is in a cross-origin iframe, the popup asks for access to
+  that player's site only. If you say no, it tells you the video can't be synced.
+- **Different video check**: if a guest's video length differs from the host's by more than 3 seconds, the panel says
+  "You're on a different video" with an **Open host's page** button, and sync pauses for that guest.
+- **Live streams** (infinite duration) sync play and pause only.
+- **Smoother sync** on any-video pages: small gaps are closed by playing up to 10% faster or slower for a moment,
+  big gaps by a seek. Playback speed is synced too.
+- **Theater mode** in any-video parties: the video fills the window next to the chat, with an optional full screen
+  that keeps the chat visible (the player's own fullscreen button hides the chat, which the button's tooltip says).
+### Changed
+- Server: `av:<16 chars>` video ids, an encrypted `page` message (host only, size-capped, stored with the party),
+  an optional `rate` in the playback state, and the invite page's "Open the video" variant. Other parties work as
+  before.
+- `web_accessible_resources`: the panel stylesheet and font can load on any http(s) page (needed for any-video tabs).
+
 ## [1.9.2] - 2026-10-29
 ### Changed
 - **New font**: the chat panel and the popup now use Inter, bundled with the extension (SIL Open Font License,

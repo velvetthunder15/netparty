@@ -1,5 +1,6 @@
-// NetParty content script (Netflix, JioHotstar, YouTube, Prime Video). Owns: the party connection, clock sync,
-// playback sync, text chat (emoji, GIFs, links), reactions, voice and video chat (WebRTC mesh) and the in-page overlay.
+// NetParty content script (Netflix, JioHotstar, YouTube, Prime Video, and since 2.0 any page the user chose
+// to sync: see anyvideo.js). Owns: the party connection, clock sync, playback sync, text chat (emoji, GIFs, links),
+// reactions, voice and video chat (WebRTC mesh) and the in-page overlay.
 (() => {
   if (window.__netpartyLoaded) return;
   window.__netpartyLoaded = true;
@@ -20,7 +21,9 @@
   // "hs:" + the JioHotstar watch path ("hs:/in/shows/<show>/<id>/<ep>/<id>/watch"),
   // "yt:" + the YouTube video id ("yt:dQw4w9WgXcQ", from /watch?v=…),
   // or "pv:" + the Prime Video title page ("pv:www.primevideo.com/detail/<id>",
-  // "pv:www.amazon.co.uk/gp/video/detail/<ASIN>"), while its player is open.
+  // "pv:www.amazon.co.uk/gp/video/detail/<ASIN>"), while its player is open,
+  // or "av:" + 16 random characters for a video on any other page (2.0). An "av:" id names no site and is
+  // never turned into a link: the page's address travels end-to-end encrypted ("page", see anyPage).
   // Same shapes as validVideoId in server/core.js: anything else is never turned into a link.
   const PRIME_HOSTS = [
     "www.primevideo.com",
@@ -31,15 +34,19 @@
     if (typeof v !== "string" || !v || v.length > 512) return false;
     if (/^\d{1,12}$/.test(v)) return true;
     if (v.startsWith("yt:")) return /^yt:[A-Za-z0-9_-]{11}$/.test(v);
+    if (v.startsWith("av:")) return /^av:[A-Za-z0-9_-]{16}$/.test(v);
     if (v.startsWith("hs:")) return /^hs:(\/[A-Za-z0-9._~%-]+)+\/\d{5,}\/watch$/.test(v);
     const pv = PV_RE.exec(v);
     if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
     return false;
   }
-  const IS_HOTSTAR = /(^|\.)(jio)?hotstar\.com$/.test(location.hostname);
-  const IS_YT = /(^|\.)youtube\.com$/.test(location.hostname);
-  const IS_PRIME = PRIME_HOSTS.includes(location.hostname);
-  const SITE_NAME = IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : "Netflix";
+  // "Sync any video" (2.0): set by any-mode.js when the user chose to sync this page (not a supported service)
+  const IS_ANY = window.__netpartyAny === true;
+  const isAv = (v) => typeof v === "string" && v.startsWith("av:") && validVideoId(v);
+  const IS_HOTSTAR = !IS_ANY && /(^|\.)(jio)?hotstar\.com$/.test(location.hostname);
+  const IS_YT = !IS_ANY && /(^|\.)youtube\.com$/.test(location.hostname);
+  const IS_PRIME = !IS_ANY && PRIME_HOSTS.includes(location.hostname);
+  const SITE_NAME = IS_ANY ? "this page" : IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : "Netflix";
   const largest = (vids) => {
     if (vids.length < 2) return vids[0] || null;
     const area = (v) => {
@@ -80,6 +87,9 @@
     return m ? `/gp/video/detail/${m[1]}` : null;
   }
   const videoIdFromUrl = () => {
+    // any page: the party's own id (or a placeholder before there is one). The page counts as the
+    // "watch page" for as long as NetParty runs on it; the video itself is found by anyV.
+    if (IS_ANY) return isAv(party.state?.videoId) ? party.state.videoId : "av:local";
     if (IS_PRIME) {
       const t = primeTitlePath();
       const v = t && "pv:" + location.hostname + t;
@@ -97,10 +107,11 @@
   // compare by content id so slug, language-prefix or store differences don't matter
   const videoKey = (v) =>
     v && v.startsWith("hs:") ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1] : v && v.startsWith("pv:") ? "pv:" + v.split("/").pop() : v;
-  const sameVideo = (a, b) => videoKey(a) === videoKey(b);
+  const sameVideo = (a, b) => (IS_ANY ? isAv(b) : videoKey(a) === videoKey(b));
   // null for anything that isn't a known title shape (a party member can't send us elsewhere)
   const watchUrl = (videoId, roomId) => {
     if (!validVideoId(videoId) || !/^[a-z0-9]{4,16}$/.test(String(roomId))) return null;
+    if (videoId.startsWith("av:")) return null; // its address is encrypted (party.page)
     if (videoId.startsWith("yt:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${roomId}`;
     // Prime Video: autoplay=1 opens the player on the title page
     if (videoId.startsWith("pv:")) return `https://${videoId.slice(3)}?autoplay=1&npParty=${roomId}`;
@@ -124,7 +135,10 @@
   const titleCache = { vid: null, title: "" };
   function readTitle() {
     let t = "";
-    if (IS_PRIME) {
+    if (IS_ANY) {
+      t = document.querySelector('meta[property="og:title"]')?.content || document.title || "";
+      t = t.split(/\s[|–-]\s/)[0];
+    } else if (IS_PRIME) {
       const box = primePlayer()?.box;
       t = box?.querySelector('[class*="atvwebplayersdk-title-text"]')?.textContent || "";
       if (!t.trim()) t = document.querySelector('meta[property="og:title"]')?.content || document.querySelector("h1")?.textContent || "";
@@ -151,7 +165,7 @@
     return titleCache.title;
   };
   // the main player <video>: skip tiny previews/ads by preferring the largest one on screen
-  const mainVideo = () => (IS_PRIME ? primePlayer()?.video || null : largest([...document.querySelectorAll("video")]));
+  const mainVideo = () => (IS_ANY ? anyV.video : IS_PRIME ? primePlayer()?.video || null : largest([...document.querySelectorAll("video")]));
   const fmt = (ms) => {
     const t = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
@@ -329,8 +343,339 @@
     },
   };
 
+  // ------------------------------------------- any page: the video and its page (2.0)
+  // anyvideo.js finds the video (page, open shadow roots, same-origin iframes), or an agent in a
+  // cross-origin iframe drives it. This keeps track of which one is ours, follows the site when it swaps the
+  // element (ads, next episode), nudges the speed to correct small drift, and runs Theater mode.
+  // The page { u: address, d: duration in s, -1 for a live stream } is what the host shares, encrypted.
+  const PAGE_MAX = 2048;
+  function safePageUrl(s) {
+    if (typeof s !== "string" || !s || s.length > PAGE_MAX || /[\u0000-\u0020\u007f]/.test(s)) return null;
+    let u;
+    try {
+      u = new URL(s);
+    } catch {
+      return null;
+    }
+    if ((u.protocol !== "https:" && u.protocol !== "http:") || u.username || u.password || u.href !== s) return null;
+    return u.href;
+  }
+  const cleanPage = (p) => {
+    if (!p || typeof p !== "object") return null;
+    const d = p.d === -1 || (Number.isFinite(p.d) && p.d >= 0 && p.d < 1e7) ? p.d : null;
+    return { u: safePageUrl(p.u), d };
+  };
+  const anyV = IS_ANY
+    ? (() => {
+        const lib = globalThis.__npAnyLib;
+        let cur = null; // { v, chain, rect } the <video> we drive (here or in a same-origin iframe)
+        let agent = null; // { frameId, origin, el, chain } a video in a cross-origin iframe, driven via the background
+        let frameHint = null; // origin of a cross-origin iframe that may hold the video (needs the user's OK)
+        let base = 1; // the party's speed
+        let nudged = null; // a speed we set to catch up / slow down a little, or null
+        let lastDur = NaN; // seconds; Infinity for a live stream
+        let lastScan = 0;
+        let lastTU = 0;
+        let picking = false;
+        let pickerShown = false; // asked once on this page already (don't keep popping it up)
+        let theater = false;
+        let reserved = 0; // px on the right kept for the chat panel
+        let changedT = null;
+        const EVENTS = ["play", "pause", "seeked", "ratechange", "timeupdate", "durationchange", "loadedmetadata", "emptied"];
+        const same = (a, b) => Math.abs(a - b) < 1e-3;
+        function onEvt(e) {
+          const v = e.currentTarget;
+          if (!cur || v !== cur.v) return;
+          switch (e.type) {
+            case "play":
+            case "pause":
+            case "seeked":
+              onLocalPlayerEvent(e.type);
+              break;
+            case "ratechange":
+              if ((nudged !== null && same(v.playbackRate, nudged)) || same(v.playbackRate, base)) return;
+              base = v.playbackRate;
+              nudged = null;
+              onLocalPlayerEvent("rate");
+              break;
+            case "timeupdate": {
+              const now = Date.now();
+              if (now - lastTU < 1000) return;
+              lastTU = now;
+              if (v.duration === lastDur || (Number.isNaN(v.duration) && Number.isNaN(lastDur))) return;
+              lastDur = v.duration;
+              changed();
+              break;
+            }
+            default:
+              lastDur = v.duration;
+              changed();
+          }
+        }
+        // something about the video changed: the host re-shares the page, guests re-check it's the same video
+        function changed() {
+          clearTimeout(changedT);
+          changedT = setTimeout(() => {
+            sendPage();
+            checkMismatch();
+            ui.render();
+          }, 400);
+        }
+        function detach() {
+          if (cur) for (const t of EVENTS) cur.v.removeEventListener(t, onEvt);
+          cur = null;
+        }
+        function attach(c) {
+          if (cur && c && cur.v === c.v) return;
+          detach();
+          if (!c) return;
+          cur = { v: c.v, chain: c.chain || [], rect: c.rect || lib.topRect(c.v, c.chain) };
+          for (const t of EVENTS) cur.v.addEventListener(t, onEvt);
+          lastDur = cur.v.duration;
+          frameHint = null;
+          nudged = null;
+          if (theater) applyTheater();
+          changed();
+          // catch up with the party on the new element
+          setTimeout(() => party.roomId && party.state && applyRemote(party.state, "attach"), 300);
+          ui.render();
+        }
+        // non-interactive look at the page: { pick } | { ambiguous: [...] } | { agent } | { frame } | { none }
+        function find() {
+          const { list, frames } = lib.candidates();
+          const r = lib.choose(list);
+          if (r.pick) return { pick: r.pick };
+          if (r.ambiguous) return { ambiguous: r.ambiguous };
+          if (agent) return { agent };
+          if (frames.length) {
+            frameHint = frames[0].origin;
+            return { frame: frames[0] };
+          }
+          return { none: true };
+        }
+        // let the user click the video they mean; resolves true once one is attached
+        async function pick(list) {
+          picking = pickerShown = true;
+          try {
+            const c = await lib.picker(list);
+            if (c) attach(c);
+            return !!c;
+          } finally {
+            picking = false;
+          }
+        }
+        // keep following the right <video>: re-attach when the site replaces it
+        function tick() {
+          if (!party.roomId || picking) return;
+          if (cur && cur.v.isConnected) {
+            cur.rect = lib.topRect(cur.v, cur.chain);
+            return;
+          }
+          const now = Date.now();
+          if (now - lastScan < 700) return;
+          lastScan = now;
+          const { list, frames } = lib.candidates();
+          if (cur) {
+            // swapped (ad, next episode): the new element sitting where the old one was
+            const old = cur.rect;
+            detach();
+            const overlap = (r) => Math.max(0, Math.min(r.right, old.right) - Math.max(r.left, old.left)) * Math.max(0, Math.min(r.bottom, old.bottom) - Math.max(r.top, old.top));
+            const best = list.map((c) => [c, overlap(c.rect)]).sort((a, b) => b[1] - a[1])[0];
+            if (best && best[1] > 0.3 * Math.min(old.width * old.height, best[0].rect.width * best[0].rect.height)) return attach(best[0]);
+          }
+          const r = lib.choose(list);
+          if (r.pick) return attach(r.pick);
+          if (r.ambiguous && !pickerShown) return void pick(r.ambiguous);
+          const hint = !r.ambiguous && !agent && frames[0] ? frames[0].origin : null;
+          if (hint !== frameHint) {
+            frameHint = hint;
+            ui.render();
+          }
+        }
+        setInterval(tick, 1000);
+        // ---- cross-origin iframe agent (messages relayed by the background)
+        const toAgent = (m) => (agent ? chrome.runtime.sendMessage({ cmd: "npAgent", frameId: agent.frameId, ...m }).catch(() => null) : Promise.resolve(null));
+        function onFrame(m) {
+          if (m.op === "hello") {
+            if (cur) return; // a video in this page wins
+            const f = lib.candidates().frames.find((x) => x.origin === m.origin);
+            agent = { frameId: m.frameId, origin: m.origin, el: f?.el || null, chain: f?.chain || [] };
+            frameHint = null;
+            nudged = null;
+            if (theater) applyTheater();
+            changed();
+            setTimeout(() => party.roomId && party.state && applyRemote(party.state, "attach"), 300);
+            ui.render();
+            return;
+          }
+          if (!agent || m.frameId !== agent.frameId || cur) return;
+          if (m.op === "lost") return;
+          if (m.op !== "event") return;
+          if (m.kind === "play" || m.kind === "pause" || m.kind === "seeked") onLocalPlayerEvent(m.kind);
+          else if (m.kind === "ratechange" && Number.isFinite(m.rate)) {
+            if ((nudged !== null && same(m.rate, nudged)) || same(m.rate, base)) return;
+            base = m.rate;
+            nudged = null;
+            onLocalPlayerEvent("rate");
+          } else changed();
+        }
+        // ---- playback
+        async function status() {
+          if (cur?.v) {
+            const x = cur.v;
+            lastDur = x.duration;
+            return {
+              position: Math.round((x.currentTime || 0) * 1000),
+              playing: !x.paused,
+              buffering: x.readyState < 3 && !x.paused,
+              duration: x.duration === Infinity ? -1 : Math.round((x.duration || 0) * 1000),
+              live: x.duration === Infinity,
+            };
+          }
+          if (!agent) return null;
+          const r = await toAgent({ op: "status" });
+          if (!r || !Number.isFinite(r.position)) return null;
+          lastDur = r.live ? Infinity : r.duration > 0 ? r.duration / 1000 : NaN;
+          return { position: r.position, playing: !!r.playing, buffering: !!r.buffering, duration: r.duration, live: !!r.live };
+        }
+        async function setRate(r, nudge) {
+          if (cur?.v) cur.v.playbackRate = r;
+          else await toAgent({ op: "rate", rate: r, nudge });
+        }
+        return {
+          get video() {
+            return cur?.v || null;
+          },
+          get ready() {
+            return !!(cur || agent);
+          },
+          get frameHint() {
+            return frameHint;
+          },
+          get picking() {
+            return picking;
+          },
+          get theater() {
+            return theater;
+          },
+          get base() {
+            return base;
+          },
+          // seconds (Infinity: live); NaN while unknown
+          get duration() {
+            if (cur?.v) lastDur = cur.v.duration;
+            return lastDur;
+          },
+          get live() {
+            return this.duration === Infinity;
+          },
+          find,
+          attach,
+          pick,
+          tick,
+          onFrame,
+          changed,
+          resetAsk: () => (pickerShown = false),
+          status,
+          seek: async (ms) => (cur?.v ? (cur.v.currentTime = Math.max(0, ms) / 1000) : toAgent({ op: "seek", position: ms })),
+          play: async () => (cur?.v ? cur.v.play()?.catch(() => {}) : toAgent({ op: "play" })),
+          pause: async () => (cur?.v ? cur.v.pause() : toAgent({ op: "pause" })),
+          // the party's speed (from a remote update); also ends any nudge
+          async setBase(r) {
+            r = Number.isFinite(r) && r >= 0.0625 && r <= 16 ? r : 1;
+            if (same(r, base) && nudged === null) return;
+            base = r;
+            nudged = null;
+            await setRate(r, false);
+          },
+          // small speed change to close a gap of a few hundred ms (dir +1 = speed up, -1 = slow down, 0 = stop)
+          async nudge(dir, gapMs = 0) {
+            const k = Math.min(0.1, 0.03 + Math.abs(gapMs) / 20000);
+            const want = dir ? Math.round(base * (1 + dir * k) * 1000) / 1000 : null;
+            if (want === nudged || (want === null && nudged === null)) return;
+            nudged = want;
+            await setRate(want ?? base, true);
+          },
+          get nudged() {
+            return nudged;
+          },
+          // ---- Theater mode: the video (or the iframe holding it) fills the window left of the chat
+          setReserved(px) {
+            if (px === reserved) return;
+            reserved = px;
+            if (theater) applyTheater();
+          },
+          async toggleTheater(on = !theater) {
+            theater = !!on;
+            if (!theater && document.fullscreenElement === document.documentElement) await document.exitFullscreen().catch(() => {});
+            applyTheater();
+            ui.render();
+          },
+        };
+        function applyTheater() {
+          lib.theaterOff();
+          toAgent({ op: "theater", on: theater && !cur });
+          if (!theater) return;
+          const topFill = { width: `calc(100vw - ${reserved}px)`, height: "100vh" };
+          const inner = { width: "100vw", height: "100vh" };
+          if (cur) {
+            const els = [...cur.chain, cur.v];
+            els.forEach((n, i) => lib.theaterOn(n, i === 0 ? topFill : inner));
+          } else if (agent?.el) [...agent.chain, agent.el].forEach((n, i) => lib.theaterOn(n, i === 0 ? topFill : inner));
+        }
+      })()
+    : null;
+
+  // the page the host shares with the party (address + duration); host only
+  let pageSig = "";
+  function pageNow() {
+    let u = location.href;
+    if (u.length > PAGE_MAX) u = u.split("#")[0];
+    const d = anyV.duration;
+    return { u: safePageUrl(u), d: d === Infinity ? -1 : Number.isFinite(d) && d > 0 ? Math.round(d * 10) / 10 : null };
+  }
+  async function sendPage() {
+    if (!IS_ANY || !party.roomId || !party.me || party.me !== party.hostId || !e2e.ready) return;
+    const p = pageNow();
+    const sig = JSON.stringify(p);
+    if (sig === pageSig || sig === JSON.stringify(party.page)) return void (pageSig = sig);
+    pageSig = sig;
+    try {
+      const ct = await e2e.seal("page", "", p);
+      await net.request("page", { ct });
+      party.page = p;
+    } catch {
+      pageSig = "";
+    }
+  }
+  // guests: is this the host's video? Durations more than 3 s apart (both known, not live) say it isn't
+  let anyMismatch = false;
+  function checkMismatch() {
+    let m = false;
+    if (IS_ANY && party.roomId && party.me !== party.hostId && anyV.ready) {
+      const hd = party.page?.d, gd = anyV.duration;
+      m = Number.isFinite(hd) && hd > 0 && Number.isFinite(gd) && gd > 0 && Math.abs(hd - gd) > 3;
+    }
+    if (m === anyMismatch) return;
+    anyMismatch = m;
+    if (m) ui.system("You're on a different video than the host, so sync is paused for you.");
+    else if (party.state) applyRemote(party.state, "same-video");
+    ui.render();
+  }
+  // "Open host's page": this tab goes to the host's page (checked: http(s) only). The party key stays in this
+  // tab's extension storage, so the popup there offers "Join party on this tab".
+  async function openHostPage() {
+    const u = safePageUrl(party.page?.u);
+    if (!u) return;
+    await net.request("leave", {}, 2000).catch(() => {});
+    location.href = u;
+  }
+  // live stream on either side: only play and pause are synced
+  const anyLive = () => IS_ANY && (anyV.live || party.page?.d === -1);
+
   // ------------------------------------------------- page-context bridge
   const bridge = (() => {
+    if (IS_ANY) return { status: () => anyV.status(), seek: (ms) => anyV.seek(ms), play: () => anyV.play(), pause: () => anyV.pause() };
     // YouTube: a plain HTML5 <video> in #movie_player, driven straight from here. (No page
     // script needed, which matters because youtube.com enforces a nonce-based script-src.)
     // Prime Video: the HTML5 <video> in its overlay player, the same way.
@@ -571,7 +916,8 @@
     hostId: null,
     hostOnly: false,
     members: [],
-    state: null, // { playing, position, at (server ms), videoId, by }
+    state: null, // { playing, position, at (server ms), videoId, by, rate? }
+    page: null, // any-video parties: the host's page { u, d } (decrypted)
     profiles: new Map(), // pid -> { name, avatar } (decrypted)
     profileCt: new Map(), // pid -> the ciphertext it came from
     name: "Guest",
@@ -582,10 +928,12 @@
   let suppressUntil = 0;
   let lastEpisodeChange = 0;
   let lastLocalAction = 0;
+  let lastLocalEvt = 0; // the viewer's own play / pause / seek, before it's sent
   let videoEl = null;
 
+  // rate: the party's playback speed (any-video parties; everyone else plays at 1x)
   const expectedPosition = (st) =>
-    st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) : 0);
+    st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) * (Number.isFinite(st.rate) && st.rate > 0 ? st.rate : 1) : 0);
 
   async function loadPrefs() {
     const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions", "theme"]);
@@ -660,7 +1008,9 @@
   }
 
   async function createParty() {
-    const vid = videoIdFromUrl();
+    // any page: a new random id for the party's video (the page's address goes out encrypted, below)
+    const vid = IS_ANY ? "av:" + e2e.genKey().slice(0, 16) : videoIdFromUrl();
+    if (IS_ANY && !anyV.ready) throw new Error("No video found on this page.");
     if (!vid)
       throw new Error(
         IS_YT
@@ -687,12 +1037,14 @@
       playing: st.playing,
       position: st.position,
       at: clock.serverNow(),
+      ...(IS_ANY && anyV.base !== 1 ? { rate: anyV.base } : {}),
     });
     try {
       if (!snap?.e2ee || typeof snap.roomId !== "string") throw new Error(E2E.OLD_SERVER);
       e2e.setRoom(snap.roomId);
       await keys.set(snap.roomId, key);
       await inbound(() => onJoined(snap));
+      if (IS_ANY) await sendPage();
     } catch (e) {
       net.request("end", {}, 3000).catch(() => {});
       e2e.clear();
@@ -717,7 +1069,9 @@
       throw e;
     }
     await keys.set(info.roomId, key);
-    if (!videoIdFromUrl()) {
+    // a party on a video on some other page can only be joined from that page (any-video mode)
+    if (!IS_ANY && isAv(info.videoId)) throw new Error("This party is watching a video on another site. Open the invite link and press Open the video.");
+    if (!videoIdFromUrl() || (IS_ANY && !isAv(info.videoId))) {
       // not on a player yet (browse page): go to the party's title; the invite code
       // rides along in the URL (the key stays in this tab's extension storage) and the join happens there
       const url = info.videoId && watchUrl(info.videoId, info.roomId);
@@ -761,6 +1115,13 @@
     party.hostId = null;
     party.members = [];
     party.state = null;
+    party.page = null;
+    if (IS_ANY) {
+      anyV.toggleTheater(false);
+      anyV.setBase(1);
+      anyMismatch = false;
+      pageSig = "";
+    }
     party.profiles.clear();
     party.profileCt.clear();
     e2e.clear();
@@ -791,7 +1152,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     if (ui.theme) box.dataset.theme = ui.theme;
     else delete box.dataset.theme;
     box.replaceChildren(el("b", {}, "NetParty "), text);
-    (document.fullscreenElement || document.body).append(noticeHost);
+    const fsEl = document.fullscreenElement;
+    (fsEl && fsEl.localName !== "video" && fsEl.localName !== "iframe" ? fsEl : document.body).append(noticeHost);
     requestAnimationFrame(() => box.classList.add("s"));
     clearTimeout(notice.t);
     notice.t = setTimeout(() => box.classList.remove("s"), 5000);
@@ -845,6 +1207,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     party.hostOnly = snap.hostOnly;
     party.members = Array.isArray(snap.members) ? snap.members : [];
     party.state = snap.state;
+    party.page = null;
+    if (IS_ANY && typeof snap.page === "string") party.page = cleanPage(await e2e.open("page", "", snap.page));
     party.error = null;
     decryptWarned = false;
     sessionStorage.setItem("netpartyRoom", snap.roomId);
@@ -882,7 +1246,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     if (!st) return;
     const vid = videoIdFromUrl();
     if (!vid) return; // not on a watch page (left the title): never pull them back in
-    if (st.videoId && !sameVideo(vid, st.videoId)) {
+    if (IS_ANY) {
+      // never navigates anyone: a different video shows "Open host's page" instead (checkMismatch)
+      if (anyMismatch || anyV.picking) return;
+    } else if (st.videoId && !sameVideo(vid, st.videoId)) {
       // a late update from the old episode right after we switched: ours wins
       if (Date.now() - lastEpisodeChange < 8000) return;
       // different title/episode: follow the party (only to a known title shape on this site's kind)
@@ -898,7 +1265,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     if (adPlaying()) return;
     suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
     const target = expectedPosition(st);
-    if (Math.abs(target - cur.position) >= SEEK_THRESHOLD_MS) await bridge.seek(target);
+    if (IS_ANY) await anyV.setBase(st.rate);
+    // live streams: there's no shared timeline, so only play / pause follow the party
+    if (!(IS_ANY && anyLive()) && Math.abs(target - cur.position) >= SEEK_THRESHOLD_MS) await bridge.seek(target);
     if (st.playing && !cur.playing) await bridge.play();
     if (!st.playing && cur.playing) await bridge.pause();
     suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
@@ -909,6 +1278,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   function onLocalPlayerEvent(kind) {
     if (HAS_ADS) adWatch(); // an ad that just ended: the resume events below are the site's, not ours
     if (!party.roomId || Date.now() < suppressUntil || adPlaying()) return;
+    if (IS_ANY && (anyMismatch || (kind === "seeked" && anyLive()))) return;
+    lastLocalEvt = Date.now();
     // coalesce bursts (Netflix fires pause+seeked+play when scrubbing)
     clearTimeout(sendTimer);
     sendTimer = setTimeout(async () => {
@@ -927,6 +1298,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         at: clock.serverNow(),
         videoId: videoIdFromUrl(),
         reason: kind,
+        ...(IS_ANY && anyV.base !== 1 ? { rate: anyV.base } : {}),
       };
       // only count it once the server took it (a rejected update must not hide an
       // episode change from the check in watchPlayer)
@@ -936,6 +1308,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
   // periodic drift correction
   setInterval(async () => {
+    if (IS_ANY) return; // see anyDrift
     if (!party.roomId || !party.state || !party.state.playing) return;
     if (Date.now() < suppressUntil || Date.now() - lastLocalAction < 4000 || adPlaying()) return;
     const cur = await bridge.status();
@@ -946,6 +1319,32 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       applyRemote(party.state, "drift");
     }
   }, 3000);
+
+  // any page: checked every second. A small gap is closed by playing up to 10% faster or slower for a
+  // moment (no visible jump); a big one by seeking. Live streams: play / pause only.
+  const NUDGE_FROM_MS = 250;
+  const HARD_SEEK_MS = 2500;
+  async function anyDrift() {
+    if (!party.roomId || !party.state || anyMismatch || anyV.picking || !anyV.ready) return anyV.nudge(0);
+    if (Date.now() < suppressUntil || Date.now() - lastLocalAction < 3000 || Date.now() - lastLocalEvt < 3000) return;
+    const st = party.state;
+    const cur = await bridge.status();
+    if (!cur || cur.buffering) return anyV.nudge(0);
+    if (st.playing !== cur.playing) {
+      // a missed play / pause (a site that ignored it, or an event we never saw)
+      applyRemote(st, "drift-state");
+      return;
+    }
+    if (!st.playing || anyLive()) return anyV.nudge(0);
+    const drift = cur.position - expectedPosition(st);
+    if (Math.abs(drift) > HARD_SEEK_MS) {
+      log("drift", drift, "seeking");
+      await anyV.nudge(0);
+      applyRemote(st, "drift");
+    } else if (Math.abs(drift) > NUDGE_FROM_MS) await anyV.nudge(drift > 0 ? -1 : 1, drift);
+    else if (Math.abs(drift) < 120) await anyV.nudge(0);
+  }
+  if (IS_ANY) setInterval(anyDrift, 1000);
 
   // YouTube / Prime Video ads: while one plays this viewer neither sends nor applies sync; when it
   // ends they jump back to where the party is.
@@ -967,6 +1366,17 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   // attach to the <video> element and follow the sites' SPA navigation
   let lastVideoId = videoIdFromUrl();
   function watchPlayer() {
+    if (IS_ANY) {
+      // any page: anyV follows the video; the host re-shares the page when its address changes
+      anyV.tick();
+      if (party.roomId) {
+        sendPage();
+        currentTitle();
+      }
+      ui.mount();
+      ui.dockCheck();
+      return;
+    }
     // episode change first, so a newly attached player syncs to the NEW episode
     const vid = videoIdFromUrl();
     if (vid !== lastVideoId) {
@@ -1028,6 +1438,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     return v;
   };
   async function waitForPlayer(ms = 20000) {
+    if (IS_ANY) return true; // joining doesn't wait for the video; anyV attaches it when it shows up
     for (let t = 0; t < ms; t += 500) {
       if (!videoIdFromUrl()) return false;
       if (await bridge.status()) return true;
@@ -1295,11 +1706,21 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       case "state":
         party.state = msg.data;
         if (msg.data.reason && msg.data.by) {
-          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : IS_PRIME ? "changed the title" : "changed the episode" }[msg.data.reason];
+          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : IS_PRIME ? "changed the title" : "changed the episode", rate: "set the speed to " + (Number.isFinite(msg.data.rate) ? msg.data.rate : 1) + "x" }[msg.data.reason];
           if (what) ui.system(`${nameOf(msg.data.by)} ${what}`);
         }
         applyRemote(msg.data, "remote");
         break;
+      case "page": {
+        // any-video parties: the host's page changed (address or video)
+        if (!IS_ANY || !party.roomId || typeof msg.data?.ct !== "string") break;
+        const p = cleanPage(await e2e.open("page", "", msg.data.ct));
+        if (!p) break;
+        party.page = p;
+        checkMismatch();
+        ui.render();
+        break;
+      }
       case "members":
         if (!party.roomId || !Array.isArray(msg.data.members)) break;
         party.members = msg.data.members;
@@ -1763,6 +2184,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     const E = globalThis.NP_EMOJI || { avatars: ["🙂"], reactions: ["😂", "😭", "💀", "🥰", "😱"], categories: [] };
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
     let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer, headEl, leaveIcon;
+    let anyRow, anyNote, theaterBtn, fsBtn, theaterIcon; // any-video mode: Theater, Full screen, notes
     let open = false;
     let unread = 0;
     let toastTimer = 0;
@@ -1806,6 +2228,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       resize: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M20 9 9 20M20 15l-5 5"/>',
       leave: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9"/>',
       check: '<path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/>',
+      theater: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 6h18v12H3z"/><path fill="currentColor" d="M5 8h10v8H5z"/>',
+      expand: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
     };
     const iconBtn = (icon, title, onclick, cls = "") =>
       el("button", { type: "button", class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
@@ -2851,11 +3275,31 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         "Leave party",
       );
 
+      // any-video mode: Theater (the video fills the window, the chat stays beside it) and notes about the video
+      const THEATER_TIP = "Theater mode: the video fills the window and the chat stays beside it. The player's own fullscreen button hides the chat.";
+      theaterBtn = el("button", { type: "button", class: "np-pill np-pill-soft np-theater", title: THEATER_TIP, "aria-pressed": "false", onclick: () => anyV.toggleTheater() }, svg(ICON.theater), el("span", {}, "Theater"));
+      fsBtn = el(
+        "button",
+        {
+          type: "button", class: "np-pill np-pill-soft np-fs", title: "Full screen with the chat still showing (Esc to leave)",
+          onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}),
+        },
+        svg(ICON.expand),
+        el("span", {}, "Full screen"),
+      );
+      theaterIcon = el("button", { type: "button", class: "np-icon np-head-act np-theater-icon", title: THEATER_TIP, "aria-label": "Theater mode", "aria-pressed": "false", onclick: () => anyV.toggleTheater() }, svg(ICON.theater));
+      anyRow = el("div", { class: "np-any-row" }, theaterBtn, fsBtn);
+      anyNote = el("div", { class: "np-any-note", role: "status" });
+      if (!IS_ANY) anyRow.hidden = anyNote.hidden = theaterIcon.hidden = true;
+      headEl.querySelector(".np-head-acts").prepend(theaterIcon);
+
       panel = el(
         "aside",
         { class: "np-panel", "aria-label": "NetParty chat" },
         head,
         el("div", { class: "np-actions" }, copyBtn, leaveBtn),
+        anyRow,
+        anyNote,
         el("div", { class: "np-section-label" }, "Watching"),
         peopleEl,
         voiceBox,
@@ -2877,6 +3321,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       document.addEventListener("fullscreenchange", () => {
         mount();
         dockCheck(true);
+        if (IS_ANY) render();
       });
     }
 
@@ -2954,8 +3399,10 @@ html.np-docked [data-np-shrink] {
         ensurePageStyle();
         html.style.setProperty("--np-w", w + "px");
         host.style.setProperty("--np-w", w + "px");
-        markShrinkTargets();
+        // any page: nothing on the site is narrowed; Theater mode leaves room for the panel instead
+        if (!IS_ANY) markShrinkTargets();
       }
+      if (IS_ANY) anyV.setReserved(docked ? w : 0);
       if (sig === lastDockSig && !force) return;
       lastDockSig = sig;
       html.classList.toggle("np-docked", docked);
@@ -2969,7 +3416,9 @@ html.np-docked [data-np-shrink] {
     function mount() {
       if (!host) build();
       // sites fullscreen a container element; the overlay must live inside it to stay visible
-      const parent = document.fullscreenElement || document.body;
+      // (a <video> or <iframe> in fullscreen can't hold it: the chat can't show over native video fullscreen)
+      const fs = document.fullscreenElement;
+      const parent = (fs && fs.localName !== "video" && fs.localName !== "iframe" ? fs : null) || document.body;
       if (parent && host.parentElement !== parent) parent.append(host);
       // only on a watch page; on Netflix's browse pages the party waits in the background
       host.style.display = party.roomId && videoIdFromUrl() ? "" : "none";
@@ -3039,6 +3488,7 @@ html.np-docked [data-np-shrink] {
       }
       metaEl.textContent = metaText();
       metaEl.classList.toggle("np-ad", adPlaying());
+      if (IS_ANY) renderAny();
 
       const pSig = party.members
         .map((m) => {
@@ -3111,6 +3561,39 @@ html.np-docked [data-np-shrink] {
           ),
         );
       }
+    }
+
+    // any-video mode: Theater state, and a note when the video isn't the host's, can't be found, or is live
+    function renderAny() {
+      const t = anyV.theater;
+      theaterBtn.setAttribute("aria-pressed", String(t));
+      theaterIcon.setAttribute("aria-pressed", String(t));
+      theaterBtn.lastChild.textContent = t ? "Exit theater" : "Theater";
+      theaterBtn.disabled = theaterIcon.disabled = !anyV.ready;
+      fsBtn.hidden = !t;
+      fsBtn.lastChild.textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+      let note = null;
+      if (anyMismatch) {
+        const u = party.page?.u;
+        note = [
+          el("b", {}, "You're on a different video."),
+          " Your video's length doesn't match the host's, so sync is paused for you.",
+          ...(u ? [el("button", { type: "button", class: "np-pill np-any-open", onclick: () => openHostPage() }, "Open host's page")] : []),
+        ];
+      } else if (!anyV.ready && anyV.frameHint) {
+        let site = anyV.frameHint;
+        try {
+          site = new URL(anyV.frameHint).host;
+        } catch {}
+        note = [el("b", {}, "The video is in a player from " + site + "."), " Click the NetParty icon in the toolbar and press Allow to sync it."];
+      } else if (!anyV.ready) note = [el("b", {}, "No video found on this page."), " Play the video, or open the page it's on."];
+      else if (anyLive()) note = ["Live stream: only play and pause are synced."];
+      const sig = anyMismatch + "|" + anyV.ready + "|" + anyV.frameHint + "|" + anyLive() + "|" + (party.page?.u || "");
+      if (anyNote.dataset.sig === sig) return;
+      anyNote.dataset.sig = sig;
+      anyNote.replaceChildren(...(note || []));
+      anyNote.hidden = !note;
+      anyNote.classList.toggle("np-warn", !!note && !anyLive());
     }
 
     function addLine(node) {
@@ -3227,8 +3710,49 @@ html.np-docked [data-np-shrink] {
     };
   })();
 
+  // ---- any page: find the video for a new party or one we just joined.
+  // -> { ok } | { picking } (the highlight overlay is up; the rest happens on the page) |
+  //    { needFrame: origin } (the video is in a cross-origin iframe: the popup asks for that site) |
+  //    { none } (no <video> anywhere we can see, e.g. a canvas-only player)
+  async function anyFind(then) {
+    if (anyV.ready) {
+      await then();
+      return { ok: true };
+    }
+    const f = anyV.find();
+    if (f.pick) {
+      anyV.attach(f.pick);
+      await then();
+      return { ok: true };
+    }
+    if (f.ambiguous) {
+      (async () => {
+        if (!(await anyV.pick(f.ambiguous))) return notice("No video picked. Click the NetParty icon to try again.");
+        try {
+          await then();
+        } catch (e) {
+          notice(e.message);
+        }
+      })();
+      return { picking: true };
+    }
+    if (f.agent) {
+      await then();
+      return { ok: true };
+    }
+    if (f.frame) return { needFrame: f.frame.origin };
+    return { none: true };
+  }
+  const NO_VIDEO = "No video found on this page.";
+
   // ------------------------------------------------ popup <-> content API
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    // a video in a cross-origin iframe (anyvideo.js agent), relayed by the background: nothing to answer
+    if (msg?.cmd === "npFrameEvt") {
+      if (IS_ANY && Number.isInteger(msg.frameId)) anyV.onFrame(msg);
+      return;
+    }
+    if (msg?.cmd === "npAgent") return; // for agents in subframes, not for us
     (async () => {
       try {
         switch (msg.cmd) {
@@ -3243,17 +3767,45 @@ html.np-docked [data-np-shrink] {
               isHost: party.me === party.hostId,
               voice: voice.active,
               chatOpen: false,
+              any: IS_ANY,
+              booted,
+              video: IS_ANY ? anyV.ready : undefined,
+              frameHint: IS_ANY ? anyV.frameHint : undefined,
+              picking: IS_ANY ? anyV.picking : undefined,
             };
           case "create":
+            if (IS_ANY) {
+              if (party.roomId) return { ok: true, invite: inviteLink() };
+              anyV.resetAsk();
+              const r = await anyFind(async () => {
+                await createParty();
+                ui.show();
+              });
+              if (r.none) throw new Error(NO_VIDEO);
+              return { ...r, invite: inviteLink() };
+            }
             await createParty();
             return { ok: true, invite: inviteLink() };
+          case "findVideo": {
+            // the popup allowed a cross-origin player: look again (the agent says hello once it's in)
+            if (!IS_ANY) return { ok: true };
+            for (let t = 0; t < 3000 && !anyV.ready; t += 250) await sleep(250);
+            return { ok: anyV.ready, frameHint: anyV.frameHint };
+          }
           case "join": {
             // from the popup: the full invite link's code and key
             const code = String(msg.roomId || "").trim().toLowerCase();
             if (!/^[a-z0-9]{4,16}$/.test(code)) throw new Error("That doesn't look like a NetParty invite link.");
             if (!e2e.validKey(msg.key)) throw new Error(E2E.NEED_LINK);
             await keys.set(code, msg.key);
+            if (IS_ANY && party.roomId === code) return { ok: true };
             await joinParty(code);
+            if (IS_ANY && party.roomId) {
+              anyV.resetAsk();
+              const r = await anyFind(async () => {});
+              if (r.none) ui.system(NO_VIDEO + " Play the video, or open the page it's on.");
+              return { ...r, none: undefined, ok: true };
+            }
             return { ok: true };
           }
           case "leave":
