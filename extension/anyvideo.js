@@ -103,11 +103,26 @@
     return { list, frames };
   }
   // the playing video, else the clearly largest visible one; several similar ones -> ask the user
+  // paused counts too: a video that has loaded media and been watched beats an empty or unstarted one
+  const hasMedia = (v) => v.readyState >= 1 || !!v.currentSrc || !!v.srcObject;
+  const started = (v) => hasMedia(v) && v.currentTime > 0 && !v.ended;
+  const rank = (v) => (isPlaying(v) ? 4 : 0) + (started(v) ? 2 : 0) + (hasMedia(v) ? 1 : 0);
+  const overlapRatio = (a, b) => {
+    const w = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+    const h = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    return (w * h) / Math.max(1, Math.min(a.width * a.height, b.width * b.height));
+  };
   function choose(list) {
     if (!list.length) return { none: true };
-    const live = list.filter((c) => isPlaying(c.v));
-    const pool = (live.length ? live : list).slice().sort((a, b) => area(b) - area(a));
+    const tiers = [list.filter((c) => isPlaying(c.v)), list.filter((c) => started(c.v)), list.filter((c) => hasMedia(c.v)), list];
+    const pool = tiers.find((t) => t.length).slice().sort((a, b) => area(b) - area(a));
     if (pool.length === 1 || area(pool[0]) >= 2.5 * area(pool[1])) return { pick: pool[0] };
+    // players often stack two <video>s in one box (ad layer, preloader): take the better one of the pair
+    if (overlapRatio(pool[0].rect, pool[1].rect) > 0.8 && pool.slice(2).every((c) => area(pool[0]) >= 2.5 * area(c))) {
+      const [x, y] = pool;
+      const best = rank(y.v) > rank(x.v) || (rank(y.v) === rank(x.v) && y.v.currentTime > x.v.currentTime) ? y : x;
+      return { pick: best };
+    }
     return { ambiguous: pool };
   }
 

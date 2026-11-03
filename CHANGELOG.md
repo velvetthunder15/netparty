@@ -4,6 +4,12 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.0.1] - 2026-11-03
+### Fixed
+- **Sync this tab on a paused video**: when no video was playing and the page had more than one (often a second
+  player layer stacked behind the real one), NetParty asked you to pick instead of starting. It now prefers the
+  video you've been watching, then one with media loaded, and resolves stacked players on its own.
+
 ## [2.0.0] - 2026-11-03
 ### Added
 - **Sync any video**: on a site that isn't Netflix, JioHotstar, YouTube or Prime Video, the popup offers
