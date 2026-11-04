@@ -6,7 +6,7 @@
     <title>NetParty — Watch together, in sync</title>
     <meta name="description" content="NetParty is a free browser extension for watch parties: synced play, pause and seek, with text, voice and video chat beside the video. No account needed." />
     <meta property="og:title" content="NetParty — Watch together, in sync" />
-    <meta property="og:description" content="Start a party from any title, send one link, and everyone stays locked in sync, with chat, voice and video right beside the video. Free browser extension." />
+    <meta property="og:description" content="Start a party on Netflix, YouTube or almost any video site, send one link, and everyone stays locked in sync, with chat, voice and video right beside the video. Free browser extension." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://netparty.tech/" />
     <meta name="theme-color" content="#0B0A10" />
@@ -280,6 +280,9 @@
       .x-vig::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, rgba(124,92,255,.13), transparent 70%); pointer-events: none; }
       .x-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 13px; border-radius: 999px; background: #201e2b; border: 1px solid #353147; font-size: 13px; font-weight: 500; color: var(--x-text); white-space: nowrap; position: relative; }
       .x-chip--dash { background: transparent; border-style: dashed; color: var(--x-mute); }
+      .x-chip__lnk { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; transition: opacity .15s; }
+      .x-chip__lnk:active { opacity: .6; }
+      @media (hover:hover) { .x-chip__lnk:hover { color: var(--x-text); } }
 
       /* steps */
       .x-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -641,13 +644,14 @@
             </div>
           </div>
           <p class="x-h1 x-rv">Watch together, <span class="x-grad-text">in sync.</span></p>
-          <p class="x-lead x-rv">Start a party from any title, send one link, and everyone's play, pause and seek stay locked together, with chat and voice right beside the video.</p>
+          <p class="x-lead x-rv">Start a party on your favourite streaming service or almost any site that plays video, send one link, and everyone's play, pause and seek stay locked together, with chat and voice right beside the video.</p>
           <ul class="x-works x-rv" aria-label="Works on">
             <li class="x-works__lab" aria-hidden="true">Works on</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="netflix.svg" width="22" height="22" alt="" /></span>Netflix</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.webp" width="64" height="64" alt="" /></span>JioHotstar</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" width="22" height="22" alt="" /></span>YouTube</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="primevideo.svg" width="27" height="22" alt="" /></span>Prime Video</li>
+            <li class="x-chip x-chip--dash"><a class="x-chip__lnk" href="#faq-other-sites">+ Other video sites</a></li>
           </ul>
           <div class="x-cta x-rv">
             <a class="x-btn x-btn--primary" href="#install" data-install>Add to browser, free</a>
@@ -875,7 +879,7 @@
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
             <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
             <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar, YouTube and Prime Video, plus videos on other sites you choose, on a computer. It works in Google Chrome, Brave and other Chromium browsers, or in Firefox and Microsoft Edge from their official add-on stores. Opera is coming soon. Phones and TVs aren't supported.</p></details>
-            <details class="x-rv"><summary>Does it work on other video sites?</summary><p>Yes, on most sites that play video in the browser. Open the video, click the NetParty icon and press Sync this tab. Your friends open the invite link, press Open the video, then click the NetParty icon on that page and press Join party on this tab. NetParty only runs on a site after you click, or on sites you set to Always allow. The page address is shared with your party end-to-end encrypted. Videos drawn without a video player, such as some games, can't be synced.</p></details>
+            <details class="x-rv" id="faq-other-sites"><summary>Does it work on other video sites?</summary><p>Yes, on most sites that play video in the browser. Open the video, click the NetParty icon and press Sync this tab. Your friends open the invite link, press Open the video, then click the NetParty icon on that page and press Join party on this tab. NetParty only runs on a site after you click, or on sites you set to Always allow. The page address is shared with your party end-to-end encrypted. Videos drawn without a video player, such as some games, can't be synced.</p></details>
             <details class="x-rv"><summary>How do voice and video chat work?</summary><p>Click Join voice chat in the panel and allow your microphone, then press the camera button if you want video. Audio and video travel directly between the people in the party, and the connection setup is encrypted too.</p></details>
             <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name and profile picture with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
             <details class="x-rv"><summary>Why do friends need the full link?</summary><p>The invite link carries your party's encryption key after the # sign, which is never sent to any server. A bare party code can't unlock the chat, so always share the full link.</p></details>
@@ -945,7 +949,7 @@
         <div class="x-foot__top">
           <div>
             <a class="x-logo" href="#top"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
-            <p class="x-foot__tag">Free watch parties for Netflix, JioHotstar, YouTube and Prime Video.</p>
+            <p class="x-foot__tag">Free watch parties for Netflix, JioHotstar, YouTube, Prime Video and most other video sites.</p>
             <a class="x-bmc" href="https://buymeacoffee.com/chiragrasal" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17" /><path d="M8 2.5c-.6.8-.6 1.7 0 2.5M12 2.5c-.6.8-.6 1.7 0 2.5" /><path d="M5 21h11" /></svg>Buy me a coffee</a>
           </div>
           <nav class="x-foot__links" aria-label="Footer">

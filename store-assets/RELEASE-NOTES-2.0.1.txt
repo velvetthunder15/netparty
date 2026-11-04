@@ -1,0 +1,17 @@
+NetParty 2.0.1 (changes since 1.9.1)
+
+New
+• Sync any video: on other video sites, click the NetParty icon and press Sync this tab to start a party. NetParty only runs on that tab after you click.
+• Friends open your invite, go to the video, and press Join party on this tab.
+• Optional Always allow on this site, so reloads keep the party.
+• Videos inside another site's player frame work after you allow that player's site.
+• Theater mode: the video fills the window next to the chat.
+• Smoother sync with matched playback speed. Live streams sync play and pause.
+• A warning with Open host's page when a friend is on a different video.
+
+Improved
+• The chat panel and popup now use the Inter font on every system.
+• The page address of an any-video party is end-to-end encrypted, like chat.
+
+Fixed
+• Sync this tab now works when the video is paused.
