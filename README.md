@@ -7,7 +7,7 @@ Supported:
 - **Netflix** (`netflix.com/watch/...`)
 - **JioHotstar** (`hotstar.com/in/.../watch`, movies, shows and episodes)
 - **YouTube** (`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported)
-- **Prime Video** (new in 1.8, not yet tested on a live account): a title's page on `primevideo.com`
+- **Prime Video** : a title's page on `primevideo.com`
   (`/detail/<id>`, also under `/region/…` and `/-/<lang>/`) or on an Amazon store's Prime Video pages,
   `amazon.<tld>/gp/video/detail/<ASIN>` (`.com`, `.co.uk`, `.de`, `.co.jp`, `.in`, `.ca`, `.com.au`, `.fr`, `.it`,
   `.es`, `.com.br`, `.com.mx`, `.nl`; the extension also runs on `/Amazon-Video/` pages). Start from the title's page;
