@@ -314,13 +314,48 @@
     return u.protocol === "https:" && !u.username && !u.password && !u.port && GIF_HOSTS.includes(u.hostname) && u.href === s;
   }
   const dim = (n) => (Number.isInteger(n) && n > 0 && n <= 4096 ? n : null);
-  // decrypted chat payload -> { text } or { gif: { url, w, h } }, or null if it isn't valid
+  // 2.1: chat lines carry a random message id ("mid") inside the encryption, so replies and
+  // reactions can point at them. Lines without one (2.0.x senders) get an id made from the end of
+  // their ciphertext (the AES-GCM tag), which every member sees the same way.
+  const MID_RE = /^[A-Za-z0-9_~-]{8,24}$/;
+  const MID_ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+  const newMid = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => MID_ABC[b & 63]).join("");
+  const ctMid = (ct) => (typeof ct === "string" && ct.length >= 16 ? "~" + ct.slice(-16) : null);
+  const SNIPPET = 80; // characters of the quoted message kept in a reply
+  // one line of text for a reply quote: no control or invisible characters, at most 80 characters
+  const cleanSnippet = (s) =>
+    typeof s === "string" ? [...s.replace(/[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu, " ").replace(/\s+/g, " ").trim()].slice(0, SNIPPET).join("") : "";
+  // a reply's quote: { id?, uid?, name?, s, g? } (g: the quoted line was a GIF)
+  function cleanRe(r) {
+    if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+    const g = r.g === 1 || r.g === true;
+    const s = g ? "" : cleanSnippet(r.s);
+    if (!g && !s) return null;
+    return {
+      id: MID_RE.test(r.id || "") ? r.id : null,
+      uid: typeof r.uid === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(r.uid) ? r.uid : null,
+      name: cleanName(r.name) || null,
+      s,
+      g,
+    };
+  }
+  // decrypted chat payload -> { text } or { gif: { url, w, h } } (plus mid / re), a message reaction
+  // { mr: { id, e, on } }, or null if it isn't valid. 2.0.x clients only know "text" and "gif" and
+  // ignore the extra fields, and drop "mr" lines entirely.
   function cleanChat(p) {
-    if (p?.t === "gif") return isKlipyMediaUrl(p.url) ? { gif: { url: p.url, w: dim(p.w), h: dim(p.h) } } : null;
+    const extra = () => {
+      const x = {};
+      if (MID_RE.test(p.mid || "")) x.mid = p.mid;
+      const re = cleanRe(p.re);
+      if (re) x.re = re;
+      return x;
+    };
+    if (p?.t === "gif") return isKlipyMediaUrl(p.url) ? { gif: { url: p.url, w: dim(p.w), h: dim(p.h) }, ...extra() } : null;
     if (p?.t === "text" && typeof p.text === "string") {
       const text = p.text.trim().slice(0, 500);
-      return text ? { text } : null;
+      return text ? { text, ...extra() } : null;
     }
+    if (p?.t === "mr") return MID_RE.test(p.id || "") && isSingleEmoji(p.e, 16) && typeof p.on === "boolean" ? { mr: { id: p.id, e: p.e, on: p.on } } : null;
     return null;
   }
   const cleanProfile = (p) => ({ name: cleanName(p?.name) || "Guest", avatar: cleanAvatar(p?.avatar) });
@@ -1193,7 +1228,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       return null;
     }
     const c = cleanChat(p);
-    return c && { kind: "chat", id: h.from, ts: h.ts, ...c };
+    if (!c) return null;
+    if (c.mr) return { kind: "mr", from: h.from, ts: h.ts, ...c.mr };
+    return { kind: "chat", id: h.from, ts: h.ts, ...c, mid: c.mid || ctMid(h.ct) };
   }
 
   // A create/join/rejoin reply: the party, its members and history (decrypted here). Runs in
@@ -1738,7 +1775,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         // the same ciphertext twice (a replay) is shown once
         if (line && !seenCt.has(msg.data.ct)) {
           seenCt.add(msg.data.ct);
-          ui.chat(line);
+          if (line.kind === "mr") ui.msgReact(line);
+          else ui.chat(line);
         }
         break;
       }
@@ -2235,6 +2273,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       micOff: '<path fill="currentColor" d="M15 10.6V6a3 3 0 0 0-5.9-.8zM19 12h-2a5 5 0 0 1-.6 2.3l1.5 1.5A7 7 0 0 0 19 12zM4.3 3 3 4.3l6 6V12a3 3 0 0 0 4.5 2.6l1.6 1.6A5 5 0 0 1 7 12H5a7 7 0 0 0 6 6.9V21h2v-2.1a7 7 0 0 0 3.6-1.5l3.1 3.1 1.3-1.3z"/>',
       phoneOff: '<path fill="currentColor" d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.4-1.7 1-2.4 1.6-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 12.8a1 1 0 0 1 0-1.4C3.4 8.5 7.5 7 12 7s8.6 1.5 11.7 4.4a1 1 0 0 1 0 1.4L21 15.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.6-1.5-1.2-2.4-1.6-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/>',
       crown: '<path fill="currentColor" d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/>',
+      reply: '<path fill="currentColor" d="M10 9V5L3 12l7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/>',
       smile: '<path fill="none" stroke="currentColor" stroke-width="2" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 14.5a5 5 0 0 0 8 0"/><path fill="currentColor" d="M9 8.5a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6zm6 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>',
       edit: '<path fill="currentColor" d="M3 17.2V21h3.8L17.8 9.9l-3.7-3.7zM20.7 7a1 1 0 0 0 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7z"/>',
       clock: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4v5l3 2"/>',
@@ -2275,10 +2314,30 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       sendLine({ t: "text", text: text.slice(0, 500) }).catch((err) => system("Message not sent: " + err.message));
       input.focus();
     }
-    // chat text or GIF, encrypted for the party
+    // chat text or GIF (with a fresh message id, and the quote when replying), or a message
+    // reaction { t: "mr" }, encrypted for the party
     async function sendLine(payload) {
       if (!party.roomId || !party.me || !e2e.ready) throw new Error("Not in a party.");
-      const ct = await e2e.seal("chat", party.me, payload);
+      if (payload.t === "text" || payload.t === "gif") {
+        payload = { ...payload, mid: newMid() };
+        if (replyTo) {
+          const r = replyTo;
+          payload.re = { ...(r.id ? { id: r.id } : {}), ...(r.uid ? { uid: r.uid } : {}), ...(r.name ? { name: r.name } : {}), ...(r.g ? { g: 1 } : { s: r.s }) };
+          reply.cancel();
+        }
+      }
+      let ct = await e2e.seal("chat", party.me, payload);
+      // a long message plus its quote can outgrow the size every server accepts: drop the quoted
+      // name, then shorten the snippet, then drop the quote (the message itself always goes)
+      while (ct.length > CT_MAX.chat && payload.re) {
+        const re = { ...payload.re };
+        if (re.name) delete re.name;
+        else if (re.s && re.s.length > 8) re.s = [...re.s].slice(0, Math.floor([...re.s].length / 2)).join("");
+        else re.drop = true;
+        payload = { ...payload, re };
+        if (re.drop) delete payload.re;
+        ct = await e2e.seal("chat", party.me, payload);
+      }
       if (ct.length > CT_MAX.chat) throw new Error("Too long.");
       await net.request("chat", { ct });
     }
@@ -2304,10 +2363,18 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       } else if (e.key === "Enter" && active === gif.inputEl) {
         e.preventDefault();
         gif.searchNow();
+      } else if (e.key === "Enter" && active && active === emoji.searchEl) {
+        e.preventDefault();
+        emoji.pickFirst();
+      } else if (e.key === "Escape" && active && active === emoji.searchEl && emoji.clearSearch()) {
+        e.preventDefault();
       } else if (e.key === "Escape") {
         if (pops.current) {
           e.preventDefault();
           pops.close();
+          input.focus();
+        } else if (reply.cancel()) {
+          e.preventDefault();
           input.focus();
         } else hide();
       }
@@ -2352,20 +2419,27 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     // picker buttons keep the caret in the chat box
     const keepFocus = (b) => (b.addEventListener("mousedown", (e) => e.preventDefault()), b);
 
-    // ---- emoji picker
+    // ---- emoji picker (with search by name; also picks reactions for a tray slot or a chat message)
     const emoji = (() => {
-      let node, body, recentSec, recentGrid, mode = null; // mode: null (insert) or { slot }
+      let node, body, tabsEl, recentSec, recentGrid, searchIn, emptyEl, mode = null; // mode: null (insert), { slot } or { msg }
       let recent = [];
+      const NAMES = E.names || {};
       chrome.storage.local.get("recentEmoji").then((r) => (recent = Array.isArray(r.recentEmoji) ? r.recentEmoji.slice(0, 16) : [])).catch(() => {});
       const btn = (e) =>
-        keepFocus(el("button", { type: "button", class: "np-emo-btn np-emo", title: e, "aria-label": e, "data-emoji": e, onclick: () => pick(e) }, e));
+        keepFocus(el("button", { type: "button", class: "np-emo-btn np-emo", title: (NAMES[e] || "").split("|")[0] || e, "aria-label": e, "data-emoji": e, onclick: () => pick(e) }, e));
       function pick(e) {
         recent = [e, ...recent.filter((x) => x !== e)].slice(0, 16);
         chrome.storage.local.set({ recentEmoji: recent }).catch(() => {});
-        if (mode) {
+        if (mode?.slot !== undefined) {
           const slot = mode.slot;
           pops.close();
           reactions.replace(slot, e);
+          return;
+        }
+        if (mode?.msg) {
+          const mid = mode.msg;
+          pops.close();
+          msgReactions.toggle(mid, e, true);
           return;
         }
         insertAtCursor(e);
@@ -2374,11 +2448,37 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       function fillRecent() {
         if (!recentGrid) return;
         recentGrid.replaceChildren(...recent.map(btn));
-        recentSec.hidden = !recent.length;
+        recentSec.hidden = !recent.length || !!searchIn.value.trim();
       }
+      // every word typed must start a word of the emoji's name or keywords (or be the emoji itself)
+      const hay = (e) => " " + (NAMES[e] || "").replace(/\|/g, " ") + " ";
+      function filter() {
+        const q = searchIn.value.toLowerCase().replace(/\s+/g, " ").trim();
+        const words = q ? q.split(" ") : [];
+        const seen = new Set();
+        let shown = 0;
+        for (const sec of body.querySelectorAll(".np-emo-sec")) {
+          if (sec.dataset.cat === "recent") continue;
+          let n = 0;
+          for (const b of sec.querySelectorAll(".np-emo-btn")) {
+            const e = b.dataset.emoji;
+            const ok = !q || (!seen.has(e) && (e === q || words.every((w) => hay(e).includes(" " + w))));
+            b.hidden = !ok;
+            if (ok) (n++, q && seen.add(e));
+          }
+          sec.hidden = !n;
+          shown += n;
+        }
+        recentSec.hidden = !recent.length || !!q;
+        tabsEl.hidden = !!q;
+        emptyEl.hidden = shown > 0;
+        node.classList.toggle("np-searching", !!q);
+        body.scrollTop = 0;
+      }
+      const first = () => [...body.querySelectorAll('.np-emo-sec:not([data-cat="recent"]) .np-emo-btn')].find((b) => !b.hidden && !b.closest("[hidden]"));
       function build() {
         body = el("div", { class: "np-emo-body" });
-        const tabs = el("div", { class: "np-emo-tabs", role: "tablist" });
+        tabsEl = el("div", { class: "np-emo-tabs", role: "tablist" });
         const section = (id, label, list) => {
           const grid = el("div", { class: "np-emo-grid" }, ...list.map(btn));
           const sec = el("section", { class: "np-emo-sec", "data-cat": id }, el("div", { class: "np-emo-label" }, label), grid);
@@ -2396,37 +2496,272 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
               },
             }, icon),
           );
-        tabs.append(tab("recent", "🕘", "Recently used"));
+        tabsEl.append(tab("recent", "🕘", "Recently used"));
         for (const c of E.categories) {
           body.append(section(c.id, c.label, c.list)[0]);
-          tabs.append(tab(c.id, c.icon, c.label));
+          tabsEl.append(tab(c.id, c.icon, c.label));
         }
-        node = popEl("np-emoji-pop", "Emoji", tabs, body);
+        emptyEl = el("div", { class: "np-emo-empty", role: "status" }, "No emoji found");
+        emptyEl.hidden = true;
+        body.append(emptyEl);
+        searchIn = el("input", { class: "np-emo-search", type: "text", placeholder: "Search emoji", "aria-label": "Search emoji", autocomplete: "off", spellcheck: "false", maxlength: "40" });
+        searchIn.addEventListener("input", filter);
+        node = popEl("np-emoji-pop", "Emoji", el("div", { class: "np-emo-head" }, searchIn), tabsEl, body);
         node.addEventListener("np-close", () => {
           mode = null;
-          node.classList.remove("np-replace");
+          node.classList.remove("np-replace", "np-for-msg");
           emojiBtn.classList.remove("np-on");
           reactBtn.classList.remove("np-on");
+          if (searchIn.value) {
+            searchIn.value = "";
+            filter();
+          }
         });
         panel.append(node);
       }
+      function openAs(want, opener) {
+        if (!node) build();
+        fillRecent();
+        if (pops.current === node && !want && !mode) return pops.close();
+        pops.close();
+        pops.open(node, opener);
+        mode = want;
+        node.classList.toggle("np-replace", mode?.slot !== undefined);
+        node.classList.toggle("np-for-msg", !!mode?.msg);
+        node.setAttribute("aria-label", mode ? "Pick a reaction" : "Emoji");
+        if (mode?.slot !== undefined) reactBtn.classList.add("np-on");
+        else if (!mode) emojiBtn.classList.add("np-on");
+        body.scrollTop = 0;
+        // picking a reaction for a message: start in the search box (there's no caret to keep)
+        if (mode?.msg) setTimeout(() => pops.current === node && searchIn.focus(), 30);
+      }
       return {
+        get searchEl() {
+          return searchIn || null;
+        },
         // forSlot: pick a replacement for that 🎉 tray slot instead of typing the emoji
         toggle(forSlot = null) {
-          if (!node) build();
-          fillRecent();
-          const want = forSlot === null ? null : { slot: forSlot };
-          if (pops.current === node && !want && !mode) return pops.close();
-          pops.close();
-          pops.open(node, want ? reactBtn : emojiBtn);
-          mode = want;
-          node.classList.toggle("np-replace", !!mode);
-          node.setAttribute("aria-label", mode ? "Pick a reaction" : "Emoji");
-          (mode ? reactBtn : emojiBtn).classList.add("np-on");
-          body.scrollTop = 0;
+          openAs(forSlot === null ? null : { slot: forSlot }, forSlot === null ? emojiBtn : reactBtn);
+        },
+        // react to a chat message with any emoji
+        forMessage(mid, opener) {
+          openAs({ msg: mid }, opener);
+        },
+        // Enter in the search box: the first result
+        pickFirst() {
+          const b = node && first();
+          if (b) pick(b.dataset.emoji);
+        },
+        // Esc in the search box: clear it first, close the picker on the next Esc
+        clearSearch() {
+          if (!searchIn?.value) return false;
+          searchIn.value = "";
+          filter();
+          return true;
         },
       };
     })();
+
+    // ---- 2.1: reply to a message, react to a message
+    // Hovering a chat line (tap or long-press on touch) shows a small bar with Reply and React.
+    // Both travel as ordinary encrypted chat lines: a reply is a message with a quote ("re"),
+    // a reaction is { t: "mr", id, e, on }. The server can't tell them from any other message.
+    const lineInfo = new WeakMap(); // .np-msg -> { mid, uid, s, g }
+    let replyTo = null; // { id, uid, name, s, g } while the reply strip is up
+    const msgNode = (mid) => (chatEl && mid ? [...chatEl.querySelectorAll(".np-msg[data-mid]")].find((n) => n.dataset.mid === mid) || null : null);
+    const reply = (() => {
+      let strip, label;
+      function build() {
+        label = el("div", { class: "np-replybar-txt" });
+        strip = el(
+          "div",
+          { class: "np-replybar", role: "status" },
+          svg(ICON.reply),
+          label,
+          el("button", { type: "button", class: "np-replybar-x", title: "Cancel reply (Esc)", "aria-label": "Cancel reply", onclick: () => (cancel(), input.focus()) }, svg(ICON.close)),
+        );
+        strip.hidden = true;
+        return strip;
+      }
+      function start(node) {
+        const info = lineInfo.get(node);
+        if (!info) return;
+        const name = nameOf(info.uid);
+        replyTo = { id: info.mid, uid: info.uid, name: info.uid === party.me ? cleanName(party.name) || null : party.profiles.get(info.uid)?.name || null, s: info.s, g: info.g };
+        label.replaceChildren("Replying to ", el("b", {}, name), ": ", el("span", { class: "np-replybar-s" }, info.g ? "GIF" : info.s));
+        strip.hidden = false;
+        acts.hide();
+        input.focus();
+      }
+      function cancel() {
+        if (!replyTo && strip?.hidden !== false) return false;
+        replyTo = null;
+        if (strip) strip.hidden = true;
+        return true;
+      }
+      return { build, start, cancel, get active() { return !!replyTo; } };
+    })();
+
+    // reactions on chat lines: mid -> Map(emoji -> Set(pid)), for the lines still in the chat
+    const msgReactions = (() => {
+      const rx = new Map();
+      const QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+      let quick = null, quickMid = null;
+      const mineOn = (mid, e) => !!rx.get(mid)?.get(e)?.has(party.me);
+      // what a reaction from `from` does to the line it points at (ignored if that line isn't here)
+      function apply({ from, id, e, on }, draw = true) {
+        const node = msgNode(id);
+        if (!node) return;
+        let m = rx.get(id);
+        if (!m) rx.set(id, (m = new Map()));
+        let who = m.get(e);
+        if (on) {
+          if (!who) {
+            if (m.size >= 16) return; // a sane number of different emoji per line
+            m.set(e, (who = new Set()));
+          }
+          who.add(from);
+        } else if (who) {
+          who.delete(from);
+          if (!who.size) m.delete(e);
+        }
+        if (draw) render(node);
+      }
+      const names = (set) => [...set].map((pid) => (pid === party.me ? "You" : nameOf(pid))).join(", ");
+      function render(node) {
+        const mid = node.dataset.mid;
+        const m = rx.get(mid);
+        const col = node.querySelector(".np-mcol");
+        let row = col.querySelector(".np-reacts");
+        if (!m || !m.size) return row?.remove();
+        const visible = chatEl.clientHeight > 0;
+        const nearBottom = visible ? chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60 : chatStick;
+        if (!row) col.append((row = el("div", { class: "np-reacts" })));
+        row.replaceChildren(
+          ...[...m].map(([e, who]) => {
+            const mine = who.has(party.me);
+            const list = names(who);
+            return el("button", {
+              type: "button", class: "np-rchip" + (mine ? " np-rmine" : ""), "data-emoji": e, title: list + (mine ? " (tap to remove yours)" : ""),
+              "aria-label": `${e} ${who.size}: ${list}`, "aria-pressed": String(mine), onclick: () => toggle(mid, e),
+            }, el("span", { class: "np-emo" }, e), el("span", { class: "np-rn" }, String(who.size)));
+          }),
+        );
+        if (nearBottom || !open) chatToBottom();
+      }
+      // send: on/off for my reaction (default: the opposite of what I have now)
+      function toggle(mid, e, on = !mineOn(mid, e)) {
+        if (!mid || !isSingleEmoji(e, 16)) return;
+        if (on === mineOn(mid, e)) return;
+        sendLine({ t: "mr", id: mid, e, on }).catch((err) => system("Reaction not sent: " + err.message));
+      }
+      function buildQuick() {
+        quick = popEl(
+          "np-qreact",
+          "React to this message",
+          el(
+            "div",
+            { class: "np-qreact-row" },
+            ...QUICK.map((e) =>
+              keepFocus(el("button", { type: "button", class: "np-qbtn np-emo", "data-emoji": e, title: "React " + e, "aria-label": "React " + e, onclick: () => (pops.close(), toggle(quickMid, e)) }, e)),
+            ),
+            keepFocus(el("button", { type: "button", class: "np-qbtn np-qmore", title: "More emoji", "aria-label": "More emoji", onclick: () => emoji.forMessage(quickMid, null) }, "+")),
+          ),
+        );
+        panel.append(quick);
+      }
+      // the quick-pick row, just above the line it's for
+      function openQuick(node, opener) {
+        if (!quick) buildQuick();
+        quickMid = node.dataset.mid;
+        for (const b of quick.querySelectorAll(".np-qbtn[data-emoji]")) b.classList.toggle("np-rmine", mineOn(quickMid, b.dataset.emoji));
+        // above the line, inside the chat area; below the line when there's no room above it
+        const pr = panel.getBoundingClientRect(), nr = node.getBoundingClientRect(), cr = chatEl.getBoundingClientRect();
+        const minTop = cr.top - pr.top + 4, maxTop = cr.bottom - pr.top - 54;
+        let top = nr.top - pr.top - 54;
+        if (top < minTop) top = Math.min(nr.bottom - pr.top + 6, maxTop);
+        top = Math.max(8, Math.min(top, maxTop));
+        if (pops.current === quick && quick.dataset.mid === quickMid) return pops.close();
+        quick.dataset.mid = quickMid;
+        pops.close();
+        pops.open(quick, opener, Math.round(top));
+      }
+      return {
+        apply,
+        toggle,
+        openQuick,
+        forget: (mid) => rx.delete(mid),
+        clear: () => rx.clear(),
+        redraw() {
+          if (chatEl) for (const n of chatEl.querySelectorAll(".np-msg[data-mid]")) if (rx.has(n.dataset.mid)) render(n);
+        },
+      };
+    })();
+
+    // the hover / tap bar (one, moved to the line it's for)
+    const acts = (() => {
+      let bar, on = null, pressT = 0;
+      function build() {
+        bar = el(
+          "div",
+          { class: "np-acts", role: "toolbar", "aria-label": "Message actions" },
+          el("button", { type: "button", class: "np-act np-act-reply", title: "Reply", "aria-label": "Reply", onclick: (e) => (e.stopPropagation(), reply.start(bar.closest(".np-msg"))) }, svg(ICON.reply)),
+          el("button", {
+            type: "button", class: "np-act np-act-react", title: "React", "aria-label": "React",
+            onclick: (e) => (e.stopPropagation(), msgReactions.openQuick(bar.closest(".np-msg"), e.currentTarget)),
+          }, svg(ICON.smile)),
+        );
+        keepFocus(bar.firstChild);
+        keepFocus(bar.lastChild);
+        return bar;
+      }
+      // put the bar on a line (mouse: on hover; touch: on tap or long-press)
+      function attach(node) {
+        if (!node?.dataset.mid || !lineInfo.has(node)) return;
+        if (!bar) build();
+        const col = node.querySelector(".np-mcol");
+        if (col && bar.parentNode !== col) col.append(bar);
+      }
+      function show(node) {
+        attach(node);
+        if (on && on !== node) on.classList.remove("np-acts-on");
+        on = node;
+        node.classList.add("np-acts-on");
+      }
+      function hide() {
+        on?.classList.remove("np-acts-on");
+        on = null;
+      }
+      const skip = (t) => t.closest?.("a, .np-quote, .np-reacts, .np-acts, img.np-gif");
+      function wire(chat) {
+        chat.addEventListener("pointerover", (e) => {
+          if (e.pointerType !== "mouse") return;
+          const node = e.target.closest?.(".np-msg");
+          if (node) attach(node);
+        });
+        chat.addEventListener("pointerdown", (e) => {
+          clearTimeout(pressT);
+          lastPointer = e.pointerType || "mouse";
+          if (e.pointerType === "mouse") return;
+          const node = e.target.closest?.(".np-msg");
+          if (!node || skip(e.target)) return;
+          pressT = setTimeout(() => ((pressT = 0), show(node), (node.dataset.pressed = "1")), 450);
+        });
+        for (const t of ["pointerup", "pointercancel", "pointerleave"]) chat.addEventListener(t, () => clearTimeout(pressT));
+        chat.addEventListener("scroll", () => clearTimeout(pressT), { passive: true });
+        chat.addEventListener("contextmenu", (e) => e.target.closest?.(".np-msg") && e.pointerType !== "mouse" && navigator.maxTouchPoints > 0 && e.preventDefault());
+        // a tap on a line toggles its bar (touch has no hover)
+        chat.addEventListener("click", (e) => {
+          if (lastPointer === "mouse") return;
+          const node = e.target.closest?.(".np-msg");
+          if (node?.dataset.pressed) return void delete node.dataset.pressed;
+          if (!node || skip(e.target)) return node ? undefined : hide();
+          on === node ? hide() : show(node);
+        });
+      }
+      return { wire, hide };
+    })();
+    let lastPointer = "mouse";
 
     // ---- 🎉 reactions: tray of 5 (editable), floating emoji over the video for everyone
     const reactions = (() => {
@@ -3263,6 +3598,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       peopleEl = el("div", { class: "np-people" });
       voiceBox = el("div", { class: "np-voice" });
       chatEl = el("div", { class: "np-chat", role: "log", "aria-live": "polite" });
+      acts.wire(chatEl);
       // Remember where the reader is while the chat is visible. A hidden chat (panel closed, page
       // navigation, a picker or dock change) loses its scroll position, so when it gets a size
       // again it goes back to the newest message, or to where they had scrolled up to.
@@ -3295,6 +3631,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         "form",
         { class: "np-composer", onsubmit: (e) => (e.preventDefault(), sendChat()) },
         el("div", { class: "np-tools" }, emojiBtn, gifBtn, reactBtn, el("span", { class: "np-grow" }), fontBtn),
+        reply.build(),
         el("div", { class: "np-row" }, input, sendBtn),
       );
 
@@ -3647,8 +3984,10 @@ html.np-docked [data-np-shrink] {
       const nearBottom = visible ? chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60 : chatStick;
       chatEl.append(node);
       while (chatEl.childElementCount > 200) {
-        media.release(chatEl.firstElementChild);
-        chatEl.firstElementChild.remove();
+        const gone = chatEl.firstElementChild;
+        media.release(gone);
+        if (gone.dataset.mid) msgReactions.forget(gone.dataset.mid);
+        gone.remove();
       }
       if (nearBottom || !open) chatToBottom();
     }
@@ -3672,21 +4011,56 @@ html.np-docked [data-np-shrink] {
       // everyone's lines, ours included, carry the sender's picture and name (ours on the right);
       // more lines from the same person within a minute stack under the first without repeating them
       const ts = Number(d.ts) || Date.now();
-      const prev = chatEl?.lastElementChild;
+      if (!host) build();
+      const prev = chatEl.lastElementChild;
       const cont = !!prev && prev.classList.contains("np-msg") && prev.dataset.uid === d.id && ts - Number(prev.dataset.ts) >= -5000 && ts - Number(prev.dataset.ts) < 60000;
-      addLine(
-        el(
-          "div",
-          { class: "np-msg" + (mine ? " np-mine" : "") + (cont ? " np-cont" : ""), "data-uid": d.id, "data-ts": String(cont ? prev.dataset.ts : ts) },
-          el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
-          el("div", { class: "np-mcol" }, el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), body),
-        ),
+      const mid = typeof d.mid === "string" && MID_RE.test(d.mid) && !msgNode(d.mid) ? d.mid : null;
+      const line = el(
+        "div",
+        { class: "np-msg" + (mine ? " np-mine" : "") + (cont ? " np-cont" : ""), "data-uid": d.id, "data-ts": String(cont ? prev.dataset.ts : ts), ...(mid ? { "data-mid": mid } : {}) },
+        el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
+        el("div", { class: "np-mcol" }, el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), ...(d.re ? [quoteEl(d.re)] : []), body),
       );
+      if (mid) lineInfo.set(line, { mid, uid: d.id, s: d.gif ? "" : cleanSnippet(text), g: !!d.gif });
+      addLine(line);
       if (!open && !mine && !replay) {
         unread++;
         toast(who, d.gif ? "sent a GIF" : text);
         render();
       }
+    }
+    // the quoted line above a reply: name + one line (or "GIF"); click to jump to the original
+    const quoteName = (re) => (re.uid && (re.uid === party.me || party.profiles.has(re.uid)) ? nameOf(re.uid) : re.name || (re.uid ? nameOf(re.uid) : "Someone"));
+    function quoteEl(re) {
+      const q = el(
+        "button",
+        { type: "button", class: "np-quote" + (re.id ? "" : " np-quote-noref"), title: re.id ? "Show the original message" : "", "aria-label": `Reply to ${quoteName(re)}: ${re.g ? "GIF" : re.s}` },
+        el("span", { class: "np-quote-name", ...(re.uid ? { "data-quid": re.uid } : {}) }, quoteName(re)),
+        el("span", { class: "np-quote-s" + (re.g ? " np-quote-gif" : "") }, re.g ? "GIF" : re.s),
+      );
+      if (re.name) q.dataset.qname = re.name;
+      q.addEventListener("click", (e) => (e.stopPropagation(), jumpTo(re.id, q)));
+      return q;
+    }
+    // scroll the original into the middle of the chat and flash it (if it's still in the last 200 lines)
+    function jumpTo(mid, from) {
+      const node = msgNode(mid);
+      if (!node) {
+        from.classList.remove("np-gone");
+        void from.offsetWidth;
+        from.classList.add("np-gone");
+        from.title = "That message is no longer in the chat";
+        return;
+      }
+      const cr = chatEl.getBoundingClientRect(), nr = node.getBoundingClientRect();
+      chatEl.scrollTop += nr.top - cr.top - Math.max(8, (chatEl.clientHeight - nr.height) / 2);
+      chatStick = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
+      chatSaved = chatEl.scrollTop;
+      node.classList.remove("np-flash");
+      void node.offsetWidth;
+      node.classList.add("np-flash");
+      clearTimeout(node._npFlash);
+      node._npFlash = setTimeout(() => node.classList.remove("np-flash"), 1800);
     }
     // keep the newest message in view when a GIF above it finishes loading
     function nearBottomScroll() {
@@ -3709,14 +4083,28 @@ html.np-docked [data-np-shrink] {
         const v = picOf(n.dataset.uid);
         if (n.textContent !== v) n.textContent = v;
       }
+      for (const n of chatEl.querySelectorAll(".np-quote-name[data-quid]")) {
+        const v = quoteName({ uid: n.dataset.quid, name: n.parentNode.dataset.qname || null });
+        if (n.textContent !== v) n.textContent = v;
+      }
+      msgReactions.redraw();
     }
     // everything said in the party so far (the server keeps the last 150 lines, encrypted)
     function loadHistory(list) {
       if (!host) build();
       media.release(chatEl);
       chatEl.replaceChildren();
+      msgReactions.clear();
+      reply.cancel();
+      acts.hide();
       system("🔒 Chat is end-to-end encrypted. Only people with the invite link can read it.");
-      for (const h of list) h.kind === "chat" ? chat(h, true) : sysEvent(h.event, h.id);
+      // reactions are folded onto their lines (in order), then drawn once
+      for (const h of list) {
+        if (h.kind === "chat") chat(h, true);
+        else if (h.kind === "mr") msgReactions.apply(h, false);
+        else sysEvent(h.event, h.id);
+      }
+      msgReactions.redraw();
       chatToBottom();
     }
 
@@ -3733,6 +4121,7 @@ html.np-docked [data-np-shrink] {
       hide,
       render,
       chat,
+      msgReact: (d) => host && msgReactions.apply(d),
       system,
       sysEvent,
       refreshNames: () => {

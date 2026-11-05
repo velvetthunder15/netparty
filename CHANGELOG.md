@@ -4,6 +4,25 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.1.0] - 2026-11-06
+### Added
+- **Replies**: hover a chat line (tap or long-press on touch) and press **Reply**. A strip above the chat box
+  says who you're replying to (× or Esc cancels). The sent message carries a small quote of the original (name and
+  one line, or "GIF"); clicking it scrolls to the original and highlights it while it's still in the chat.
+- **Message reactions**: **React** on a chat line offers 👍 ❤️ 😂 😮 😢 🔥, and **+** opens the full emoji picker.
+  Reactions show as chips under the message with a count, highlighted when one is yours; tap a chip to add or
+  remove yours, hover it to see who reacted. They're kept in the party's history, so people who join or reload see
+  them. (The floating 🎉 reactions over the video are unchanged.)
+- **Emoji search**: a search box at the top of the emoji picker finds emoji by name or keyword across all
+  categories (names from Unicode CLDR, bundled with the extension). Enter picks the first result, Esc clears the
+  search and then closes the picker.
+
+### Changed
+- Chat lines now carry a random message id inside the encryption so replies and reactions can point at them.
+  Replies and reactions are ordinary end-to-end encrypted chat lines: the server sees and stores only ciphertext,
+  and they count against the same size cap, rate limit and 150-line history as any message. Clients on 2.0.x show
+  replies as plain messages and ignore reactions; lines sent by 2.0.x can still be replied to and reacted to.
+
 ## [2.0.2] - 2026-11-06
 ### Fixed
 - **Voice and video chat now connect on any network**: calls go through a relay (TURN) server when the two

@@ -275,6 +275,23 @@ await gp.keyboard.type("after reload PLAINTEXT-MARKER-e2e");
 await gp.keyboard.press("Enter");
 check("chat works after reload", !!(await until(async () => (await mav(hp)).some((x) => x.endsWith("after reload PLAINTEXT-MARKER-e2e")))));
 
+// ---- 2.1: a reply and a reaction on a message (their quote and emoji stay encrypted too; see the leak audit)
+const openPanel = async (p) => { if (!(await p.locator(".np-panel").isVisible())) await p.locator(".np-toggle").click(); };
+await openPanel(hp);
+await openPanel(gp);
+for (const p of [hp, gp]) await p.locator(".np-input").click(); // closes any picker / tray still open
+const hello = gp.locator(".np-msg").filter({ has: gp.locator(".np-bubble", { hasText: "hello panda" }) }).last();
+await hello.hover();
+await hello.locator(".np-act-reply").click();
+await gp.keyboard.type("LEAKCHECK quoted reply");
+await gp.keyboard.press("Enter");
+const replyH = hp.locator(".np-msg").filter({ has: hp.locator(".np-bubble", { hasText: "LEAKCHECK quoted reply" }) }).last();
+check("2.1 reply arrives with its quote", !!(await until(async () => (await replyH.locator(".np-quote-s").textContent({ timeout: 300 }).catch(() => "")) === "hello panda")));
+await replyH.hover();
+await replyH.locator(".np-act-react").click();
+await hp.locator('.np-qreact .np-qbtn[data-emoji="😮"]').click();
+check("2.1 reaction on a message reaches the friend", !!(await until(() => shadow(gp, (r) => { return !!r.querySelector('.np-rchip[data-emoji="😮"]'); }))));
+
 // ---- invite links without (the right) key
 const X = await launch("/tmp/pw-fx", { name: "Eve Intruder", avatar: "🐸", extra: { serverUrl: T.url } });
 const xp = await X.ctx.newPage();
@@ -317,10 +334,10 @@ await X.ctx.close();
 const cids = [await hp.evaluate(() => sessionStorage.getItem("netpartyCid")), await gp.evaluate(() => sessionStorage.getItem("netpartyCid"))];
 check("cids are 128-bit random hex", cids.every((c) => /^[0-9a-f]{32}$/.test(c || "")), JSON.stringify(cids));
 check("the tap saw the party's traffic", T.frames.filter((f) => f.text.includes('"type":"chat"') && f.text.includes('"ct":"')).length >= 6, String(T.frames.length));
-const secret = ["Chirag", "Rahul", "Eve Intruder", "🦊", "🐼", "🐸", "🍕", "🐙", "hi from the panda", "hello panda", "so good", "🦄", "example.com", "www.test.org", "onerror", "static.klipy.com", "klipy", "/test/", "😂", "💀", "🥰", "🔥", "😱", "PLAINTEXT-MARKER", "candidate", "a=fingerprint", "v=0", "Fake Movie", KEY, OTHER];
+const secret = ["Chirag", "Rahul", "Eve Intruder", "🦊", "🐼", "🐸", "🍕", "🐙", "hi from the panda", "hello panda", "so good", "🦄", "example.com", "www.test.org", "onerror", "static.klipy.com", "klipy", "/test/", "😂", "💀", "🥰", "🔥", "😱", "PLAINTEXT-MARKER", "LEAKCHECK", "quoted reply", "😮", "candidate", "a=fingerprint", "v=0", "Fake Movie", KEY, OTHER];
 check("no WebSocket frame contains names, pictures, messages, links, GIF URLs, reactions, SDP/ICE, title or the key", leaks(T.frames, secret).length === 0, JSON.stringify(leaks(T.frames, secret)));
 check("no cid ever sent to a browser", leaks(T.frames.filter((f) => f.dir === "down"), cids).length === 0);
-check("no plaintext fields in any frame", !T.frames.some((f) => /"(name|text|emoji|avatar|payload|byName|gif)":/.test(f.text)), T.frames.find((f) => /"(name|text|emoji|avatar|payload|byName|gif)":/.test(f.text))?.text.slice(0, 160));
+check("no plaintext fields in any frame", !T.frames.some((f) => /"(name|text|emoji|avatar|payload|byName|gif|re|mr|mid)":/.test(f.text)), T.frames.find((f) => /"(name|text|emoji|avatar|payload|byName|gif|re|mr|mid)":/.test(f.text))?.text.slice(0, 160));
 const srvLog = (await import("node:fs")).readFileSync("/tmp/np-server.log", "utf8");
 check("server log has none of it either", leaks([{ text: srvLog }], secret).length === 0, JSON.stringify(leaks([{ text: srvLog }], secret)));
 

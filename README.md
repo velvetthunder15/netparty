@@ -31,7 +31,13 @@ Features
   (works in fullscreen; keys typed in chat never reach the site's hotkeys)
 - Profile pictures: pick a cute emoji (🐶 🐼 🦊 🍕 🍩 🍿 …) in the popup or by clicking your picture in the
   chat panel; it shows next to your messages and in the people list, and updates live for everyone
-- Emoji picker in the chat bar (smileys, gestures, animals, food, activities, symbols, recently used)
+- Emoji picker in the chat bar (smileys, gestures, animals, food, activities, symbols, recently used), with
+  search by name or keyword (2.1): type "fire" or "lol", Enter picks the first result
+- Reply to a message (2.1): hover a chat line (tap or long-press on touch) → **Reply**. The reply shows a small
+  quote of the original (name + one line, or "GIF"); click the quote to jump to the original
+- Reactions on messages (2.1): hover a line → **React** → 👍 ❤️ 😂 😮 😢 🔥 or **+** for any emoji. Chips under
+  the message show counts (hover for who); tap a chip to add or remove yours. Kept in the party's history, so
+  people who join or reload see them. Replies and reactions are end-to-end encrypted like any chat message
 - 🎉 Reactions: tap one of 5 emojis and it floats up over everyone's video (also in fullscreen).
   Defaults 😂 😭 💀 🥰 😱; change them in the tray (pencil) or the popup's Chat settings
 - GIFs from KLIPY, with the picker pre-filled with what you're watching, plus quick chips
@@ -77,7 +83,8 @@ No server setup needed: the extension uses the hosted server by default.
 | Video | In voice, the camera button turns your camera on/off. Tiles sit in the chat panel; the pop-out button floats them over the video (drag by the bar, resize from the corner, arrow folds it away, dock button puts them back). With the chat closed they float until you reopen it |
 | Your name / picture | Click your picture in the panel (or the name on your camera tile) → **Your profile**: type a name and press Enter, or pick a picture. Or icon → name field |
 | Theme | Icon → **Settings** → **Theme**: System (default, follows your computer), Light or Dark |
-| Emoji / GIF / react | Chat bar: 🙂 opens emoji, **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
+| Emoji / GIF / react | Chat bar: 🙂 opens emoji (type in its search box to find one), **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
+| Reply / react to a message | Hover a chat line (tap it on touch) → **Reply** or **React**; Esc or × cancels a reply; tap a reaction chip to add or remove yours |
 | Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Settings** |
 | Sync another site | Open the video, icon → **Sync this tab**. Friends: invite link → **Open the video** → icon on that page → **Join party on this tab** |
 | Theater (other sites) | **Theater** in the panel: the video fills the window next to the chat (the player's own fullscreen hides the chat) |

@@ -279,6 +279,59 @@ ok("host-only control lock");
   ok("encrypted reactions: relayed to others, size-checked, rate limited (12 per 3 s), not in history");
 }
 
+// ---- 2.1: replies and reactions on chat lines. Both are ordinary encrypted chat lines
+// (a reply carries its quote inside the ciphertext, a reaction is { t: "mr", id, e, on }), so the
+// server can't tell them from any other message: same size cap, same rate limit, same history.
+{
+  const MAX_CHAT_CT = 4135; // server/core.js MAX_CHAT_CT (unchanged in 2.1)
+  const r = await member("r", { key: KEY, room: snap.roomId });
+  await sleep(50);
+  for (const m of [a, b]) m.drain("chat"), m.drain("members"), m.drain("system");
+  // a long reply: 500 three-byte characters, an 80-character quote and a 24-character name still fit
+  const reply = { t: "text", text: "€".repeat(500), mid: "Q1w2E3r4T5y6", re: { id: "Zx9Zx9Zx9Zx9", uid: b.pid, name: ("Q" + MARK).slice(0, 24), s: ("snippet " + MARK).padEnd(80, "€").slice(0, 80) } };
+  const replyCt = await sealAs(r, "chat", reply);
+  assert.ok(replyCt.length <= MAX_CHAT_CT, String(replyCt.length));
+  await r.req("chat", { ct: replyCt });
+  const got = await a.next("chat", (x) => x.data.ct === replyCt);
+  assert.deepEqual(await open(KEY, snap.roomId, "chat", got.data.from, got.data.ct), reply);
+  await r.next("chat", (x) => x.data.ct === replyCt); // relayed to the sender too
+  // the worst case (every character escaped) with a full quote is over the cap: the extension
+  // shortens or drops the quote then (sendLine), and the plain message still fits
+  const worst = { t: "text", text: "\u0001".repeat(500), mid: "Q1w2E3r4T5y6", re: { id: "Zx9Zx9Zx9Zx9", uid: b.pid, name: "\u0001".repeat(24), s: "\u0001".repeat(80) } };
+  await assert.rejects(r.req("chat", { ct: await sealAs(r, "chat", worst) }), /Bad message/);
+  const { re: _drop, ...plain } = worst;
+  assert.ok((await sealAs(r, "chat", plain)).length <= MAX_CHAT_CT);
+  // a reaction on a line: small, relayed to everyone incl. the sender, kept in the history
+  const mr = { t: "mr", id: "Q1w2E3r4T5y6", e: "🫶", on: true };
+  const mrCt = await sealAs(r, "chat", mr);
+  await r.req("chat", { ct: mrCt });
+  const ma = await a.next("chat", (x) => x.data.ct === mrCt);
+  assert.deepEqual(Object.keys(ma.data).sort(), ["ct", "from", "ts"]);
+  assert.equal(ma.data.from, r.pid);
+  assert.deepEqual(await open(KEY, snap.roomId, "chat", r.pid, ma.data.ct), mr);
+  await b.next("chat", (x) => x.data.ct === mrCt);
+  await r.next("chat", (x) => x.data.ct === mrCt);
+  const hist = (await b.req("join", { e2ee: 1, roomId: snap.roomId, cid: b.cid })).history;
+  const cts = hist.filter((h) => h.kind === "chat").map((h) => h.ct);
+  assert.ok(cts.includes(replyCt) && cts.includes(mrCt), "replies and reactions are kept (encrypted) for people who join later");
+  assert.ok(cts.indexOf(replyCt) < cts.indexOf(mrCt), "in order: the reaction comes after the line it's for");
+  for (const h of hist) if (h.kind === "chat") assert.deepEqual(Object.keys(h).sort(), ["ct", "from", "kind", "ts"]);
+  assert.ok(!JSON.stringify(hist).includes(MARK) && !JSON.stringify(hist).includes("🫶") && !JSON.stringify(hist).includes("snippet"));
+  // what a 2.0.x client does with them (its cleanChat): the reply shows as plain text, the reaction is dropped
+  const old20 = (p) => (p?.t === "gif" ? "gif" : p?.t === "text" && typeof p.text === "string" && p.text.trim() ? p.text.trim().slice(0, 500) : null);
+  assert.equal(old20(reply), "€".repeat(500));
+  assert.equal(old20(mr), null);
+  // reactions count against the chat limit (20 lines per 10 s per connection)
+  for (let i = 0; i < 18; i++) await r.req("chat", { ct: await sealAs(r, "chat", { ...mr, on: i % 2 === 1 }) });
+  await assert.rejects(r.req("chat", { ct: mrCt }), /Slow down/);
+  await sleep(100);
+  for (const m of [a, b, r]) m.drain("chat");
+  r.close();
+  await b.next("system", (m) => m.data.event === "leave" && m.data.id === r.pid, 20000).catch(() => null);
+  for (const m of [a, b]) m.drain("members"), m.drain("system");
+  ok("2.1 replies + message reactions: encrypted chat lines (quote inside), size-capped, rate-limited with chat, kept in history; 2.0.x shows replies as text and drops reactions");
+}
+
 // ---- voice: A joins first, B joins and gets A as a peer to call; signaling is encrypted
 {
   const va = await a.req("voiceJoin", {});
@@ -727,8 +780,9 @@ ok("host handoff on disconnect (leave event for " + sysLeft.data.id + ")");
     for (const s of secrets) assert.ok(!f.text.includes(s), "a cid was sent to a client: " + f.text.slice(0, 200));
     assert.ok(!f.text.includes(KEY), "the room key reached the server");
     assert.ok(!f.text.includes(MARK), "plaintext marker in a server message: " + f.text.slice(0, 200));
+    assert.ok(!f.text.includes("🫶") && !f.text.includes("snippet"), "a message reaction or reply quote in a server message: " + f.text.slice(0, 200));
   }
-  const plain = allFrames.filter((f) => /"(name|byName|text|emoji|avatar|payload|cid)":/.test(f.text));
+  const plain = allFrames.filter((f) => /"(name|byName|text|emoji|avatar|payload|cid|re|mr|mid|s|e)":/.test(f.text));
   assert.deepEqual(plain.map((f) => f.text.slice(0, 120)), [], "no plaintext fields in any server message");
   ok(`leak audit: ${allFrames.length} server frames, no cid, key, names, text, emoji or SDP in any of them`);
 }

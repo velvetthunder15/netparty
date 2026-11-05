@@ -413,3 +413,102 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   .np-pill, .np-pill-soft { transition: none; }
   .np-pill:active:not(:disabled) { transform: none; }
 }
+
+/* ---- 2.1: replies, reactions on messages, emoji search */
+.np-mcol { position: relative; }
+.np-acts {
+  position: absolute; top: -14px; right: -4px; z-index: 2; display: none; gap: 2px; padding: 2px;
+  background: var(--pop); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 4px 12px var(--shadow);
+}
+.np-mine .np-acts { right: auto; left: -4px; }
+.np-msg.np-acts-on .np-acts, .np-acts:focus-within { display: flex; }
+.np-act {
+  width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--dim);
+  display: grid; place-items: center; -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
+}
+.np-act svg { width: 16px; height: 16px; }
+.np-act:focus-visible, .np-quote:focus-visible, .np-rchip:focus-visible, .np-qbtn:focus-visible, .np-replybar-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* the quoted line above a reply */
+.np-quote {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0; max-width: 100%; min-width: 0; margin: 0 0 2px;
+  padding: 3px 9px 4px; border: 0; border-left: 3px solid var(--accent); border-radius: 4px 10px 10px 4px;
+  background: var(--card2); color: var(--text); text-align: left; font-size: calc(var(--np-fs) - 2px); line-height: 1.3;
+  -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
+}
+.np-quote.np-quote-noref { cursor: default; }
+.np-quote-name { font-weight: 600; color: var(--accent2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-quote-s { color: var(--dim); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-quote-gif { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; border: 1.3px solid currentColor; border-radius: 4px; padding: 0 3px; margin-top: 1px; }
+.np-quote.np-gone { animation: np-nudge 0.35s; }
+@keyframes np-nudge { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.np-msg.np-flash .np-bubble { animation: np-flash 1.6s ease-out; }
+@keyframes np-flash { 0%, 45% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+
+/* reaction chips under a line */
+.np-reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; max-width: 100%; }
+.np-mine .np-reacts { justify-content: flex-end; }
+.np-msg:has(.np-reacts) .np-mav { margin-bottom: 26px; } /* picture stays level with the bubble, not the chips */
+.np-rchip {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: calc(var(--np-fs) - 2px); line-height: 1;
+  -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
+}
+.np-rchip .np-emo { font-size: calc(var(--np-fs)); }
+.np-rchip .np-rn { font-weight: 600; font-variant-numeric: tabular-nums; }
+.np-rchip.np-rmine { border-color: var(--accent); background: rgba(124, 92, 255, 0.2); color: var(--accent2); }
+
+/* quick-pick row (React) */
+.np-qreact-row { display: flex; align-items: center; justify-content: space-between; gap: 2px; padding: 6px; }
+.np-qbtn {
+  width: 38px; height: 38px; padding: 0; border: 0; border-radius: 10px; background: none; font-size: 22px;
+  display: grid; place-items: center; -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
+}
+.np-qbtn.np-rmine { background: rgba(124, 92, 255, 0.2); }
+.np-qbtn.np-qmore { font: inherit; font-size: 22px; font-weight: 400; color: var(--dim); }
+
+/* reply strip above the chat box */
+.np-replybar {
+  display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 4px 4px 9px; border-left: 3px solid var(--accent);
+  border-radius: 4px 10px 10px 4px; background: var(--card); font-size: 12px; color: var(--dim);
+}
+.np-replybar[hidden] { display: none; }
+.np-replybar > svg { width: 14px; height: 14px; flex: none; color: var(--accent2); }
+.np-replybar-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-replybar-txt b { color: var(--text); font-weight: 600; }
+.np-replybar-x {
+  flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--dim);
+  display: grid; place-items: center; -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
+}
+.np-replybar-x svg { width: 13px; height: 13px; }
+
+/* emoji search */
+/* the search box takes its room from the grid, so the picker is no taller than before (≈ 270 px) */
+.np-emo-head { padding: 6px 8px 0; }
+.np-emoji-pop .np-emo-body { height: 192px; }
+.np-emo-search {
+  width: 100%; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--input);
+  color: var(--text); font: inherit; font-size: 13px; outline: none;
+}
+.np-emo-search::placeholder { color: var(--dim); opacity: 1; }
+.np-emo-search:focus { border-color: var(--accent); }
+.np-emo-tabs[hidden], .np-emo-btn[hidden], .np-emo-empty[hidden] { display: none; }
+.np-searching .np-emo-label { display: none; }
+.np-emo-empty { padding: 28px 8px; text-align: center; color: var(--dim); font-size: 13px; }
+.np-for-msg .np-emo-tabs::before { content: "React"; align-self: center; padding: 0 6px; font-size: 12px; color: var(--accent2); white-space: nowrap; }
+
+/* soft touch */
+.np-act:active, .np-quote:active:not(.np-quote-noref), .np-rchip:active, .np-qbtn:active, .np-replybar-x:active { transform: scale(0.96); opacity: 0.8; }
+@media (hover: hover) {
+  .np-msg:hover .np-acts { display: flex; }
+  .np-act:hover, .np-replybar-x:hover { background: var(--card); color: var(--text); }
+  .np-quote:hover:not(.np-quote-noref) { background: var(--hover); }
+  .np-rchip:hover { border-color: var(--accent); }
+  .np-qbtn:hover { background: var(--card); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-act, .np-quote, .np-rchip, .np-qbtn, .np-replybar-x { transition: none; }
+  .np-act:active, .np-quote:active, .np-rchip:active, .np-qbtn:active, .np-replybar-x:active { transform: none; }
+  .np-msg.np-flash .np-bubble { animation-duration: 0.01s; box-shadow: 0 0 0 3px var(--accent); }
+  .np-quote.np-gone { animation: none; }
+}

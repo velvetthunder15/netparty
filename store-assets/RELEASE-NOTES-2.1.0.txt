@@ -1,0 +1,6 @@
+NetParty 2.1.0
+
+- Reply to a message: hover a chat message (or tap it on a phone or tablet) and press Reply. Your message shows a small quote of the one you answered; click the quote to jump to it.
+- React to a message: press React and pick 👍 ❤️ 😂 😮 😢 🔥, or + for any emoji. Counts show under the message; tap one to add or remove yours.
+- Emoji search: type in the emoji picker to find an emoji by name, and press Enter to use the first result.
+- Replies and reactions are end-to-end encrypted, like the rest of the chat.
