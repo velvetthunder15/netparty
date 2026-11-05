@@ -1,6 +1,6 @@
 // NetParty sync server on Cloudflare Workers. All WebSocket connections go to one
 // Durable Object ("hub"), which runs the same room logic as the Node server.
-import { createHub, defaultIceServers, joinPage, joinPageHeaders } from "../core.js";
+import { createHub, iceProvider, joinPage, joinPageHeaders } from "../core.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "../gifs.js";
 import extensionZip from "./public/netparty-extension.zip";
 // landing site (copied from the Hark-built page) bundled into the Worker
@@ -180,8 +180,9 @@ export class PartyHub {
     // 15 minutes deletes parties that have been idle for nearly 6 hours.
     const kv = state.storage;
     this.kv = kv;
+    this.ice = iceProvider(env);
     this.hub = createHub({
-      iceServers: defaultIceServers(env),
+      iceServers: this.ice,
       store: {
         get: (id) => kv.get("room:" + id),
         put: async (id, obj) => {
@@ -224,7 +225,7 @@ export class PartyHub {
       return new Response(null, { status: room ? 204 : 404 });
     }
     if (url.pathname === "/health")
-      return Response.json({ ok: true, rooms: this.hub.rooms.size });
+      return Response.json({ ok: true, rooms: this.hub.rooms.size, relay: this.ice.status.relay });
     if (request.headers.get("Upgrade") !== "websocket")
       return new Response("Not found.\n", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", "x-robots-tag": "noindex" } });
 

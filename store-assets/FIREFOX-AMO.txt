@@ -73,7 +73,7 @@ Features
 
 Good to know
 • Everyone in the party needs NetParty, and for Netflix and JioHotstar, their own subscription to that service. NetParty doesn't share or stream video, it only keeps each person's own player in sync.
-• Voice chat connects browsers directly and has no relay server, so it may not connect on some restrictive networks (some office, school or mobile networks). Text chat and sync still work there.
+• Voice and video chat connect browsers directly, and fall back to an encrypted relay (Cloudflare TURN) on restrictive networks such as mobile data or college Wi-Fi.
 • Anyone with the full invite link can join the party and read its chat, so share it only with people you want there.
 
 Free and open source (MIT): https://github.com/velvetthunder15/netparty
@@ -193,7 +193,7 @@ How to test (YouTube is free, so no subscription is needed):
 4. Profile B: open that invite link. The invite page shows "<name> invited you…". Click "Join on YouTube". Profile B opens the same video and joins the party.
    Note: the invite page's install help still says Chrome, because it was written for the Chrome version. With the Firefox add-on installed, the Join button works as described.
 5. Try: play/pause/seek in either profile (the other follows); type in the chat box and press Enter (it appears on the other side); hover the 🎉 button and click an emoji (it floats up on both screens); the GIF button opens a KLIPY GIF picker (search goes to https://netparty.tech/api/gifs/…, which asks KLIPY), and clicking a GIF sends it; the popup shows the party code, who's watching and "Copy invite link"; reload either tab (it rejoins and decrypts the chat history again); "Leave party" in the popup.
-6. Voice (optional): "Join voice chat" in both profiles. It asks for the microphone. Audio goes peer to peer with no relay (TURN) server, so it may not connect on restrictive networks.
+6. Voice (optional): "Join voice chat" in both profiles. It asks for the microphone. Audio goes peer to peer, or through the Cloudflare TURN relay when a direct link fails.
 Netflix and JioHotstar work the same way but need a subscription on each side.
 
 Technical notes:

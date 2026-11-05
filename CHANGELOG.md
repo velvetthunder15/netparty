@@ -4,6 +4,14 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.0.2] - 2026-11-06
+### Fixed
+- **Voice and video chat now connect on any network**: calls go through a relay (TURN) server when the two
+  networks block a direct peer-to-peer link (mobile data, hostel and college Wi-Fi, carrier NAT). The server
+  hands out short-lived relay credentials; a dropped link reconnects on its own with fresh ones (twice).
+- **Chat opens at the newest message**: after closing and reopening the chat, or reloading with it closed, it
+  showed the first message. It now returns to the newest line, or to where you had scrolled up to.
+
 ## [2.0.1] - 2026-11-03
 ### Fixed
 - **Sync this tab on a paused video**: when no video was playing and the page had more than one (often a second

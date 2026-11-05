@@ -24,6 +24,7 @@ const limits = {
   chat: [20, 10_000],
   profile: [10, 10_000],
   page: [10, 10_000],
+  ice: [10, 60_000], // voice joins / reconnects asking for relay credentials
 };
 
 // ---- ciphertext sizes. Wire format (built by the extension): base64url(0x01 | 12-byte IV |
@@ -109,10 +110,65 @@ export function validVideoId(v) {
   return false;
 }
 
+const STUN = { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] };
+
+// Static ICE list: STUN, plus a fixed TURN server when TURN_URL/TURN_USER/TURN_PASS are set.
 export function defaultIceServers(env = {}) {
-  const ice = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+  const ice = [STUN];
   if (env.TURN_URL) ice.push({ urls: env.TURN_URL.split(","), username: env.TURN_USER, credential: env.TURN_PASS });
   return ice;
+}
+
+// ICE servers for voice/video. With TURN_KEY_ID + TURN_KEY_API_TOKEN (Cloudflare Realtime TURN),
+// short-lived relay credentials are minted and cached, so calls connect even when the two
+// networks block peer-to-peer (carrier / symmetric NAT). Falls back to the static list on error.
+// Returns an async function: () => Promise<iceServers[]>.
+export function iceProvider(env = {}, fetchFn = globalThis.fetch) {
+  const fallback = defaultIceServers(env);
+  if (!env.TURN_KEY_ID || !env.TURN_KEY_API_TOKEN || !fetchFn) return Object.assign(async () => fallback, { status: { relay: env.TURN_URL ? "static" : "off" } });
+  const status = { relay: "pending" }; // for /health: "ok" or the last error (never the key)
+  const TTL = 24 * 3600; // seconds the credentials stay valid
+  let cache = null; // { ice, exp }
+  let inflight = null;
+  const get = async () => {
+    const now = Date.now();
+    if (cache && now < cache.exp) return cache.ice;
+    if (!inflight) {
+      inflight = (async () => {
+        try {
+          const r = await fetchFn(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(env.TURN_KEY_ID)}/credentials/generate-ice-servers`, {
+            method: "POST",
+            headers: { Authorization: "Bearer " + env.TURN_KEY_API_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({ ttl: TTL }),
+          });
+          if (!r.ok) throw new Error("TURN credentials HTTP " + r.status);
+          const j = await r.json();
+          const list = Array.isArray(j.iceServers) ? j.iceServers : j.iceServers ? [j.iceServers] : [];
+          // browsers refuse port 53, so drop those urls (Cloudflare's docs recommend this)
+          const ice = list
+            .map((s) => {
+              const urls = (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => typeof u === "string" && !/:53(\?|$)/.test(u));
+              return urls.length ? { ...s, urls } : null;
+            })
+            .filter(Boolean);
+          if (!ice.some((s) => s.urls.some((u) => /^turns?:/.test(u)))) throw new Error("no TURN urls in response");
+          // keep Google STUN first as well; refresh well before the credentials expire
+          cache = { ice: [STUN, ...ice], exp: Date.now() + (TTL / 2) * 1000 };
+          status.relay = "ok";
+          return cache.ice;
+        } catch (e) {
+          console.log("TURN credentials failed:", String(e?.message || e));
+          status.relay = "error: " + String(e?.message || e).slice(0, 80);
+          cache = { ice: fallback, exp: Date.now() + 60 * 1000 }; // retry in a minute
+          return fallback;
+        } finally {
+          inflight = null;
+        }
+      })();
+    }
+    return inflight;
+  };
+  return Object.assign(get, { status });
 }
 
 // private per-tab reconnect secret: 128 random bits as hex (the extension makes 32 hex chars)
@@ -123,7 +179,8 @@ const announcesE2ee = (data) => data?.e2ee === 1 || data?.e2ee === true;
 // With one, a party survives a server restart: its playback state, host, seats and (encrypted)
 // chat come back on the next join.
 export function createHub({ iceServers = defaultIceServers(), store = null } = {}) {
-const ICE_SERVERS = iceServers;
+// iceServers: a fixed list, or an async function returning one (see iceProvider)
+const getIce = typeof iceServers === "function" ? iceServers : async () => iceServers;
 const newId = (n = 8) => {
   const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
   let s = "";
@@ -548,14 +605,34 @@ const handlers = {
 
   // ---- Voice chat (WebRTC mesh). Server only tracks who is in voice and relays the
   // (encrypted) connection setup between two members. Audio goes peer to peer (DTLS-SRTP).
-  voiceJoin(client, _data, reply) {
-    const room = inRoom(client);
+  async voiceJoin(client, _data, reply) {
+    if (!inRoom(client)) return reply(null, "Not in a party.");
+    let ice;
+    try {
+      ice = await getIce();
+    } catch {
+      ice = defaultIceServers();
+    }
+    const room = inRoom(client); // re-check: they may have left while credentials were fetched
     if (!room) return reply(null, "Not in a party.");
     const peers = [...room.members.values()].filter((m) => m.inVoice && m !== client).map((m) => m.pid);
     client.inVoice = true;
     broadcast(room, { type: "voice", data: { event: "join", id: client.pid } }, client.pid);
     broadcast(room, membersMsg(room));
-    reply({ peers, iceServers: ICE_SERVERS });
+    reply({ peers, iceServers: ice });
+  },
+
+  // fresh ICE servers (relay credentials) for a voice reconnect
+  async voiceIce(client, _data, reply) {
+    if (!inRoom(client)) return reply(null, "Not in a party.");
+    if (limited(client, "ice")) return reply(null, "Slow down.");
+    let ice;
+    try {
+      ice = await getIce();
+    } catch {
+      ice = defaultIceServers();
+    }
+    reply({ iceServers: ice });
   },
 
   voiceLeave(client, _data, reply) {

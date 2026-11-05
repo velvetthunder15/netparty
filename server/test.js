@@ -284,6 +284,15 @@ ok("host-only control lock");
   const va = await a.req("voiceJoin", {});
   assert.deepEqual(va.peers, []);
   assert.ok(va.iceServers.length >= 1);
+  if (process.env.EXPECT_TURN) {
+    const turn = va.iceServers.find((s) => [].concat(s.urls).some((u) => /^turns?:/.test(u)));
+    assert.ok(turn && turn.username && turn.credential, "relay (TURN) server with credentials offered");
+    assert.ok(![].concat(...va.iceServers.map((s) => s.urls)).some((u) => /:53(\?|$)/.test(u)), "no port-53 urls");
+    const vi = await a.req("voiceIce", {});
+    assert.ok(vi.iceServers.some((s) => [].concat(s.urls).some((u) => /^turns?:/.test(u))), "voiceIce returns TURN too");
+    if (process.env.DUMP_ICE) (await import("node:fs")).writeFileSync(process.env.DUMP_ICE, JSON.stringify(va.iceServers));
+    ok("voice: TURN relay credentials offered (" + [].concat(turn.urls).length + " relay urls)");
+  }
   const vb = await b.req("voiceJoin", {});
   assert.deepEqual(vb.peers, [a.pid]);
   const ve = await a.next("voice", (m) => m.data.event === "join");

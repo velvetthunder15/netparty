@@ -1823,6 +1823,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     const peers = new Map();
     const peerState = new Map(); // id -> { muted, speaking }
     const rxQ = new Map(); // id -> chain of incoming signals being handled
+    const retries = new Map(); // id -> reconnect attempts since the link last worked
     let muted = false;
     let speaking = false;
     let meter = null;
@@ -1875,10 +1876,27 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       };
       pc.onicecandidate = (e) => e.candidate && signal(entry, id, { ice: e.candidate.toJSON() }).catch(() => {});
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "failed") {
-          ui.system("Voice/video link to " + nameOf(id) + " failed: your networks may block peer-to-peer connections (there's no relay server yet).");
+        if (pc.connectionState === "failed" && peers.get(id) === entry) {
+          // the caller retries with fresh relay credentials (twice); the other side waits for its new offer
+          const n = (retries.get(id) || 0) + 1;
+          retries.set(id, n);
+          if (n > 2) ui.system("Couldn't connect voice/video with " + nameOf(id) + ". Ask them to leave and rejoin voice chat.");
+          else if (offerer) {
+            ui.system("Voice/video link to " + nameOf(id) + " dropped. Reconnecting…");
+            setTimeout(async () => {
+              if (!active || peers.get(id) !== entry) return;
+              try {
+                const r = await net.request("voiceIce", {});
+                if (r?.iceServers?.length) iceServers = r.iceServers;
+              } catch {}
+              if (!active || peers.get(id) !== entry) return;
+              closePeer(id);
+              callPeer(id).catch((e) => log("recall failed", e));
+            }, 1000 * n);
+          }
         }
         if (pc.connectionState === "connected") {
+          retries.delete(id);
           tuneVideo();
           // tell them whether our camera is on (also covers a reconnect); 1.7 ignores this
           signal(entry, id, { cam: camTrack ? 1 : 0 }).catch(() => {});
@@ -2182,6 +2200,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   // Lives in a shadow root so the streaming site's CSS can't break it.
   const ui = (() => {
     const E = globalThis.NP_EMOJI || { avatars: ["🙂"], reactions: ["😂", "😭", "💀", "🥰", "😱"], categories: [] };
+    let chatStick = true, chatSaved = 0; // chat scroll: following the newest line, or scrolled-up offset
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
     let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer, headEl, leaveIcon;
     let anyRow, anyNote, theaterBtn, fsBtn, theaterIcon; // any-video mode: Theater, Full screen, notes
@@ -3244,6 +3263,20 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       peopleEl = el("div", { class: "np-people" });
       voiceBox = el("div", { class: "np-voice" });
       chatEl = el("div", { class: "np-chat", role: "log", "aria-live": "polite" });
+      // Remember where the reader is while the chat is visible. A hidden chat (panel closed, page
+      // navigation, a picker or dock change) loses its scroll position, so when it gets a size
+      // again it goes back to the newest message, or to where they had scrolled up to.
+      chatEl.addEventListener("scroll", () => {
+        if (!chatEl.clientHeight) return;
+        chatStick = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
+        chatSaved = chatEl.scrollTop;
+      }, { passive: true });
+      let chatH = 0;
+      new ResizeObserver(() => {
+        const h = chatEl.clientHeight;
+        if (h && (!chatH || h !== chatH)) restoreChatScroll();
+        chatH = h;
+      }).observe(chatEl);
 
       input = el("input", { class: "np-input", type: "text", placeholder: "Message the party…", "aria-label": "Message the party", maxlength: "500", autocomplete: "off" });
       input.addEventListener("input", updateSend);
@@ -3442,6 +3475,8 @@ html.np-docked [data-np-shrink] {
       render();
       camUi.render(); // docked cameras move back into the panel
       dockCheck();
+      restoreChatScroll();
+      requestAnimationFrame(restoreChatScroll);
       if (!gifProbed && party.roomId) {
         gifProbed = true;
         gif.probe();
@@ -3596,15 +3631,26 @@ html.np-docked [data-np-shrink] {
       anyNote.classList.toggle("np-warn", !!note && !anyLive());
     }
 
+    function chatToBottom() {
+      chatStick = true;
+      chatEl.scrollTop = chatEl.scrollHeight;
+      chatSaved = chatEl.scrollTop;
+    }
+    function restoreChatScroll() {
+      if (!chatEl || !chatEl.clientHeight) return;
+      if (chatStick) chatEl.scrollTop = chatEl.scrollHeight;
+      else chatEl.scrollTop = chatSaved;
+    }
     function addLine(node) {
       if (!host) build();
-      const nearBottom = chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60;
+      const visible = chatEl.clientHeight > 0;
+      const nearBottom = visible ? chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 60 : chatStick;
       chatEl.append(node);
       while (chatEl.childElementCount > 200) {
         media.release(chatEl.firstElementChild);
         chatEl.firstElementChild.remove();
       }
-      if (nearBottom || !open) chatEl.scrollTop = chatEl.scrollHeight;
+      if (nearBottom || !open) chatToBottom();
     }
 
     // d: { id (sender pid), ts, text } or { id, ts, gif: { url, w, h } } (decrypted and checked)
@@ -3644,7 +3690,7 @@ html.np-docked [data-np-shrink] {
     }
     // keep the newest message in view when a GIF above it finishes loading
     function nearBottomScroll() {
-      if (chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 260) chatEl.scrollTop = chatEl.scrollHeight;
+      if (!chatEl.clientHeight ? chatStick : chatEl.scrollHeight - chatEl.scrollTop - chatEl.clientHeight < 260) chatToBottom();
     }
     function system(text) {
       addLine(el("div", { class: "np-sys" }, text));
@@ -3671,7 +3717,7 @@ html.np-docked [data-np-shrink] {
       chatEl.replaceChildren();
       system("🔒 Chat is end-to-end encrypted. Only people with the invite link can read it.");
       for (const h of list) h.kind === "chat" ? chat(h, true) : sysEvent(h.event, h.id);
-      chatEl.scrollTop = chatEl.scrollHeight;
+      chatToBottom();
     }
 
     // the only thing that changes every second is the playback clock

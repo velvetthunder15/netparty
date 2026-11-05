@@ -1,0 +1,4 @@
+NetParty 2.0.2
+
+- Voice and video chat now connect on any network. When a direct link can't be made (mobile data, college or office Wi-Fi), the call goes through an encrypted relay server, and a dropped link reconnects on its own.
+- The chat opens at the newest message after you close and reopen it, or reload with it closed.

@@ -96,7 +96,7 @@ Tips
   and nothing is synced; when it ends you jump to where the party is. Switching video moves the whole party.
 - Use headphones on voice to avoid echo.
 - If someone drifts, pressing play/pause once resyncs everyone.
-- On strict college or mobile networks voice may not connect; see TURN below.
+- On strict college or mobile networks voice goes through the relay (TURN) server; see TURN below.
 
 ## Troubleshooting
 
@@ -108,8 +108,8 @@ Tips
 - **No mic prompt / no audio**: click the lock icon in the address bar → allow Microphone for the site, then rejoin voice.
 - **"Camera blocked"**: same place → allow Camera for the site, then press the camera button again.
   "Your camera is in use by another app" means another app (Zoom, Meet…) has it.
-- **A friend's camera tile stays on their picture**, or "Voice/video link … failed": your networks can't connect
-  peer to peer (no relay server yet, see TURN below).
+- **A friend's camera tile stays on their picture**, or "Couldn't connect voice/video": the link failed even
+  through the relay. Both of you leave voice and join again; check the server's `GET /health` shows `"relay":"ok"`.
 - **Netflix error after a seek**: reload the tab; the party rejoins automatically.
 - **"GIFs aren't available right now"**: the server has no KLIPY key yet (see GIFs below).
 
@@ -154,8 +154,11 @@ For friends on other networks the server must be public over `wss://`. Any Node
 host works (Render, Railway, Fly.io, a VPS behind Caddy/Nginx). Set `PORT` if
 your host requires it. Health check: `GET /health`.
 
-Voice and video use Google STUN and connect peer to peer. On strict networks (symmetric NAT) (some college/mobile networks) peers
-may fail to connect; add a TURN server with env vars:
+Voice and video use Google STUN and connect peer to peer. On strict networks (symmetric NAT, many college and
+mobile networks) they go through a TURN relay. netparty.tech uses Cloudflare Realtime TURN: create a TURN key in
+the Cloudflare dashboard (Realtime, TURN Server) and set the Worker secrets `TURN_KEY_ID` and
+`TURN_KEY_API_TOKEN` (`wrangler secret put`). The server mints 24-hour credentials per voice join and caches them.
+`GET /health` shows `"relay":"ok"` once it works. A fixed TURN server also works with env vars:
 `TURN_URL=turn:host:3478 TURN_USER=... TURN_PASS=...`
 
 ## 2. Load the extension
@@ -295,7 +298,7 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
 - Episode changes reload followers' tabs; voice reconnects automatically after.
 - Voice is a mesh: great up to ~6 people in voice, heavier beyond that. Video is limited to 4 cameras, and each
   camera is uploaded once per viewer (lower quality as more people watch).
-- No TURN relay server yet: voice and video only work when the browsers can reach each other directly.
+- Voice and video use a Cloudflare TURN relay when a direct link fails; very locked-down networks that block UDP and TCP to turn.cloudflare.com can still stop calls.
 - Prime Video support is built from Prime's public player markup and tested on a mock page only; Prime can change
   it, and `video.currentTime` may not match the time Prime shows (everyone gets the same offset, so sync holds).
 - Netflix's internal player API is undocumented and can change.

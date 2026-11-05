@@ -2,11 +2,11 @@
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import fs from "node:fs";
-import { createHub, defaultIceServers, joinPage, joinPageHeaders } from "./core.js";
+import { createHub, iceProvider, joinPage, joinPageHeaders } from "./core.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "./gifs.js";
 
 const PORT = Number(process.env.PORT || 8787);
-const hub = createHub({ iceServers: defaultIceServers(process.env) });
+const hub = createHub({ iceServers: iceProvider(process.env) });
 const rooms = hub.rooms;
 
 // optional: serve the extension zip from invite pages (set EXTENSION_ZIP=/path/netparty.zip)
