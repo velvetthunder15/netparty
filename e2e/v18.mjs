@@ -1,3 +1,4 @@
+import { SERVER_DIR } from "./config.mjs";
 // 1.8 features e2e (fake Netflix, two real Chromium profiles with fake camera + mic):
 //   - your own messages show your picture and name, like everyone else's (and follow changes)
 //   - light / dark theme: follows prefers-color-scheme by default, Theme setting in the popup overrides it,
@@ -18,15 +19,15 @@ import { spawn } from "node:child_process";
 const SITE = "https://www.netflix.com/watch/12345";
 // a party server with GIFs on (mock KLIPY on :8444), behind the recording proxy
 const srv = spawn(process.execPath, ["server.js"], {
-  cwd: "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server",
+  cwd: SERVER_DIR,
   env: { ...process.env, PORT: "8796", KLIPY_KEY: "test-key", KLIPY_BASE: "http://127.0.0.1:8444" },
   stdio: "ignore",
 });
 await sleep(1200);
 const T = tap(8793, 8796);
 
-const H = await launch("/tmp/pw-8h", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url }, ctxOpts: { deviceScaleFactor: 2 } });
-const G = await launch("/tmp/pw-8g", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url }, ctxOpts: { deviceScaleFactor: 3 } });
+const H = await launch("pw-8h", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url }, ctxOpts: { deviceScaleFactor: 2 } });
+const G = await launch("pw-8g", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url }, ctxOpts: { deviceScaleFactor: 3 } });
 const hp = await H.ctx.newPage(), gp = await G.ctx.newPage();
 const errors = [];
 for (const [p, n] of [[hp, "host"], [gp, "guest"]]) {
@@ -272,7 +273,7 @@ for (const [w, h] of [[1440, 900], [1920, 1080], [1280, 720]]) {
 check("guest (dark) docked view: no overflow either", !(await geom(gp)).overflow && (await geom(gp)).docked);
 
 // a third camera (another browser): 3 tiles, still 16:9 and inside the panel
-const D = await launch("/tmp/pw-8d", { name: "Meera", avatar: "🦄", extra: { serverUrl: T.url } });
+const D = await launch("pw-8d", { name: "Meera", avatar: "🦄", extra: { serverUrl: T.url } });
 const dp = await D.ctx.newPage();
 await dp.goto(created.invite);
 await until(async () => !!(await dp.$("a.btn:not([hidden])")), 5000);
@@ -557,7 +558,7 @@ check("largest encrypted offer fits the 32 KB signal limit", bigSig > 1000 && bi
 
 // ---------------------------------------------------------------- camera permission denied
 // real permission handling (no auto-accepting fake UI): microphone allowed, camera denied for the site
-const C = await launch("/tmp/pw-8c", { name: "Asha", avatar: "🐸", extra: { serverUrl: T.url }, prompts: true });
+const C = await launch("pw-8c", { name: "Asha", avatar: "🐸", extra: { serverUrl: T.url }, prompts: true });
 const cp = await C.ctx.newPage();
 const cdp = await C.ctx.newCDPSession(cp);
 await cdp.send("Browser.setPermission", { origin: "https://www.netflix.com", permission: { name: "microphone" }, setting: "granted" });

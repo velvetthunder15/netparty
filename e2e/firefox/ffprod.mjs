@@ -1,6 +1,6 @@
 // Prod smoke: two Firefox profiles with the AMO build, default server wss://netparty.tech, fake streaming sites.
 import { launchFF, extPage, startProxy } from "./fflib.mjs";
-import { shadow, until, people, check, summary, out, sleep, keyOf } from "/workspace/work/e2e/lib.mjs";
+import { shadow, until, people, check, summary, out, sleep, keyOf } from "../lib.mjs";
 import net from "node:net";
 const FAKE = new Set(["www.netflix.com", "www.hotstar.com", "www.jiohotstar.com", "www.youtube.com"]);
 const p = startProxy();

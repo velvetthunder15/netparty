@@ -1,3 +1,5 @@
+import path from "node:path";
+import { MEDIA_DIR } from "./config.mjs";
 // Fake www.netflix.com / www.hotstar.com / www.youtube.com / www.primevideo.com (+ www.amazon.co.uk/gp/video) for extension e2e tests,
 // plus a mock KLIPY API (http :8444) and a mock KLIPY media host (static.klipy.com).
 // A tiny single-page app: browse/detail pages with a Play button, and watch pages
@@ -7,8 +9,8 @@
 import https from "node:https";
 import http from "node:http";
 import fs from "node:fs";
-const video = fs.readFileSync("test.webm");
-const gif = fs.readFileSync("test.gif");
+const video = fs.readFileSync(path.join(MEDIA_DIR, "test.webm"));
+const gif = fs.readFileSync(path.join(MEDIA_DIR, "test.gif"));
 const CSP = process.env.CSP || "";
 
 const app = `<!doctype html><html><head><title>fake</title></head><body style="margin:0;background:#141414;color:#fff;font-family:sans-serif">
@@ -237,7 +239,7 @@ window.addEventListener("keydown", (e) => {
 </script></body></html>`;
 
 // mock KLIPY media (static.klipy.com is mapped here by the browser's host-resolver-rules)
-https.createServer({ key: fs.readFileSync("key.pem"), cert: fs.readFileSync("cert.pem") }, (req, res) => {
+https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert: fs.readFileSync(path.join(MEDIA_DIR, "cert.pem")) }, (req, res) => {
   const host = (req.headers.host || "").split(":")[0];
   if (/klipy\.com$/.test(host)) {
     if (/^\/test\/.+\.gif/.test(req.url)) {

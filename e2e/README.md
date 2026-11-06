@@ -20,12 +20,17 @@ API (`http://127.0.0.1:8444`) and mock KLIPY media host (`static.klipy.com`), an
 exactly what the server receives and sends.
 
 ```bash
-cd e2e && npm i playwright
+# From the repository root. Use Node.js 22+ and npm on Linux, macOS, or WSL.
+# Install ffmpeg, openssl, git, tar, and an emoji font with your OS package manager.
+npm --prefix server ci
+npm --prefix e2e ci
+npm --prefix e2e run browser:install
+cd e2e
 ffmpeg -f lavfi -i testsrc=size=640x360:rate=25 -t 120 -c:v libvpx test.webm
 ffmpeg -f lavfi -i testsrc=size=320x180:rate=15 -t 60 -c:v libvpx -b:v 200k test-short.webm
 ffmpeg -f lavfi -i testsrc=size=200x150:rate=5 -t 1.2 test.gif
 openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 30 \
-  -subj "/CN=www.netflix.com" -addext "subjectAltName=DNS:www.netflix.com,DNS:www.hotstar.com,DNS:www.youtube.com,DNS:static.klipy.com"
+  -subj "/CN=www.netflix.com" -addext "subjectAltName=DNS:www.netflix.com,DNS:www.hotstar.com,DNS:www.youtube.com,DNS:static.klipy.com,DNS:www.primevideo.com,DNS:www.amazon.co.uk"
 ./go.sh                                  # run.mjs (Netflix); SITE=https://www.hotstar.com/in/shows/x/1260000002/ep/1260000099/watch for JioHotstar
 SCRIPT=lifecycle.mjs HOT=1 ./go.sh
 SCRIPT=features.mjs ./go.sh; SCRIPT=features.mjs CSP=strict ./go.sh
@@ -34,5 +39,54 @@ SCRIPT=youtube.mjs ./go.sh
 SCRIPT=anyvideo.mjs TMO=420 ./go.sh
 SCRIPT=prime.mjs ./go.sh; SCRIPT=v18.mjs TMO=300 ./go.sh
 ```
-The certificate needs `DNS:www.primevideo.com,DNS:www.amazon.co.uk` in its subjectAltName too.
-Paths to Chromium, Playwright and the extension are set at the top of `lib.mjs` / the scripts.
+Run `e2e/go.sh` from any working directory. It uses Node from `PATH`; set `NODE` to
+an executable path to choose another installation. `npm --prefix e2e test` is equivalent.
+No OS packages are installed by the runner. On Linux, if Chromium reports missing system
+libraries, install them using your OS package manager or `cd e2e && npx playwright install-deps chromium`.
+
+Playwright and `ws` are declared in `e2e/package.json` and pinned by its lockfile.
+The default browser is Playwright's full Chromium build, including headless extension support.
+Set `CHROMIUM_PATH=/absolute/path/to/chromium` to use another Chromium build that supports
+loading unpacked extensions. Chrome and Edge builds may disable these extension flags.
+
+| Setting | Default / meaning |
+| --- | --- |
+| `SCRIPT` | `run.mjs`; relative paths resolve from `e2e`, absolute paths also work |
+| `TMO` | `230` seconds; positive number, timeout returns exit code 124 |
+| `LOG` | `e2e/run.log`; relative paths resolve from `e2e` |
+| `EXT_DIR` | This checkout's `extension` directory |
+| `MEDIA_DIR` | `e2e`; directory containing generated media and TLS certificate/key |
+| `SERVER_LOG` | `e2e/server.log`; also used by the server-log leak assertions |
+| `OLD_REV` | Full commit `52ed7690633fbc2f6f4a343aa2a724596bebc800` (2.0.2) for `chat2.mjs` |
+
+Use absolute paths for path overrides when invoking `go.sh` outside `e2e`. `SITE`, `HOT`,
+`CSP`, and the other suite-specific settings still work. `SERVER` is for manually managed
+runs; `go.sh` always starts the local server on port 8787 because the recording proxies
+assert against that server.
+
+The chat compatibility test requires Git history containing `OLD_REV`, plus `git` and `tar`
+on `PATH`. For a shallow clone, fetch that commit or unshallow the clone first. A missing
+old client is an error, never a skipped compatibility check. Archive commands use argument
+arrays so checkout paths with spaces work.
+
+The runner checks files, dependencies, browser installation, and the suite's fixed ports
+before starting. Run one suite at a time per host: ports 8443, 8444, 8450, 8451, 8787, 8789,
+8790, 8791, 8792, 8793, 8796, and 8899 must be free. A busy port causes an error without
+stopping its owner. Service startup is checked before the test starts.
+
+Each run owns separate process groups and a private temporary directory for browser profiles
+and extension copies. Success, failure, timeout, Ctrl+C, and SIGTERM all trigger cleanup of
+those groups only. No `pkill` or process-name matching is used. Native Windows is not supported
+by this POSIX cleanup code; use WSL. SIGKILL cannot be handled. Logs and screenshots remain in
+`e2e`; temporary profiles are removed. The command returns the test's status (130 for Ctrl+C,
+143 for SIGTERM). Inspect `fake.log`, `server.log`, and the chosen test log on failure.
+
+Run the runner regression checks without browsers or media:
+
+```bash
+npm --prefix e2e run test:runner
+```
+
+Optional tools: `store-capture.mjs` reads `still-<n>.b64` from `STORE_DIR` (default `e2e/store`)
+and writes to its `raw` subdirectory. `relay.mjs` reads `ICE_FILE` (default `ice.json` in the
+working directory) and leaves that input file intact. See `firefox/README.md` for Firefox setup.

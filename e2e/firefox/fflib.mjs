@@ -1,10 +1,12 @@
+import { E2E, MEDIA_DIR, tempPath, executableOnPath } from "../config.mjs";
+import path from "node:path";
 // Firefox helpers for the NetParty e2e: real Firefox ESR driven over WebDriver BiDi (puppeteer-core),
 // the Firefox build installed as a temporary add-on, fake sites reached through a local CONNECT proxy.
 import puppeteer from "puppeteer-core";
 import http from "node:http";
 import net from "node:net";
 import fs from "node:fs";
-export const BUILD = process.env.BUILD || "/workspace/work/ff/build";
+export const BUILD = process.env.BUILD || path.join(E2E, "firefox", "build");
 const FAKE_HOSTS = new Set(["www.netflix.com", "www.hotstar.com", "www.jiohotstar.com", "www.youtube.com", "static.klipy.com", "www.primevideo.com", "www.amazon.co.uk"]);
 
 // HTTPS proxy: the fake hosts tunnel to the fake site on :8443; anything else is refused
@@ -30,12 +32,13 @@ export function startProxy(port = 8899) {
 }
 
 export async function launchFF(dir, { uuid, prefs = {} } = {}) {
+  dir = tempPath(dir);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   startProxy();
   const browser = await puppeteer.launch({
     browser: "firefox",
-    executablePath: "/usr/bin/firefox-esr",
+    executablePath: process.env.FIREFOX_PATH || executableOnPath("firefox-esr"),
     headless: true,
     acceptInsecureCerts: true,
     args: ["-remote-allow-system-access"],
@@ -75,11 +78,11 @@ export async function extPage(x) {
 // TLS recording proxy in front of the local party server (Firefox's MV3 extension CSP has
 // upgrade-insecure-requests, so the add-on talks wss:// only, exactly like with netparty.tech).
 import https from "node:https";
-import { WebSocket, WebSocketServer } from "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server/node_modules/ws/wrapper.mjs";
+import { WebSocket, WebSocketServer } from "ws";
 export function tapTLS(listenPort, targetPort) {
   const frames = [];
   let n = 0;
-  const srv = https.createServer({ key: fs.readFileSync("/workspace/work/e2e/key.pem"), cert: fs.readFileSync("/workspace/work/e2e/cert.pem") }, async (req, res) => {
+  const srv = https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert: fs.readFileSync(path.join(MEDIA_DIR, "cert.pem")) }, async (req, res) => {
     try {
       const r = await fetch(`http://127.0.0.1:${targetPort}${req.url}`, { method: req.method, headers: { origin: req.headers.origin || "" } });
       const headers = {};

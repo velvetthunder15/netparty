@@ -1,3 +1,4 @@
+import { tempPath } from "./config.mjs";
 // Smoke test of "Sync any video" against the live server (wss://netparty.tech): Chromium host + guest on the
 // local test pages (anysite.mjs), party through the popup's injection path, the production invite page
 // decrypting the page address, join, pause / seek sync, end. Uses the same test copy of the extension as
@@ -7,15 +8,15 @@ import { launch, until, people, check, summary, out, sleep, keyOf, EXT } from ".
 import { start as startPages } from "./anysite.mjs";
 const PROD = process.env.TARGET || "wss://netparty.tech";
 const A = "http://localhost:8450";
-const TEST_EXT = "/tmp/np-ext-anyprod";
+const TEST_EXT = tempPath("np-ext-anyprod");
 fs.rmSync(TEST_EXT, { recursive: true, force: true });
 fs.cpSync(EXT, TEST_EXT, { recursive: true });
 const man = JSON.parse(fs.readFileSync(TEST_EXT + "/manifest.json", "utf8"));
 man.host_permissions.push("http://localhost/*");
 fs.writeFileSync(TEST_EXT + "/manifest.json", JSON.stringify(man, null, 2));
 const stop = startPages();
-const H = await launch("/tmp/pw-prodany-h", { name: "ProdHost", ext: TEST_EXT, extra: { serverUrl: PROD } });
-const G = await launch("/tmp/pw-prodany-g", { name: "ProdGuest", ext: TEST_EXT, extra: { serverUrl: PROD } });
+const H = await launch("pw-prodany-h", { name: "ProdHost", ext: TEST_EXT, extra: { serverUrl: PROD } });
+const G = await launch("pw-prodany-g", { name: "ProdGuest", ext: TEST_EXT, extra: { serverUrl: PROD } });
 const FILES = ["any-mode.js", "early.js", "emoji-data.js", "anyvideo.js", "content.js"];
 const run = (x, page, msg, inject) =>
   x.sw.evaluate(async ([u, m, files, inj]) => {

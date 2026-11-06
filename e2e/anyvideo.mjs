@@ -1,3 +1,4 @@
+import { tempPath } from "./config.mjs";
 // "Sync any video" (2.0) e2e in Chromium: two browsers (host + guest) on local test pages (anysite.mjs,
 // http://localhost:8450 and a second origin on :8451).
 //
@@ -18,10 +19,10 @@
 import fs from "node:fs";
 import { launch, shadow, until, people, check, summary, out, sleep, tap, leaks, keyOf, EXT, SERVER } from "./lib.mjs";
 import { start as startPages } from "./anysite.mjs";
-import { WebSocket } from "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server/node_modules/ws/wrapper.mjs";
+import { WebSocket } from "ws";
 
 const A = "http://localhost:8450";
-const TEST_EXT = "/tmp/np-ext-anytest";
+const TEST_EXT = tempPath("np-ext-anytest");
 fs.rmSync(TEST_EXT, { recursive: true, force: true });
 fs.cpSync(EXT, TEST_EXT, { recursive: true });
 const man = JSON.parse(fs.readFileSync(TEST_EXT + "/manifest.json", "utf8"));
@@ -30,8 +31,8 @@ fs.writeFileSync(TEST_EXT + "/manifest.json", JSON.stringify(man, null, 2));
 
 const stopPages = startPages();
 const T = tap(8793, 8787);
-const H = await launch("/tmp/pw-any-host", { name: "Chirag", ext: TEST_EXT, extra: { serverUrl: T.url } });
-const G = await launch("/tmp/pw-any-guest", { name: "Rahul", ext: TEST_EXT, extra: { serverUrl: T.url } });
+const H = await launch("pw-any-host", { name: "Chirag", ext: TEST_EXT, extra: { serverUrl: T.url } });
+const G = await launch("pw-any-guest", { name: "Rahul", ext: TEST_EXT, extra: { serverUrl: T.url } });
 const errors = [];
 const watch = (p, n) => {
   p.on("pageerror", (e) => (errors.push(n + ": " + e.message), out(n + " pageerror:", e.message)));

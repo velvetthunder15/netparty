@@ -3,7 +3,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 // (or SITE=...), local party server behind a TLS recording proxy.
 // IDLE=<ms> sets extensions.background.idle.timeout in both browsers; QUIET=<s> idles that long mid-test.
 import { launchFF, extPage, tapTLS } from "./fflib.mjs";
-import { shadow, until, people, check, summary, out, sleep, leaks, keyOf } from "/workspace/work/e2e/lib.mjs";
+import { shadow, until, people, check, summary, out, sleep, leaks, keyOf } from "../lib.mjs";
 const SITE = process.env.SITE || "https://www.netflix.com/watch/12345";
 const IDLE = process.env.IDLE ? Number(process.env.IDLE) : null;
 const QUIET = Number(process.env.QUIET || 0);
@@ -17,7 +17,7 @@ const he = await extPage(H), ge = await extPage(G);
 const perms = await he.evaluate(() => chrome.permissions.getAll());
 out("granted:", JSON.stringify(perms));
 check("Firefox granted the declared data collection at install", JSON.stringify((perms.data_collection || []).slice().sort()) === JSON.stringify(["browsingActivity", "personalCommunications", "websiteActivity", "websiteContent"]), JSON.stringify(perms.data_collection));
-const WANT_VER = JSON.parse((await import("node:fs")).readFileSync(new URL("../../extension/manifest.json", "file:///workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/e2e/firefox/"), "utf8")).version;
+const WANT_VER = JSON.parse((await import("node:fs")).readFileSync(new URL("../../extension/manifest.json", import.meta.url), "utf8")).version;
 check("add-on version matches extension/manifest.json (" + WANT_VER + ")", (await he.evaluate(() => chrome.runtime.getManifest().version)) === WANT_VER);
 await he.evaluate((u) => chrome.storage.sync.set({ serverUrl: u, name: "Chirag", avatar: "🦊" }), T.url);
 await ge.evaluate((u) => chrome.storage.sync.set({ serverUrl: u, name: "Rahul", avatar: "🐼" }), T.url);

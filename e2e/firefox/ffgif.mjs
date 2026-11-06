@@ -1,11 +1,12 @@
+import { SERVER_DIR } from "../config.mjs";
 // GIFs in Firefox: background fetch of the GIF API (CORS from a moz-extension:// origin) and KLIPY media,
 // then the picker in the panel. Second local server with a KLIPY key pointed at the mock KLIPY on :8444.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { spawn } from "node:child_process";
 import { launchFF, extPage, tapTLS } from "./fflib.mjs";
-import { shadow, until, check, summary, out, sleep } from "/workspace/work/e2e/lib.mjs";
+import { shadow, until, check, summary, out, sleep } from "../lib.mjs";
 const T = tapTLS(8792, 8787);
-const srv = spawn(process.execPath, ["server.js"], { cwd: "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server", env: { ...process.env, PORT: "8789", KLIPY_KEY: "test-key", KLIPY_BASE: "http://127.0.0.1:8444" }, stdio: "ignore" });
+const srv = spawn(process.execPath, ["server.js"], { cwd: SERVER_DIR, env: { ...process.env, PORT: "8789", KLIPY_KEY: "test-key", KLIPY_BASE: "http://127.0.0.1:8444" }, stdio: "ignore" });
 const G2 = tapTLS(8793, 8789);
 await sleep(1200);
 const H = await launchFF("/tmp/ff-gif", { uuid: "aaaaaaaa-0000-4000-8000-000000000003" });

@@ -1,29 +1,32 @@
+import { REPO, tempPath, SERVER_LOG } from "./config.mjs";
 // 2.1 chat e2e (fake Netflix): reply to a message, reactions on messages, emoji search.
 // Two browsers (host Chirag, guest Rahul, guest in light mode), a scripted third member ("Bottie",
 // a plain WebSocket client that sends a GIF line the way 2.0.x does, without a message id, and
 // decrypts everything it gets), and a 2.0.2 browser (the extension at git HEAD~ 2.0.2, unpacked to
-// /tmp/np-old) to check old clients still read replies as text and never show reactions as lines.
+// a private temporary directory) to check old clients still read replies as text and never show reactions as lines.
 // Everything goes through a recording proxy; at the end no WebSocket frame may contain a quote
 // snippet, a reaction emoji, a name or a message.
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { launch, shadow, until, people, check, summary, out, sleep, tap, leaks, keyOf } from "./lib.mjs";
-import { WebSocket } from "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server/node_modules/ws/wrapper.mjs";
-const REPO = "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty";
+import { WebSocket } from "ws";
+
 const SITE = "https://www.netflix.com/watch/12345";
 const T = tap(8791, 8787);
 
 // the 2.0.2 extension, straight from git (the last 2.0.x commit)
-const OLD = "/tmp/np-old/extension";
-const oldRev = process.env.OLD_REV || "52ed769";
-fs.rmSync("/tmp/np-old", { recursive: true, force: true });
-fs.mkdirSync("/tmp/np-old");
-execSync(`git -C ${REPO} archive ${oldRev} extension | tar -x -C /tmp/np-old`);
+const oldRoot = tempPath("old-client");
+const OLD = oldRoot + "/extension";
+const oldRev = process.env.OLD_REV || "52ed7690633fbc2f6f4a343aa2a724596bebc800";
+fs.mkdirSync(oldRoot, { recursive: true });
+// Separate argument arrays support spaces and do not interpret OLD_REV as shell code.
+const archive = execFileSync("git", ["-C", REPO, "archive", "--format=tar", oldRev, "extension"]);
+execFileSync("tar", ["-x", "-C", oldRoot], { input: archive });
 const oldVer = JSON.parse(fs.readFileSync(OLD + "/manifest.json", "utf8")).version;
 
-const H = await launch("/tmp/pw-c2h", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url, theme: "dark" } });
-const G = await launch("/tmp/pw-c2g", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url, theme: "light" } });
-const O = await launch("/tmp/pw-c2o", { name: "Oldie", avatar: "🐢", extra: { serverUrl: T.url }, ext: OLD });
+const H = await launch("pw-c2h", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url, theme: "dark" } });
+const G = await launch("pw-c2g", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url, theme: "light" } });
+const O = await launch("pw-c2o", { name: "Oldie", avatar: "🐢", extra: { serverUrl: T.url }, ext: OLD });
 const hp = await H.ctx.newPage(), gp = await G.ctx.newPage(), op = await O.ctx.newPage();
 const errors = [];
 for (const [p, n] of [[hp, "host"], [gp, "guest"], [op, "old"]]) {
@@ -338,7 +341,7 @@ const secret = ["Chirag", "Rahul", "Bottie", "Oldie", "ORIG pizza", "pizza tonig
 check("tap saw the chat", T.frames.filter((f) => f.text.includes('"type":"chat"')).length >= 30, String(T.frames.length));
 check("no WebSocket frame contains a snippet, reaction emoji, name or message", leaks(T.frames, secret).length === 0, JSON.stringify(leaks(T.frames, secret)));
 check("no plaintext reply / reaction fields in any frame", !T.frames.some((f) => /"(re|mr|mid|s|e|text|name|emoji|gif)":/.test(f.text)), T.frames.find((f) => /"(re|mr|mid|s|e|text|name|emoji|gif)":/.test(f.text))?.text.slice(0, 160));
-const srvLog = fs.readFileSync("/tmp/np-server.log", "utf8");
+const srvLog = fs.readFileSync(SERVER_LOG, "utf8");
 check("server log has none of it either", leaks([{ text: srvLog }], secret).length === 0, JSON.stringify(leaks([{ text: srvLog }], secret)));
 
 check("no script errors on the pages", errors.length === 0, errors.join(" | "));

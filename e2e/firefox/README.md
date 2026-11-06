@@ -16,12 +16,22 @@ only speaks wss://, just like with netparty.tech.
 | `ffprod.mjs` | against the live wss://netparty.tech: create, prod invite page, join, chat both ways, sync, end |
 | `ffprodgif.mjs` | against the live netparty.tech: GIF search/trending and a KLIPY image from the add-on's moz-extension:// origin |
 
+Install Firefox ESR for your OS. Complete the media, certificate, server, and Playwright setup
+in `../README.md`, then run these commands from the repository root:
+
 ```bash
-sudo apt-get install -y firefox-esr chromium
-mkdir -p /workspace/work/ff && cd /workspace/work/ff && npm i puppeteer-core web-ext
-node netparty/scripts/build-firefox.mjs --dir /workspace/work/ff/build
-# start ../fakesite.mjs (CSP=script for a strict page script-src) and server.js on :8787, then:
-node ffrun.mjs; IDLE=25000 QUIET=75 node ffrun.mjs; SITE="https://www.youtube.com/watch?v=aaaaaaaaaaa" node ffrun.mjs
-node ffpopup.mjs; node ffcross.mjs; node ffgif.mjs
-npx web-ext lint -s /workspace/work/ff/build
+npm --prefix e2e install --no-save puppeteer-core web-ext
+node scripts/build-firefox.mjs --dir e2e/firefox/build
+SCRIPT=firefox/ffrun.mjs ./e2e/go.sh
+SCRIPT=firefox/ffrun.mjs IDLE=25000 QUIET=75 ./e2e/go.sh
+SCRIPT=firefox/ffpopup.mjs ./e2e/go.sh
+SCRIPT=firefox/ffcross.mjs ./e2e/go.sh
+SCRIPT=firefox/ffgif.mjs ./e2e/go.sh
+cd e2e && npx web-ext lint -s firefox/build
 ```
+
+`BUILD` defaults to `e2e/firefox/build`. Set `FIREFOX_PATH` to your Firefox executable's
+absolute path; otherwise `firefox-esr` is resolved from `PATH`. `MEDIA_DIR` and `CHROMIUM_PATH`
+use the same settings as the Chromium suites. Profiles and test build copies use the runner's
+private temporary directory. The `ffprod` scripts contact the live service; run them only
+when that is intended.

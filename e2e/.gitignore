@@ -5,3 +5,6 @@ node_modules/
 *.png
 *.log
 suite.done
+firefox/build/
+store/
+ice.json

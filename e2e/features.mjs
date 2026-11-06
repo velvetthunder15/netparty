@@ -1,3 +1,4 @@
+import { SERVER_DIR, SERVER_LOG } from "./config.mjs";
 // 1.6 features e2e (fake Netflix): avatars, emoji picker, 🎉 reactions (incl. fullscreen),
 // chat text size, links, GIFs (unavailable without a key; then a mock KLIPY via a second
 // local server; with CSP=strict the fake Netflix blocks KLIPY images so the blob: path is used).
@@ -11,8 +12,8 @@ const STRICT = process.env.CSP === "strict";
 const SITE = "https://www.netflix.com/watch/12345";
 const T = tap(8790, 8787);
 
-const H = await launch("/tmp/pw-fh", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url } });
-const G = await launch("/tmp/pw-fg", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url } });
+const H = await launch("pw-fh", { name: "Chirag", avatar: "🦊", extra: { serverUrl: T.url } });
+const G = await launch("pw-fg", { name: "Rahul", avatar: "🐼", extra: { serverUrl: T.url } });
 const hp = await H.ctx.newPage(), gp = await G.ctx.newPage();
 const errors = [];
 for (const [p, n] of [[hp, "host"], [gp, "guest"]]) {
@@ -179,7 +180,7 @@ await hp.keyboard.press("Escape");
 
 // ---- GIFs via a mock KLIPY (second local server with a key and KLIPY_BASE)
 const srv = spawn(process.execPath, ["server.js"], {
-  cwd: "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server",
+  cwd: SERVER_DIR,
   env: { ...process.env, PORT: "8789", KLIPY_KEY: "test-key", KLIPY_BASE: "http://127.0.0.1:8444" },
   stdio: "ignore",
 });
@@ -293,7 +294,7 @@ await hp.locator('.np-qreact .np-qbtn[data-emoji="😮"]').click();
 check("2.1 reaction on a message reaches the friend", !!(await until(() => shadow(gp, (r) => { return !!r.querySelector('.np-rchip[data-emoji="😮"]'); }))));
 
 // ---- invite links without (the right) key
-const X = await launch("/tmp/pw-fx", { name: "Eve Intruder", avatar: "🐸", extra: { serverUrl: T.url } });
+const X = await launch("pw-fx", { name: "Eve Intruder", avatar: "🐸", extra: { serverUrl: T.url } });
 const xp = await X.ctx.newPage();
 xp.on("pageerror", (e) => errors.push("x: " + e.message));
 const OTHER = KEY.slice(0, 40) + (KEY.slice(40) === "AAA" ? "BAA" : "AAA");
@@ -338,7 +339,7 @@ const secret = ["Chirag", "Rahul", "Eve Intruder", "🦊", "🐼", "🐸", "🍕
 check("no WebSocket frame contains names, pictures, messages, links, GIF URLs, reactions, SDP/ICE, title or the key", leaks(T.frames, secret).length === 0, JSON.stringify(leaks(T.frames, secret)));
 check("no cid ever sent to a browser", leaks(T.frames.filter((f) => f.dir === "down"), cids).length === 0);
 check("no plaintext fields in any frame", !T.frames.some((f) => /"(name|text|emoji|avatar|payload|byName|gif|re|mr|mid)":/.test(f.text)), T.frames.find((f) => /"(name|text|emoji|avatar|payload|byName|gif|re|mr|mid)":/.test(f.text))?.text.slice(0, 160));
-const srvLog = (await import("node:fs")).readFileSync("/tmp/np-server.log", "utf8");
+const srvLog = (await import("node:fs")).readFileSync(SERVER_LOG, "utf8");
 check("server log has none of it either", leaks([{ text: srvLog }], secret).length === 0, JSON.stringify(leaks([{ text: srvLog }], secret)));
 
 check("no script errors on the pages", errors.length === 0, errors.join(" | "));

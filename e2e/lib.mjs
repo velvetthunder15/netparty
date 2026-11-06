@@ -1,9 +1,10 @@
+import { EXT, browserOptions, tempPath } from "./config.mjs";
 // Shared helpers for the NetParty browser e2e suites (features.mjs, youtube.mjs).
-import { chromium } from "/workspace/work/pw/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import fs from "node:fs";
 import http from "node:http";
-import { WebSocket, WebSocketServer } from "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/server/node_modules/ws/wrapper.mjs";
-export const EXT = process.env.EXT_DIR || "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/extension";
+import { WebSocket, WebSocketServer } from "ws";
+export { EXT } from "./config.mjs";
 export const SERVER = process.env.SERVER || "ws://localhost:8787";
 export const out = (...a) => console.log(...a);
 let fails = 0, passes = 0;
@@ -17,9 +18,10 @@ export const summary = (label) => {
   return fails;
 };
 export async function launch(dir, { name, avatar, extra = {}, ctxOpts = {}, args = [], prompts = false, ext = EXT } = {}) {
+  dir = tempPath(dir);
   fs.rmSync(dir, { recursive: true, force: true });
   const ctx = await chromium.launchPersistentContext(dir, {
-    executablePath: "/usr/bin/chromium",
+    ...browserOptions(),
     headless: true,
     viewport: { width: 1280, height: 720 },
     ...ctxOpts,

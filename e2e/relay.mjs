@@ -1,7 +1,8 @@
-import { chromium } from "/workspace/work/pw/node_modules/playwright/index.mjs";
+import { browserOptions } from "./config.mjs";
+import { chromium } from "playwright";
 import fs from "node:fs";
-const ice = JSON.parse(fs.readFileSync("/tmp/ice.json", "utf8"));
-const b = await chromium.launch({ executablePath: "/usr/bin/chromium", args: ["--no-sandbox"] });
+const ice = JSON.parse(fs.readFileSync(process.env.ICE_FILE || "ice.json", "utf8"));
+const b = await chromium.launch({ ...browserOptions(), args: ["--no-sandbox"] });
 const p = await b.newPage();
 for (const only of [null, "turns:", "turn:"]) {
   const servers = only ? ice.map((s) => ({ ...s, urls: [].concat(s.urls).filter((u) => u.startsWith(only)) })).filter((s) => s.urls.length) : ice;
@@ -24,4 +25,4 @@ for (const only of [null, "turns:", "turn:"]) {
   }, servers);
   console.log(only || "all", JSON.stringify(r));
 }
-await b.close(); fs.rmSync("/tmp/ice.json");
+await b.close();

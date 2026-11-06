@@ -1,7 +1,7 @@
 // Popup flows in Firefox: Start a party from the popup (link copied), Join by pasting the invite link in the popup.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { launchFF, extPage, tapTLS } from "./fflib.mjs";
-import { until, check, summary, out, sleep, people, keyOf } from "/workspace/work/e2e/lib.mjs";
+import { until, check, summary, out, sleep, people, keyOf } from "../lib.mjs";
 const T = tapTLS(8792, 8787);
 const H = await launchFF("/tmp/ff-pop-h", { uuid: "aaaaaaaa-0000-4000-8000-000000000004" });
 const G = await launchFF("/tmp/ff-pop-g", { uuid: "aaaaaaaa-0000-4000-8000-000000000005" });

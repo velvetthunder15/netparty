@@ -1,3 +1,4 @@
+import { MEDIA_DIR } from "./config.mjs";
 // Local test pages for "Sync any video" (2.0), plain http on two ports (two origins):
 //   http://localhost:8450  the pages below
 //   http://localhost:8451  /inner: a player page used as a cross-origin iframe
@@ -12,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const DIR = process.env.MEDIA_DIR || "/workspace/work/e2e";
+const DIR = MEDIA_DIR;
 const media = {
   "/test.webm": fs.readFileSync(path.join(DIR, "test.webm")),
   "/test-short.webm": fs.readFileSync(path.join(DIR, "test-short.webm")),

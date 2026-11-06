@@ -1,3 +1,5 @@
+import { E2E, tempPath } from "../config.mjs";
+import path from "node:path";
 // "Sync any video" (2.0) in real Firefox ESR: two Firefox profiles with the Firefox build, the local
 // any-video test pages (../anysite.mjs: http://localhost:8450, second origin :8451) and the local server
 // behind the TLS recording proxy.
@@ -13,8 +15,8 @@
 // leak audit.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import fs from "node:fs";
-const SRC_BUILD = process.env.BUILD || "/workspace/work/ff/build";
-const TEST_BUILD = "/tmp/ff-any-build";
+const SRC_BUILD = process.env.BUILD || path.join(E2E, "firefox", "build");
+const TEST_BUILD = tempPath("ff-any-build");
 fs.rmSync(TEST_BUILD, { recursive: true, force: true });
 fs.cpSync(SRC_BUILD, TEST_BUILD, { recursive: true });
 const man = JSON.parse(fs.readFileSync(TEST_BUILD + "/manifest.json", "utf8"));
@@ -22,8 +24,8 @@ man.host_permissions.push("http://localhost/*"); // both test origins (:8450, :8
 fs.writeFileSync(TEST_BUILD + "/manifest.json", JSON.stringify(man, null, 2));
 process.env.BUILD = TEST_BUILD;
 const { launchFF, extPage, tapTLS } = await import("./fflib.mjs");
-const { shadow, until, people, check, summary, out, sleep, leaks, keyOf } = await import("/workspace/work/e2e/lib.mjs");
-const { start: startPages } = await import("/workspace/work/e2e/anysite.mjs");
+const { shadow, until, people, check, summary, out, sleep, leaks, keyOf } = await import("../lib.mjs");
+const { start: startPages } = await import("../anysite.mjs");
 
 const A = "http://localhost:8450";
 const stopPages = startPages();

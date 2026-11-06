@@ -1,8 +1,9 @@
+import { EXT, browserOptions, tempPath } from "./config.mjs";
 // Party lifecycle e2e: "Start a NetParty" button, next episode keeps the party,
 // leaving the title ends it (host) / leaves it (guest), nobody gets pulled back in.
-import { chromium } from "/workspace/work/pw/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import fs from "node:fs";
-const EXT = "/workspace/projects/1bdb1792-2c02-41f9-b663-90d4ea93a9ee/netparty/extension";
+
 const SERVER = process.env.SERVER || "ws://localhost:8787";
 const HOT = process.env.HOT === "1";
 const out = (...a) => console.log(...a);
@@ -12,9 +13,10 @@ const check = (name, cond, extra = "") => {
   if (!cond) fails++;
 };
 async function launch(dir) {
+  dir = tempPath(dir);
   fs.rmSync(dir, { recursive: true, force: true });
   const ctx = await chromium.launchPersistentContext(dir, {
-    executablePath: "/usr/bin/chromium",
+    ...browserOptions(),
     headless: true,
     viewport: { width: 1280, height: 720 },
     args: [
@@ -45,7 +47,7 @@ async function until(fn, ms = 10000) {
   return null;
 }
 
-const H = await launch("/tmp/pw-lh"), G = await launch("/tmp/pw-lg");
+const H = await launch("pw-lh"), G = await launch("pw-lg");
 for (const [x, name] of [[H, "Chirag"], [G, "Rahul"]])
   await x.sw.evaluate(([s, n]) => chrome.storage.sync.set({ serverUrl: s, name: n }), [SERVER, name]);
 const hp = await H.ctx.newPage();

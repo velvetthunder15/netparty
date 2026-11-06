@@ -1,7 +1,7 @@
 // Mixed party: Firefox (AMO build) hosts, Chromium (Chrome build from extension/) joins via the invite link.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { launchFF, extPage, tapTLS } from "./fflib.mjs";
-import { launch, shadow, until, people, check, summary, out, sleep, keyOf, leaks } from "/workspace/work/e2e/lib.mjs";
+import { launch, shadow, until, people, check, summary, out, sleep, keyOf, leaks } from "../lib.mjs";
 const T = tapTLS(8792, 8787);
 const H = await launchFF("/tmp/ff-cross", { uuid: "aaaaaaaa-0000-4000-8000-000000000006" });
 const he = await extPage(H);

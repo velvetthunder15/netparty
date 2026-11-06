@@ -1,6 +1,6 @@
 // Prod check: GIF search + KLIPY media from the Firefox add-on (real moz-extension:// origin) against netparty.tech.
 import { launchFF, extPage, startProxy } from "./fflib.mjs";
-import { check, summary, out } from "/workspace/work/e2e/lib.mjs";
+import { check, summary, out } from "../lib.mjs";
 import net from "node:net";
 // let the test proxy also tunnel netparty.tech and KLIPY's media hosts to the real internet
 const p = startProxy();

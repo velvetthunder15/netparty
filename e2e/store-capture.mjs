@@ -1,10 +1,13 @@
+import path from "node:path";
+import { E2E } from "./config.mjs";
 // Store screenshots: real NetParty UI on the fake Netflix player, dressed with our own stills.
 import fs from "node:fs";
 import { launch, shadow, until, people, sleep } from "./lib.mjs";
-const OUT = "/workspace/work/store/raw";
+const STORE = process.env.STORE_DIR || path.join(E2E, "store");
+const OUT = path.join(STORE, "raw");
 fs.mkdirSync(OUT, { recursive: true });
 const SITE = "https://www.netflix.com/watch/12345";
-const still = (n) => "data:image/jpeg;base64," + fs.readFileSync(`/workspace/work/store/still-${n}.b64`, "utf8");
+const still = (n) => "data:image/jpeg;base64," + fs.readFileSync(path.join(STORE, `still-${n}.b64`), "utf8");
 const dress = async (p, img, t = "1:12:48", pct = 54) => {
   await p.evaluate(([img, t, pct]) => {
     const pv = document.querySelector(".watch-video--player-view");
