@@ -17,6 +17,7 @@ import svgYoutube from "./site/youtube.svg";
 import svgPrime from "./site/primevideo.svg";
 import svgHbo from "./site/hbo.svg";
 import svgCrunchyroll from "./site/crunchyroll.svg";
+import imgSonyliv from "./site/sonyliv.webp";
 import avFox from "./site/av-fox.webp";
 import avPanda from "./site/av-panda.webp";
 import avRobot from "./site/av-robot.webp";
@@ -88,6 +89,7 @@ function withSeo(html) {
     .replace('<img src="primevideo.svg" width="27" height="22" alt=""', '<img src="primevideo.svg" width="27" height="22" alt="Prime Video"')
     .replace('<img src="hbo.svg" width="22" height="22" alt=""', '<img src="hbo.svg" width="22" height="22" alt="HBO Max"')
     .replace('<img src="crunchyroll.svg" width="22" height="22" alt=""', '<img src="crunchyroll.svg" width="22" height="22" alt="Crunchyroll"')
+    .replace('<img src="sonyliv.webp" width="22" height="22" alt=""', '<img src="sonyliv.webp" width="22" height="22" alt="SonyLIV"')
     .replace('<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt=""', '<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
@@ -131,6 +133,7 @@ const SITE = {
   "/youtube.svg": [svgYoutube, "image/svg+xml"],
   "/primevideo.svg": [svgPrime, "image/svg+xml"],
   "/hbo.svg": [svgHbo, "image/svg+xml"],
+  "/sonyliv.webp": [imgSonyliv, "image/webp"],
   "/crunchyroll.svg": [svgCrunchyroll, "image/svg+xml"],
   "/av-fox.webp": [avFox, "image/webp"],
   "/av-panda.webp": [avPanda, "image/webp"],
