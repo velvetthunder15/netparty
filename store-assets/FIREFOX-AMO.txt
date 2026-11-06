@@ -1,10 +1,10 @@
 NetParty: Firefox Add-ons (addons.mozilla.org) submission sheet
-Version 1.7.1. Each section below matches a field on the AMO submit form, ready to paste.
+Version 2.2.0. Each section below matches a field on the AMO submit form, ready to paste.
 
 ======================================================================
 0. BEFORE YOU START
 ======================================================================
-- Upload this file:  netparty-firefox-1.7.1.zip  (project root, next to the Chrome store zip)
+- Upload this file:  netparty-firefox-2.2.0.zip  (project root, next to the Chrome store zip)
   Build it again with:  node netparty/scripts/build-firefox.mjs
   It is the extension/ folder unchanged except manifest.json: background "scripts" (event page)
   instead of "service_worker", no minimum_chrome_version, and browser_specific_settings.gecko
@@ -41,9 +41,9 @@ netparty
 Fallback if it's taken: netparty-watch-together
 
 ======================================================================
-4. SUMMARY  (250 character max; this one is 190)
+4. SUMMARY  (250 character max; this one is 207)
 ======================================================================
-Watch Netflix, JioHotstar and YouTube in sync with friends, with end-to-end encrypted chat, emoji reactions, GIFs and peer-to-peer voice chat beside the video. Free, open source, no account.
+Watch Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and other video sites in sync with friends, with end-to-end encrypted chat, voice and video chat. Free, open source, no account.
 
 ======================================================================
 5. DESCRIPTION
@@ -51,33 +51,41 @@ Watch Netflix, JioHotstar and YouTube in sync with friends, with end-to-end encr
 NetParty keeps everyone in a party on the same moment of the same video. When anyone plays, pauses or skips, everyone follows. Chat sits beside the player instead of on top of it.
 
 Works on:
-• Netflix (netflix.com/watch/…)
-• JioHotstar (movies, shows and episodes)
+• Netflix
+• Prime Video (primevideo.com and Amazon's Prime Video pages)
 • YouTube (regular videos. Shorts and live streams aren't supported)
+• HBO Max
+• Crunchyroll
+• SonyLIV
+• JioHotstar
+• Videos on most other sites: open the video and press "Sync this tab" in the NetParty popup
 
 How it works
 1. Open a title and press play.
-2. Click the NetParty button in the toolbar and choose "Start a party", or use the "Start a NetParty" button on the page. The invite link is copied for you.
+2. Click the NetParty button in the toolbar and choose "Start a party", or use the "Start a NetParty" button on the page (Netflix, JioHotstar, YouTube, Prime Video). The invite link is copied for you.
 3. Send the link to your friends. It opens a page that takes them to the same title, already in sync.
 
 Features
 • Playback sync: play, pause, seek and episode changes follow the party
+• Stays in sync when someone buffers: the party waits for a friend whose video is loading, then plays on together
+• Pauses when someone drops out, and plays on when they're back
 • End-to-end encrypted chat: messages, reactions, names and profile pictures are encrypted in your browser. The key only exists in the invite link (after the #), so the server can't read your chat
 • Chat docked beside the video: the player shrinks to make room, and you can hide the panel any time. Typing in chat never sets off the site's keyboard shortcuts
-• Emoji reactions that float up over everyone's video, also in fullscreen
-• GIFs from KLIPY, with search suggestions based on what you're watching
-• Voice chat, straight between friends' browsers (peer to peer), with mute and volume controls
-• Emoji profile pictures, an emoji picker and clickable links
+• Replies, reactions on messages, @mentions, spoilers, editing and deleting your messages, and a pinned message
+• Emoji reactions that float up over everyone's video, also in fullscreen, and GIFs from KLIPY
+• Voice and video chat between friends, with a relay for networks that block direct connections. The video gets quieter while friends talk
+• HD profile pictures, emoji, or your own photo (only people in your party see it)
 • Host controls: let only the host control playback
+• Light and dark themes
 • No account and no sign-up. No ads, no analytics, no tracking
 
 Good to know
-• Everyone in the party needs NetParty, and for Netflix and JioHotstar, their own subscription to that service. NetParty doesn't share or stream video, it only keeps each person's own player in sync.
+• Everyone in the party needs NetParty, and for the streaming services, their own subscription to that service. NetParty doesn't share or stream video, it only keeps each person's own player in sync.
 • Voice and video chat connect browsers directly, and fall back to an encrypted relay (Cloudflare TURN) on restrictive networks such as mobile data or college Wi-Fi.
 • Anyone with the full invite link can join the party and read its chat, so share it only with people you want there.
 
 Free and open source (MIT): https://github.com/velvetthunder15/netparty
-NetParty isn't affiliated with or endorsed by Netflix, JioHotstar or YouTube.
+NetParty isn't affiliated with or endorsed by Netflix, Amazon, YouTube, HBO Max, Crunchyroll, SonyLIV or JioHotstar.
 
 ======================================================================
 6. CATEGORIES  (AMO's real category names, from addons.mozilla.org/api/v5/addons/categories/)
@@ -115,46 +123,66 @@ MIT License  (choose "MIT/X11 License" in AMO's list. The repo has a LICENSE fil
 10. PRIVACY POLICY
 ======================================================================
 Tick "This add-on has a privacy policy" and paste the text below. It matches
-https://netparty.tech/privacy (last updated 27 October 2026), as plain text.
+https://netparty.tech/privacy (last updated 6 November 2026), as plain text.
 
 ----- paste from here -----
 NetParty Privacy Policy
-Last updated 27 October 2026 (end-to-end encrypted chat)
 
-NetParty is a free browser extension that lets friends watch a video together in sync, with text and voice chat, GIFs and emoji reactions. It works on Netflix, JioHotstar and YouTube. It is run by Chirag Rasane. This policy explains what the extension and its sync server handle, and why.
+Last updated 6 November 2026 (2.2: HBO Max, Crunchyroll and SonyLIV; mentions, spoilers, edits, pins, typing and loading notices; profile photos)
+
+NetParty is a free browser extension that lets friends watch a video together in sync, with text, voice and video chat, GIFs and emoji reactions. It works on Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll and SonyLIV, and on other video sites you choose. It is run by Chirag Rasane. This policy explains what the extension and its sync server handle, and why.
 
 No accounts, no tracking
+
 NetParty has no sign-up and no accounts. It has no analytics, advertising or tracking code, and we never sell or share your data.
 
 End-to-end encryption
-Party chat is end-to-end encrypted. When a party starts, the host's browser creates a random 256-bit key. The key is part of the invite link, after the # (browsers never send that part of a link to any server), and is kept only in the browsers of the people in the party, for that tab, until they leave. Chat messages, GIFs, reactions, display names and profile pictures, and the setup messages for voice calls, are encrypted with this key (AES-256-GCM) before they leave your browser. Our sync server only ever receives, relays and stores the encrypted form, and cannot read it. Anyone who has the full invite link can join the party and read its chat, so share the link only with people you want there.
 
-The sync server can still see what it needs to run the party: the party code, a random member ID for each person, when messages are sent and roughly how large they are (sizes are rounded up), playback state (play, pause, position, and the ID of the video being watched, which the invite page also uses), how many people are in the party, and connection data such as IP addresses.
+Party chat is end-to-end encrypted. When a party starts, the host's browser creates a random 256-bit key. The key is part of the invite link, after the # (browsers never send that part of a link to any server), and is kept only in the browsers of the people in the party, for that tab, until they leave. Chat messages (including mentions, spoilers, edits and deletes), GIFs, reactions, the pinned message, typing indicators, "my video is loading" notices, display names and profile pictures, the setup messages for voice calls, and the page address of a video on another site, are encrypted with this key (AES-256-GCM) before they leave your browser. Our sync server only ever receives, relays and stores the encrypted form, and cannot read it. Anyone who has the full invite link can join the party and read its chat, so share the link only with people you want there.
+
+The sync server can still see what it needs to run the party: the party code, a random member ID for each person, when messages are sent and roughly how large they are (sizes are rounded up), playback state (play, pause, position, and the ID of the video being watched, which the invite page also uses), how many people are in the party, whose connection has dropped (so the party can pause for them), and connection data such as IP addresses.
 
 What the extension handles
-- Display name and picture. The name you choose and your profile picture (an emoji you pick, such as 🐼 or 🍕), shown to others in your party. Both are stored in your browser and sent to the people in your party end-to-end encrypted; the sync server only passes on the encrypted form.
-- Chat messages. What you type or send in the party chat (text, emoji, links and GIFs), end-to-end encrypted and relayed by the sync server to everyone in that party.
-- Reactions. When you tap a reaction, that emoji is end-to-end encrypted and relayed to the people in your party so it floats over their video. Reactions are not stored.
-- GIF searches. When you open the GIF picker, your search terms (suggested from the title you're watching) are sent to our server, which asks KLIPY for matching GIFs. Searches can't be end-to-end encrypted, because KLIPY has to read them to find GIFs. KLIPY receives the search terms from our server, not your name or party, and our server doesn't log them. Results are cached on our server's edge for about 10 minutes, without recording who searched. The GIF images themselves load from KLIPY's servers, so KLIPY can see your IP address as any website would, under its own privacy policy. A GIF you send is shared in the (encrypted) party chat as a link to KLIPY's image.
-- Party and playback state. The party code, the ID of what's playing (a Netflix, JioHotstar or YouTube video ID), and play, pause and seek events with timestamps, so everyone stays in sync. These are not encrypted: the server needs them to keep everyone in sync and to send invited friends to the right title.
-- Voice chat. Voice runs peer to peer between party members over WebRTC, which encrypts the audio. The server only passes on the connection setup messages that let browsers find each other, and those are end-to-end encrypted too, so the server can't read the network addresses inside them. Your audio is not sent to or recorded by our server. Microphone access is requested only when you turn voice on.
-- Local settings. Your name, picture, chat text size, chosen reactions and server setting are kept in your browser's extension storage (which your browser may sync to your own account if you use browser sync); recently used emoji and party state stay on your device. A party's encryption key is kept only in your browser's memory for that tab, never written to disk or synced, and is deleted when the party ends or you leave it, and at the latest when you close the tab or the browser.
 
-NetParty does not read your streaming account details, passwords, payment information or viewing history. It runs only on the supported sites: Netflix, JioHotstar and YouTube.
+- Display name and picture. The name you choose and your profile picture, shown to others in your party: an emoji you pick (such as 🐼 or 🍕), one of the pictures that come with the extension, or a photo you upload. Both are stored in your browser and sent to the people in your party end-to-end encrypted; the sync server only passes on the encrypted form.
+
+- Profile photo (optional). If you upload a photo, your browser crops it and shrinks it to a small 96 x 96 picture on your device; the original file is never uploaded anywhere. The small picture is kept in this browser only (it is not synced) and is sent inside your end-to-end encrypted profile, so only the people in your party can see it. The sync server stores it only in that encrypted form, with the rest of the party's encrypted data, and deletes it with the party. Remove photo deletes it from your browser and stops sending it.
+
+- Chat messages. What you type or send in the party chat (text, emoji, links and GIFs), end-to-end encrypted and relayed by the sync server to everyone in that party. This includes replies (a reply carries a short quote of the message it answers: the sender's name and up to 80 characters, or "GIF") and reactions on chat messages (the emoji and which message it's on). Both are part of the encrypted chat and are stored, encrypted, in the party's chat history like any message. The same goes for @mentions (which party member a mention names), spoilers (the hidden text travels encrypted with the message and is blurred on screen until each person taps it) and edits and deletes of your own messages (an edit or delete is a new encrypted line in the history; people using NetParty older than 2.2 keep seeing the original message).
+
+- Pinned message. When a message is pinned, a short encrypted copy (who wrote it and up to 80 characters, or "Spoiler" or "GIF") is kept with the party so people who join later see it. The server stores only the encrypted form, and replaces or removes it when someone pins another message or unpins it.
+
+- Typing and loading notices. While you type in the chat, and while your video is stuck loading in a party, short end-to-end encrypted notices are relayed to the people in your party so they see "is typing" or "Waiting for you to load". These notices are not stored.
+
+- Reactions over the video. When you tap a reaction in the 🎉 tray, that emoji is end-to-end encrypted and relayed to the people in your party so it floats over their video. These floating reactions are not stored.
+
+- GIF searches. When you open the GIF picker, your search terms (suggested from the title you're watching) are sent to our server, which asks KLIPY for matching GIFs. Searches can't be end-to-end encrypted, because KLIPY has to read them to find GIFs. KLIPY receives the search terms from our server, not your name or party, and our server doesn't log them. Results are cached on our server's edge for about 10 minutes, without recording who searched. The GIF images themselves load from KLIPY's servers, so KLIPY can see your IP address as any website would, under its own privacy policy. A GIF you send is shared in the (encrypted) party chat as a link to KLIPY's image.
+
+- Page address (videos on other sites). When you sync a video on a site other than the supported streaming services, the address of the page you're on and the video's length are shared with the people in your party, so they can open the same page and check it's the same video. The address is end-to-end encrypted with the party's key. Our server only relays and stores the encrypted form and can't read it; for these parties the server sees a random video ID instead of a title ID. The invite page decrypts the address in your friend's browser and only links to ordinary http or https pages.
+
+- Party and playback state. The party code, the ID of what's playing (a Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll or SonyLIV title ID, or a random ID for a video on another site), and play, pause, seek and playback speed events with timestamps, so everyone stays in sync. These are not encrypted: the server needs them to keep everyone in sync and to send invited friends to the right title.
+
+- Voice and video chat. Voice and video run peer to peer between party members over WebRTC, which encrypts the audio and video (DTLS-SRTP). When two networks can't connect directly, the call goes through a relay (TURN) server run by Cloudflare. The relay only forwards the encrypted audio and video and can't play it; like any network service it sees the IP addresses of the two ends. Our server hands out short-lived relay credentials and only passes on the connection setup messages that let browsers find each other, and those are end-to-end encrypted too, so the server can't read the network addresses inside them. Your audio and video are not sent to or recorded by our server. While you're in voice chat, NetParty can lower the volume of the video you're watching while a friend speaks (it only listens to whether someone is speaking, which voice chat already shows); this happens in your browser and nothing about it is sent anywhere. Microphone access is requested only when you turn voice on. The camera is used only when you turn it on, and stops when you turn it off or leave voice.
+
+- Local settings. Your name, picture (not an uploaded photo, which stays in this browser only), theme, chat text size, chosen reactions, party and voice settings and server setting are kept in your browser's extension storage (which your browser may sync to your own account if you use browser sync); recently used emoji and party state stay on your device. A party's encryption key is kept only in your browser's memory for that tab, never written to disk or synced, and is deleted when the party ends or you leave it, and at the latest when you close the tab or the browser.
+
+NetParty does not read your streaming account details, passwords, payment information or viewing history. It runs on the supported sites: Netflix, JioHotstar, YouTube, Prime Video (primevideo.com and Amazon's Prime Video pages), HBO Max, Crunchyroll (including its video player frame on static.crunchyroll.com) and SonyLIV. On any other site it runs only on a tab where you click Sync this tab or Join party on this tab, and only on the sites you choose for Always allow on this site (you can turn that off in the popup or your browser's settings). If the video plays inside a player from another site, NetParty asks your browser for access to that player's site first. On those pages it only looks for the video element and reads its play state, position, speed and length.
 
 How long we keep it
-While a party is active, the sync server keeps its encrypted data so people who reload can rejoin: the members' encrypted names and pictures and the party's last 150 chat lines (encrypted messages, and notes of who joined or left). It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours (our hosting provider's point-in-time recovery can keep encrypted copies of the storage for up to 30 days; nobody can read them without the party's key). Basic request logs kept by our hosting provider follow its standard retention; they never contain chat content.
+
+While a party is active, the sync server keeps its encrypted data so people who reload can rejoin: the members' encrypted names and pictures and the party's last 150 chat lines (encrypted messages, including replies, reactions, edits and deletes, and notes of who joined or left) and the encrypted pinned message. It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours (our hosting provider's point-in-time recovery can keep encrypted copies of the storage for up to 30 days; nobody can read them without the party's key). Basic request logs kept by our hosting provider follow its standard retention; they never contain chat content.
 
 Where it's processed
+
 The sync server runs on Cloudflare Workers. Cloudflare processes connection data, such as IP addresses, to deliver the service under its own privacy policy.
 
 Children
+
 NetParty is not directed at children under 13, and we don't knowingly collect information from them.
 
 Changes and contact
-If this policy changes, we'll update the date above. Questions or deletion requests: support@netparty.tech.
 
-NetParty is not affiliated with or endorsed by any streaming service.
+If this policy changes, we'll update the date above. Questions or deletion requests: support@netparty.tech.
 ----- paste to here -----
 
 ======================================================================
@@ -164,15 +192,16 @@ The manifest declares these as REQUIRED (the extension can't work without them),
 them in the install prompt and the user agrees by installing:
 
   personalCommunications  "Personal communications"
-     Party chat messages, GIFs sent in chat, reactions, display names and emoji profile pictures,
-     and voice-call setup messages. All are end-to-end encrypted in the browser (AES-256-GCM) and
+     Party chat messages, GIFs sent in chat, reactions, display names and profile pictures (an emoji,
+     a bundled HD picture, or a small photo the user uploads), and voice/video-call setup messages. All are end-to-end encrypted in the browser (AES-256-GCM) and
      relayed by the NetParty server (netparty.tech), which can't read them. Voice audio goes
      directly between the friends' browsers (WebRTC) and never reaches the server.
   websiteActivity         "Website activity"
      Play, pause and seek actions and the playback position on the streaming site, sent to the
      server so everyone's player follows.
   browsingActivity        "Browsing activity"
-     The ID of the title being watched (Netflix, JioHotstar or YouTube video ID), so the server can
+     The ID of the title being watched (Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll or
+     SonyLIV ID; for a video on another site the user chose to sync, its page address, end-to-end encrypted), so the server can
      keep the party on the same title and the invite page can send friends to it.
   websiteContent          "Website content"
      The title's name, read from the page, which is used as the GIF search (sent to the NetParty

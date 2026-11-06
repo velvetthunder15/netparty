@@ -20,7 +20,8 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   if (!serverUrl || (reason === "update" && OLD.includes(serverUrl))) patch.serverUrl = DEFAULT_SERVER;
   if (!name) patch.name = "Guest " + Math.floor(100 + Math.random() * 900);
   // a random profile picture to start with (changeable in the popup or the chat panel)
-  const pics = globalThis.NP_EMOJI?.avatars || [];
+  // (2.2: one of the bundled HD pictures, "av:<slug>")
+  const pics = (globalThis.NP_EMOJI?.hd || []).map((x) => "av:" + x.id);
   if (!avatar && pics.length) patch.avatar = pics[Math.floor(Math.random() * pics.length)];
   if (Object.keys(patch).length) await chrome.storage.sync.set(patch);
 });
@@ -102,6 +103,22 @@ async function gifMedia(url) {
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return { dataUrl: `data:${type.split(";")[0]};base64,${btoa(bin)}` };
+}
+// 2.2 HD profile pictures: the bundled avatars/av-<slug>.webp as a data: URL, so the content script
+// can draw it without the files being web-accessible (no page can probe for them) and whatever the
+// page's CSP allows (blob:, data: or a canvas). Only slugs from the bundled list.
+const avatarCache = new Map();
+async function avatarFile(id) {
+  if (typeof id !== "string" || !(globalThis.NP_EMOJI?.hd || []).some((x) => x.id === id)) return { error: "unknown" };
+  if (!avatarCache.has(id)) {
+    const res = await fetch(chrome.runtime.getURL("avatars/av-" + id + ".webp"));
+    if (!res.ok) return { error: "missing" };
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    avatarCache.set(id, "data:image/webp;base64," + btoa(bin));
+  }
+  return { dataUrl: avatarCache.get(id) };
 }
 // ---- room keys (end-to-end encryption). Each tab's party key is kept in chrome.storage.session:
 // in memory only (never written to disk, never synced to Google, gone when the browser closes),
@@ -250,14 +267,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     try {
       origin = new URL(sender.url).origin;
     } catch {}
-    relayToFrame(sender.tab.id, 0, { cmd: "npFrameEvt", frameId: sender.frameId, origin, op: msg.op, kind: msg.kind, rate: msg.rate, w: msg.w, h: msg.h });
+    relayToFrame(sender.tab.id, 0, { cmd: "npFrameEvt", frameId: sender.frameId, origin, op: msg.op, kind: msg.kind, rate: msg.rate, w: msg.w, h: msg.h, again: msg.again === true });
     return;
   }
   if (msg?.cmd === "npAgent") {
     // the tab's main script -> one of its frames' agents
     if (!sender.tab || sender.frameId !== 0 || !Number.isInteger(msg.frameId) || msg.frameId === 0) return sendResponse(null);
-    const { cmd, op, position, rate, nudge, on } = msg;
-    relayToFrame(sender.tab.id, msg.frameId, { cmd, op, position, rate, nudge, on }).then(sendResponse);
+    const { cmd, op, position, rate, nudge, on, vol } = msg;
+    relayToFrame(sender.tab.id, msg.frameId, { cmd, op, position, rate, nudge, on, vol }).then(sendResponse);
     return true;
   }
   if (msg?.cmd === "anyAllow" || msg?.cmd === "anyForget") {
@@ -278,6 +295,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.cmd === "gifMedia") {
     gifMedia(msg.url).then(sendResponse, () => sendResponse({ error: "fetch failed" }));
+    return true;
+  }
+  if (msg?.cmd === "avatarFile") {
+    avatarFile(msg.id).then(sendResponse, () => sendResponse({ error: "fetch failed" }));
     return true;
   }
 });

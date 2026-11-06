@@ -10,7 +10,8 @@ function supportedSite(url) {
     return false;
   }
   if (u.protocol !== "https:") return false;
-  if (/^www\.(netflix|hotstar|jiohotstar|youtube|primevideo)\.com$/.test(u.hostname)) return true;
+  if (/^www\.(netflix|hotstar|jiohotstar|youtube|primevideo|crunchyroll|sonyliv)\.com$/.test(u.hostname)) return true;
+  if (u.hostname === "play.hbomax.com" || u.hostname === "play.max.com") return true; // 2.2: HBO Max
   return PRIME_TLDS.some((t) => u.hostname === "www.amazon." + t) && /^\/(gp\/video|Amazon-Video)\//.test(u.pathname);
 }
 // "Sync any video" (2.0): any other http(s) page can be synced after a click. A few pages never allow
@@ -127,6 +128,8 @@ async function refresh() {
         ? `Open a video on YouTube, or use the "Start a NetParty" button under it.`
         : st.site === "Prime Video"
           ? `Open a title's page on Prime Video and press play, or use the "Start a NetParty" button next to Play.`
+          : ["HBO Max", "Crunchyroll", "SonyLIV"].includes(st.site)
+            ? `Open an episode or movie on ${st.site} and press play, then start the party here.`
           : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
   }
 }
@@ -362,21 +365,60 @@ const emojiBtn = (e, cls, onclick, label) => {
   b.onclick = onclick;
   return b;
 };
+// 2.2: an HD picture ("av:<slug>", bundled file), an emoji, or your own photo (chrome.storage.local,
+// uploaded from the chat panel's "Your profile"); picking from the grid replaces the photo
+const HDS = E.hd || [];
+let photo = null;
+const picImg = (src) => {
+  const i = document.createElement("img");
+  i.src = src;
+  i.alt = "";
+  i.draggable = false;
+  return i;
+};
+const hdOf = (a) => (typeof a === "string" && a.startsWith("av:") ? HDS.find((x) => "av:" + x.id === a) : null);
 function showAvatar(a) {
-  $("avatarBtn").textContent = a || "🙂";
-  for (const b of $("avatarGrid").children) b.setAttribute("aria-selected", String(b.textContent === a));
+  const btn = $("avatarBtn"), hd = hdOf(a);
+  const okPhoto = typeof photo === "string" && /^data:image\/(webp|jpeg|png);base64,/.test(photo) ? photo : null;
+  btn.classList.toggle("has-photo", !!okPhoto);
+  btn.classList.toggle("has-hd", !okPhoto && !!hd);
+  if (okPhoto) btn.replaceChildren(picImg(okPhoto));
+  else if (hd) btn.replaceChildren(picImg("avatars/av-" + hd.id + ".webp"));
+  else btn.textContent = a || "🙂";
+  for (const b of $("avatarGrid").querySelectorAll("[data-avatar]")) b.setAttribute("aria-selected", String(!okPhoto && b.dataset.avatar === a));
 }
+async function pick(a) {
+  await chrome.storage.sync.set({ avatar: a }); // an open party picks this up straight away
+  if (photo) {
+    photo = null;
+    await chrome.storage.local.remove("avatarPhoto");
+  }
+  showAvatar(a);
+  $("avatarGrid").classList.add("hidden");
+  $("avatarBtn").setAttribute("aria-expanded", "false");
+}
+const subLabel = (t) => {
+  const d = document.createElement("div");
+  d.className = "avatar-sub";
+  d.textContent = t;
+  return d;
+};
 $("avatarGrid").append(
-  ...E.avatars.map((a) =>
-    emojiBtn(a, "avatar-opt", async () => {
-      await chrome.storage.sync.set({ avatar: a }); // an open party picks this up straight away
-      showAvatar(a);
-      $("avatarGrid").classList.add("hidden");
-      $("avatarBtn").setAttribute("aria-expanded", "false");
-    }, "Use " + a),
-  ),
+  ...HDS.map((x) => {
+    const b = emojiBtn("", "avatar-opt hd", () => pick("av:" + x.id), "Use " + x.label);
+    b.title = x.label;
+    b.dataset.avatar = "av:" + x.id;
+    b.replaceChildren(picImg("avatars/av-" + x.id + ".webp"));
+    return b;
+  }),
+  subLabel("Emoji"),
+  ...E.avatars.map((a) => {
+    const b = emojiBtn(a, "avatar-opt", () => pick(a), "Use " + a);
+    b.dataset.avatar = a;
+    return b;
+  }),
 );
-for (const b of $("avatarGrid").children) b.setAttribute("role", "option");
+for (const b of $("avatarGrid").querySelectorAll("[data-avatar]")) b.setAttribute("role", "option");
 $("avatarBtn").onclick = () => {
   const hidden = $("avatarGrid").classList.toggle("hidden");
   $("avatarBtn").setAttribute("aria-expanded", String(!hidden));
@@ -404,6 +446,16 @@ for (const b of document.querySelectorAll("[data-font]"))
     await chrome.storage.sync.set({ chatFont: b.dataset.font });
     showFont(b.dataset.font);
   };
+// 2.2 party and voice settings: on unless switched off (storage.sync { syncWait, dropPause, autoDuck: false })
+const PREFS = ["syncWait", "dropPause", "autoDuck"];
+for (const box of document.querySelectorAll("[data-pref]"))
+  box.onchange = async () => {
+    if (box.checked) await chrome.storage.sync.remove(box.dataset.pref);
+    else await chrome.storage.sync.set({ [box.dataset.pref]: false });
+  };
+function showPrefs(p) {
+  for (const box of document.querySelectorAll("[data-pref]")) box.checked = p[box.dataset.pref] !== false;
+}
 let slots = E.reactions.slice();
 let editing = -1;
 function showSlots() {
@@ -441,6 +493,7 @@ $("slotReset").onclick = async () => {
 
 (async () => {
   const { name, serverUrl, avatar, chatFont, reactions, theme } = await chrome.storage.sync.get(["name", "serverUrl", "avatar", "chatFont", "reactions", "theme"]);
+  photo = (await chrome.storage.local.get("avatarPhoto")).avatarPhoto || null;
   showTheme(theme);
   $("name").value = name && !/^Guest \d+$/.test(name) ? name : "";
   $("server").value = serverUrl || DEFAULT_SERVER;
@@ -448,5 +501,6 @@ $("slotReset").onclick = async () => {
   showFont(chatFont);
   if (Array.isArray(reactions) && reactions.length === 5) slots = reactions.slice();
   showSlots();
+  showPrefs(await chrome.storage.sync.get(PREFS));
   refresh();
 })();

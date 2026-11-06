@@ -1,0 +1,12 @@
+NetParty 2.2.0
+
+- Now on HBO Max, Crunchyroll and SonyLIV (start a party from the NetParty icon on an episode or movie).
+- Waits for everyone: if a friend's video is still loading, the party pauses and plays on together once it's ready.
+- If someone drops out while you're watching, the party pauses until they're back (or press Resume).
+- See who's typing, @mention friends, and hide spoilers with ||double bars|| or the Spoiler switch.
+- Edit or delete your messages, and pin one message for the whole party.
+- In voice chat the video gets quieter while friends talk, then goes back to your volume.
+- New Settings in the chat panel and the popup to switch these off.
+- 48 new HD profile pictures, or upload your own photo (only people in your party see it).
+- Voice and video stay connected through the relay in long parties and after a reconnect.
+- Everything stays end-to-end encrypted, like the rest of the chat.

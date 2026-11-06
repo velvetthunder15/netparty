@@ -270,6 +270,18 @@
     for (const t of EVENTS) v.addEventListener(t, onEvt);
     send({ op: "hello", w: innerWidth, h: innerHeight });
   }
+  // 2.2: say hello again now and then, so a main script that loaded after this frame (Crunchyroll's player
+  // frame comes up before the page's NetParty script) still finds us. Marked "again": nothing re-syncs.
+  setInterval(() => video && video.isConnected && send({ op: "hello", again: true, w: innerWidth, h: innerHeight }), 3000);
+  // 2.2: an ad on screen in this frame (Crunchyroll's player). Built from public page structure, checked
+  // against test pages only.
+  const AD_SEL = '[data-testid*="ad-indicator" i], [class*="ad-indicator" i], [title="Advertisement"]';
+  const adShown = () =>
+    [...document.querySelectorAll(AD_SEL)].some((n) => {
+      const r = n.getBoundingClientRect();
+      const cs = getComputedStyle(n);
+      return r.width > 0 && r.height > 0 && cs.display !== "none" && cs.visibility !== "hidden" && (!!n.textContent.trim() || n.localName === "video");
+    });
   function find() {
     if (video && video.isConnected) return;
     const { list } = candidates();
@@ -297,6 +309,8 @@
             // messages are JSON: a live stream's Infinity would arrive as null
             duration: v.duration === Infinity ? -1 : Math.round((v.duration || 0) * 1000),
             live: v.duration === Infinity,
+            ready: v.readyState >= 3,
+            ad: adShown(),
             rate: v.playbackRate,
             w: innerWidth,
             h: innerHeight,
@@ -316,6 +330,10 @@
             v.playbackRate = msg.rate;
           }
           return { ok: true };
+        case "vol":
+          // 2.2 auto-duck: read, or set (0..1), this video's volume
+          if (Number.isFinite(msg.vol) && msg.vol >= 0 && msg.vol <= 1) v.volume = msg.vol;
+          return { vol: v.volume };
         case "theater":
           theater = !!msg.on;
           if (theater) theaterOn(v, { width: "100vw", height: "100vh" });

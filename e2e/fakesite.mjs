@@ -5,6 +5,7 @@ import { MEDIA_DIR } from "./config.mjs";
 // A tiny single-page app: browse/detail pages with a Play button, and watch pages
 // with a player, switched with history.pushState like the real sites.
 //   CSP=strict  -> the fake Netflix sends img-src 'self' blob: (KLIPY images blocked directly)
+//   cookie or query npimg=none / npimg=data -> that browser's (page's) fake Netflix sends img-src 'self' / img-src 'self' data:
 //   CSP=script  -> also script-src 'self' 'unsafe-inline' on Netflix/JioHotstar (extension <script src> injection)
 import https from "node:https";
 import http from "node:http";
@@ -21,7 +22,7 @@ const isWatch = () => HOT ? /\\/\\d{5,}\\/watch\\/?$/.test(location.pathname) : 
 const player = () => {
   const shell = HOT ? "hs-player-shell" : "watch-video", inner = HOT ? "hs-player-inner" : "watch-video--player-view";
   return '<div class="' + shell + '" style="position:fixed;inset:0;background:#000"><div class="' + inner + '" style="position:absolute;top:0;left:0;width:100%;height:100%">' +
-    '<video id="v" src="/test.webm" muted autoplay style="position:absolute;top:0;left:0"></video>' +
+    '<video id="v" src="' + (localStorage.fakeGate ? "/gate.webm?g=" + encodeURIComponent(localStorage.fakeGate) + "&r=" + Math.random() : "/test.webm") + '" muted autoplay style="position:absolute;top:0;left:0"></video>' +
     (HOT ? '' : '<div data-uia="video-title" style="position:absolute;top:16px;left:20px"><h4 style="margin:0">Fake Movie</h4><span>E1</span></div>') +
     '<div class="controls" style="position:absolute;left:0;right:0;bottom:0;height:64px;display:flex;justify-content:space-between;align-items:center;padding:0 20px;background:linear-gradient(transparent,#000a)">' +
     '<button id="playbtn" style="font-size:20px">play</button><span>Fake Title ' + location.pathname + '</span><button id="fsbtn" style="font-size:20px">full</button></div></div></div>';
@@ -238,6 +239,107 @@ window.addEventListener("keydown", (e) => {
 }, true);
 </script></body></html>`;
 
+// ---- 2.2 fixtures: HBO Max, Crunchyroll, SonyLIV. Shapes from the services' public pages (URL formats, the
+// Crunchyroll "vilos" player iframe on static.crunchyroll.com, SonyLIV's ?watch=true player with an IMA ad layer,
+// HBO Max's /video/watch/<uuid>/<uuid> player). No code from the services; we can't sign in to them.
+const HBO_IDS = { "1f4b4570-933c-4264-b6e4-4aa9f596a9f5/a4f1e82b-a9f0-4e73-a692-35b31b9e0608": "Fake HBO Episode 1", "53efe792-9bd3-4e0c-b80e-87396b7ddcaf/d98913ef-a05c-46e7-84b1-e57e7b5e8727": "Fake HBO Episode 2" };
+const hbo = `<!doctype html><html><head><title>HBO Max</title><style>body{margin:0;background:#000;color:#fff;font-family:sans-serif}
+[data-testid=playerContainer]{position:fixed;inset:0;background:#000}[data-testid=playerContainer] video{width:100%;height:100%}
+[data-testid=player-ux-asset-title]{position:absolute;top:16px;left:20px;margin:0;font-size:18px}
+[data-testid=ad-badge]{position:absolute;top:60px;left:20px;background:#ff0;color:#000;padding:2px 8px}</style></head><body><div id="app"></div><script>
+const IDS = ${JSON.stringify(HBO_IDS)};
+function render() {
+  const m = location.pathname.match(/^\\/video\\/watch\\/(.+?)\\/?$/), app = document.getElementById("app");
+  if (m && IDS[m[1]]) {
+    document.title = IDS[m[1]] + " • HBO Max";
+    app.innerHTML = '<div data-testid="playerContainer"><video src="/test.webm" muted autoplay></video><h1 data-testid="player-ux-asset-title">' + IDS[m[1]] + '</h1><button id="hbonext" style="position:absolute;bottom:20px;right:20px">Next episode</button></div>';
+    document.getElementById("hbonext").onclick = () => window.__go("/video/watch/" + Object.keys(IDS).find((k) => k !== m[1]));
+  } else { document.title = "HBO Max"; app.innerHTML = '<div style="padding:40px"><h1>HBO Max home</h1><a id="hboopen" href="/video/watch/' + Object.keys(IDS)[0] + '">Open</a></div>'; }
+}
+window.__go = (p) => { history.pushState(null, "", p); render(); };
+window.__hboAd = (on) => { const c = document.querySelector("[data-testid=playerContainer]"); let n = c.querySelector("[data-testid=ad-badge]"); if (on && !n) { n = document.createElement("div"); n.dataset.testid = "ad-badge"; n.textContent = "Ad 1 of 2 · 0:15"; c.append(n); c.querySelector("video").currentTime = 100; } if (!on && n) n.remove(); };
+addEventListener("popstate", render);
+render();
+setTimeout(() => history.replaceState(null, "", location.pathname), 50); // the router drops unknown parameters
+window.__hotkeys = 0;
+window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; } }, true);
+</script></body></html>`;
+const CR_EPS = { GY0973WVY: "The Talisman Woman", G4PH0WXVJ: "Fake Crunchy Episode 2" };
+const cr = `<!doctype html><html><head><title>Crunchyroll</title><meta property="og:title" content="Watch Fake Anime - Crunchyroll"><style>body{margin:0;background:#000;color:#fff;font-family:sans-serif}
+.video-player-wrapper{position:relative;width:100%;aspect-ratio:16/9;max-height:80vh;background:#000}.video-player{position:absolute;inset:0;width:100%;height:100%;border:0}
+.erc-current-media-info{padding:12px 20px}</style></head><body><div id="app"></div><script>
+const EPS = ${JSON.stringify(CR_EPS)};
+function render() {
+  const m = location.pathname.match(/^(?:\\/[a-z]{2}(?:-[a-z]{2,4})?)?\\/watch\\/([A-Z0-9]+)/), app = document.getElementById("app");
+  if (m && EPS[m[1]]) {
+    app.innerHTML = '<div class="video-player-wrapper"><iframe class="video-player" src="https://static.crunchyroll.com/vilos-v2/web/vilos/player.html" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe></div>' +
+      '<div class="erc-current-media-info"><h1 class="title">' + EPS[m[1]] + '</h1><a id="crnext" href="/watch/' + Object.keys(EPS).find((k) => k !== m[1]) + '/next">Next episode</a></div>';
+    document.getElementById("crnext").onclick = (e) => { e.preventDefault(); window.__go(e.currentTarget.getAttribute("href")); };
+  } else app.innerHTML = '<div style="padding:40px"><h1>Crunchyroll home</h1></div>';
+}
+window.__go = (p) => { history.pushState(null, "", p); render(); };
+addEventListener("popstate", render);
+render();
+setTimeout(() => history.replaceState(null, "", location.pathname), 50);
+window.__hotkeys = 0;
+window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; } }, true);
+</script></body></html>`;
+// the player frame (static.crunchyroll.com/vilos-v2/web/vilos/player.html): its own <video>; __crAd(on) shows the ad label
+const vilos = `<!doctype html><html><head><title>Vilos</title><style>html,body{margin:0;height:100%;background:#000;display:flex}#vilosRoot{position:relative;flex:1}video{width:100%;height:100%}
+.ad-indicator{position:absolute;top:10px;left:10px;background:#f47521;color:#000;padding:2px 8px}</style></head><body><div id="vilosRoot"><video id="player0" src="https://static.crunchyroll.com/test.webm" muted autoplay></video></div><script>
+window.__crAd = (on) => { const r = document.getElementById("vilosRoot"); let n = r.querySelector(".ad-indicator"); if (on && !n) { n = document.createElement("div"); n.className = "ad-indicator"; n.dataset.testid = "vilos-ad-indicator"; n.textContent = "Ad 1/2"; r.append(n); r.querySelector("video").currentTime = 100; } if (!on && n) n.remove(); };
+</script></body></html>`;
+const SL_TITLES = { "1000022678": "Achaari Cheese Toast", "1000050121": "Tahalka", "1000022679": "Fake Sony Episode 2" };
+const sl = `<!doctype html><html><head><title>SonyLIV</title><style>body{margin:0;background:#111;color:#fff;font-family:sans-serif}
+.playerContainer{position:fixed;inset:0;background:#000}.playerContainer video{width:100%;height:100%}.playerTitle{position:absolute;top:16px;left:20px;margin:0}
+.ima-ad-container{position:absolute;inset:0;display:none}.ima-ad-container.on{display:block}.ima-ad-container .ad-label{position:absolute;bottom:70px;left:20px;background:#ff0;color:#000;padding:2px 8px}
+.hero video{width:320px;height:180px}</style></head><body><div id="app"></div><script>
+const T = ${JSON.stringify(SL_TITLES)};
+function render() {
+  const id = (location.pathname.match(/-(\\d+)\\/?$/) || [])[1], app = document.getElementById("app");
+  if (!T[id]) { document.title = "SonyLIV"; app.innerHTML = '<div style="padding:40px"><h1>SonyLIV home</h1></div>'; return; }
+  document.title = "Watch " + T[id] + " Full HD Movie Online - Sony LIV";
+  if (new URLSearchParams(location.search).get("watch") === "true") {
+    app.innerHTML = '<div class="playerContainer"><video src="/test.webm" muted autoplay></video><h2 class="playerTitle">' + T[id] + '</h2><div class="ima-ad-container"></div><button id="slnext" style="position:absolute;bottom:20px;right:20px">Next</button></div>';
+    document.getElementById("slnext").onclick = () => window.__go("/shows/bachelors-delight-1700000113/fake-sony-episode-2-1000022679?watch=true");
+  } else {
+    app.innerHTML = '<div style="padding:40px"><div class="hero"><video src="/test.webm" muted autoplay loop></video></div><h1>' + T[id] + '</h1><button id="slwatch" style="height:44px;padding:0 24px">Watch Now</button></div>';
+    document.getElementById("slwatch").onclick = () => window.__go(location.pathname + "?watch=true");
+  }
+}
+window.__go = (p) => { history.pushState(null, "", p); render(); };
+window.__slAd = (on) => { const a = document.querySelector(".ima-ad-container"); a.classList.toggle("on", on); a.innerHTML = on ? '<div class="ad-label">Ad · 0:10</div>' : ""; if (on) document.querySelector(".playerContainer video").currentTime = 100; };
+addEventListener("popstate", render);
+render();
+const q = new URLSearchParams(location.search);
+setTimeout(() => history.replaceState(null, "", location.pathname + (q.get("watch") === "true" ? "?watch=true" : "")), 50);
+window.__hotkeys = 0;
+window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; } }, true);
+</script></body></html>`;
+
+// ---- a video whose loading the test controls (buffer-aware sync): /gate.webm?g=<name>. While gate <name> is
+// closed, a response sends at most the first GATE_HEAD bytes and holds the rest (a seek further in waits too);
+// http://localhost:8444/__gate?g=<name>&open=0|1 closes / opens it.
+const gates = new Map();
+const GATE_HEAD = 400_000;
+const gateOf = (n) => (gates.has(n) || gates.set(n, { open: true, waiters: [] }), gates.get(n));
+function serveGate(req, res, name) {
+  const g = gateOf(name);
+  const range = req.headers.range;
+  let start = 0, end = video.length - 1;
+  if (range) {
+    const [s0, e0] = range.replace("bytes=", "").split("-");
+    start = +s0;
+    end = e0 ? Math.min(+e0, video.length - 1) : video.length - 1;
+  }
+  res.writeHead(range ? 206 : 200, { "content-type": "video/webm", "accept-ranges": "bytes", ...(range ? { "content-range": `bytes ${start}-${end}/${video.length}` } : {}), "content-length": end - start + 1 });
+  if (g.open) return res.end(video.subarray(start, end + 1));
+  const head = Math.min(end + 1, GATE_HEAD);
+  if (start < head) res.write(video.subarray(start, head));
+  const from = Math.max(start, head);
+  g.waiters.push(() => !res.destroyed && res.end(video.subarray(from, end + 1)));
+}
+
 // mock KLIPY media (static.klipy.com is mapped here by the browser's host-resolver-rules)
 https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert: fs.readFileSync(path.join(MEDIA_DIR, "cert.pem")) }, (req, res) => {
   const host = (req.headers.host || "").split(":")[0];
@@ -247,6 +349,12 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
       return res.end(gif);
     }
     res.writeHead(404);
+    return res.end();
+  }
+  if (req.url.startsWith("/gate.webm")) return serveGate(req, res, new URL(req.url, "https://x").searchParams.get("g") || "x");
+  if (host === "play.max.com") {
+    // the old HBO Max address goes to the new one
+    res.writeHead(301, { location: "https://play.hbomax.com" + req.url });
     return res.end();
   }
   if (req.url.startsWith("/test.webm")) {
@@ -260,6 +368,10 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
     res.writeHead(200, { "content-type": "video/webm", "accept-ranges": "bytes", "content-length": video.length });
     return res.end(video);
   }
+  if (host === "play.hbomax.com" || host === "www.crunchyroll.com" || host === "www.sonyliv.com" || (host === "static.crunchyroll.com" && req.url.startsWith("/vilos-v2/web/vilos/player.html"))) {
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end(host === "play.hbomax.com" ? hbo : host === "www.crunchyroll.com" ? cr : host === "www.sonyliv.com" ? sl : vilos);
+  }
   if (host === "www.primevideo.com" || host === "www.amazon.co.uk") {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end(pv);
@@ -272,6 +384,10 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
   if (CSP === "strict" && host === "www.netflix.com") headers["content-security-policy"] = "img-src 'self' blob:";
   // CSP=script: a page script-src that only allows the site's own and inline scripts (extension-injected <script src> must cope)
   if (CSP === "script" && (host === "www.netflix.com" || host === "www.hotstar.com")) headers["content-security-policy"] = "script-src 'self' 'unsafe-inline'; img-src 'self' blob:";
+  // per browser (avatars.mjs): cookie npimg=none -> img-src 'self' (no blob:, no data:: pictures must use a <canvas>),
+  // npimg=data -> img-src 'self' data: (no blob:)
+  const npimg = (/(?:^|;\s*)npimg=(none|data)/.exec(req.headers.cookie || "") || /[?&]npimg=(none|data)/.exec(req.url) || [])[1];
+  if (npimg && host === "www.netflix.com") headers["content-security-policy"] = npimg === "none" ? "img-src 'self'" : "img-src 'self' data:";
   res.writeHead(200, headers);
   res.end(app);
 }).listen(8443, () => console.log("fake site on 8443" + (CSP ? " (CSP " + CSP + ")" : "")));
@@ -280,6 +396,13 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
 let last = null;
 http.createServer((req, res) => {
   const u = new URL(req.url, "http://x");
+  if (u.pathname === "/__gate") {
+    const g = gateOf(u.searchParams.get("g") || "x");
+    g.open = u.searchParams.get("open") === "1";
+    if (g.open) g.waiters.splice(0).forEach((f) => f());
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ open: g.open }));
+  }
   if (u.pathname === "/__last") {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(last));

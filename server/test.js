@@ -4,6 +4,7 @@
 // Node's WebCrypto, so the server only ever sees what a real 1.7 browser would send.
 import { WebSocket } from "ws";
 import assert from "node:assert/strict";
+import { MAX_PROFILE_CT, MAX_PROFILE_IMG } from "./core.js";
 
 // TARGET=wss://host runs the suite against a deployed server instead of a local one.
 const PORT = 18000 + Math.floor(Math.random() * 1000);
@@ -175,9 +176,13 @@ ok("join + member broadcast (pid only) + join event without names");
 // ---- profiles (encrypted name + avatar)
 {
   await assert.rejects(a.req("profile", { name: "Chirag" }), /Bad profile/);
-  await assert.rejects(a.req("profile", { ct: "x".repeat(5000) }), /Bad profile/);
+  await assert.rejects(a.req("profile", { ct: "x".repeat(MAX_PROFILE_CT + 1) }), /Bad profile/);
   await assert.rejects(a.req("profile", { ct: "abc" }), /Bad profile/);
   await assert.rejects(a.req("profile", { ct: "a+b/c=".repeat(30) }), /Bad profile/);
+  // 2.2: a profile with an HD picture and a photo of the largest size the extension makes fits
+  const bigImg = "data:image/webp;base64," + "A".repeat(MAX_PROFILE_IMG - 23);
+  await a.req("profile", { ct: await sealAs(a, "profile", { name: "Ч".repeat(24), avatar: "🦊", hd: "av:pixel-alien", img: bigImg }) });
+  await assert.rejects(a.req("profile", { ct: "A".repeat(MAX_PROFILE_CT + 1) }), /Bad profile/);
   await a.req("profile", { ct: await sealAs(a, "profile", { name: "Chirag", avatar: "🦊" }) });
   await b.req("profile", { ct: await sealAs(b, "profile", { name: "Friend", avatar: "🐙" }) });
   const m = await b.next("members", (x) => x.data.members.every((p) => p.profile));
@@ -476,6 +481,114 @@ ok("host-only control lock");
 }
 
 {
+  // 2.2: HBO Max, Crunchyroll and SonyLIV parties: invite pages name the service and link to the episode
+  const cases = [
+    ["hm:1f4b4570-933c-4264-b6e4-4aa9f596a9f5/a4f1e82b-a9f0-4e73-a692-35b31b9e0608", "HBO Max", "https://play.hbomax.com/video/watch/1f4b4570-933c-4264-b6e4-4aa9f596a9f5/a4f1e82b-a9f0-4e73-a692-35b31b9e0608?npParty="],
+    ["hm:1f4b4570-933c-4264-b6e4-4aa9f596a9f5", "HBO Max", "https://play.hbomax.com/video/watch/1f4b4570-933c-4264-b6e4-4aa9f596a9f5?npParty="],
+    ["cr:GY0973WVY", "Crunchyroll", "https://www.crunchyroll.com/watch/GY0973WVY?npParty="],
+    ["sl:/shows/bachelors-delight-1700000113/achaari-cheese-toast-1000022678", "SonyLIV", "https://www.sonyliv.com/shows/bachelors-delight-1700000113/achaari-cheese-toast-1000022678?watch=true&amp;npParty="],
+    ["sl:/movies/tahalka-1000050121", "SonyLIV", "https://www.sonyliv.com/movies/tahalka-1000050121?watch=true&amp;npParty="],
+  ];
+  for (const [videoId, site, link] of cases) {
+    const m = await member("p22", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, videoId);
+    const html = await (await fetch(`${HTTP}/j/${m.room}`)).text();
+    assert.ok(html.includes(`Join on ${site}`), site);
+    assert.ok(html.includes(link + m.room), "link for " + videoId);
+    assert.match(html, /NetParty extension \(2\.2 or newer\)/);
+    await m.req("end", {});
+    m.close();
+  }
+  const bad = ["hm:not-a-uuid", "hm:1f4b4570-933c-4264-b6e4-4aa9f596a9f5/../../x", "hm:1F4B4570-933C-4264-B6E4-4AA9F596A9F5?x", "cr:gy0973wvy", "cr:GY0973WVY/../x", "cr:A", "sl:/movies/../evil-1000050121",
+    "sl://evil.com/x-1000050121", "sl:/shows/x-123/y-1000?x=1", "sl:/admin/x-1000050121", "sl:/movies/tahalka-1000050121#x"];
+  for (const videoId of bad) {
+    const m = await member("p22bad", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, null, videoId);
+    await m.req("end", {});
+    m.close();
+  }
+  ok(`2.2 platforms: HBO Max / Crunchyroll / SonyLIV invite links; ${bad.length} malformed ids dropped`);
+}
+
+{
+  // 2.2: ephemeral encrypted signals (typing, "my video is loading"), the pinned message, and "away"
+  const key = genKey();
+  const h = await member("h22", { key, create: { videoId: "81234567", playing: true, position: 1000, at: Date.now() } });
+  const g = await member("g22", { key, room: h.room });
+  const x = await member("x22", { key, room: h.room });
+  await sleep(50);
+  for (const m of [h, g, x]) m.drain("members"), m.drain("system");
+  // ev: relayed to the others as { from, ct }, never to the sender, never stored
+  await assert.rejects(g.req("ev", { t: "ty" }), /Bad signal/, "plaintext refused");
+  await assert.rejects(g.req("ev", { ct: "A".repeat(2000) }), /Bad signal/, "size cap");
+  const ty = await sealAs(g, "ev", { t: "ty" });
+  await g.req("ev", { ct: ty });
+  const e1 = await h.next("ev");
+  assert.deepEqual(Object.keys(e1.data).sort(), ["ct", "from"]);
+  assert.equal(e1.data.from, g.pid);
+  assert.deepEqual(await open(key, h.room, "ev", g.pid, e1.data.ct), { t: "ty" });
+  assert.equal(await open(key, h.room, "ev", h.pid, e1.data.ct), null, "bound to its sender");
+  await x.next("ev");
+  assert.equal(await g.next("ev", () => true, 300).catch(() => null), null, "not echoed to the sender");
+  const wait = await sealAs(h, "ev", { t: "wait", on: 1, ids: [g.pid] });
+  await h.req("ev", { ct: wait });
+  assert.deepEqual(await open(key, h.room, "ev", h.pid, (await g.next("ev")).data.ct), { t: "wait", on: 1, ids: [g.pid] });
+  x.drain("ev");
+  for (let i = 0; i < 24; i++) await x.req("ev", { ct: await sealAs(x, "ev", { t: "ty" }) });
+  await assert.rejects(x.req("ev", { ct: ty }), /Slow down/, "24 per 10 s");
+  await sleep(100);
+  for (const m of [h, g]) m.drain("ev");
+  const hist = (await g.req("join", { e2ee: 1, roomId: h.room, cid: g.cid })).history;
+  assert.ok(!hist.some((e) => e.kind !== "system"), "signals are not kept");
+  // buffer / drop / resume are known playback reasons
+  for (const reason of ["buffer", "drop", "resume"]) {
+    await h.req("state", { playing: reason === "resume", position: 2000, at: Date.now(), reason });
+    assert.equal((await g.next("state")).data.reason, reason);
+    x.drain("state");
+  }
+  // pin: encrypted, kept with the party (snapshot, peek doesn't show it), unpin with null
+  const pinObj = { id: "Q1w2E3r4T5y6", uid: g.pid, name: "Rahul " + MARK.slice(0, 8), s: "pinned snippet " + MARK };
+  const pinCt = await sealAs(h, "pin", pinObj);
+  await assert.rejects(h.req("pin", { ct: "A".repeat(2100) }), /Bad pin/);
+  await assert.rejects(h.req("pin", { text: "hi" }), /Bad pin/);
+  await h.req("pin", { ct: pinCt });
+  for (const m of [h, g, x]) {
+    const p = await m.next("pin");
+    assert.deepEqual(p.data, { ct: pinCt, by: h.pid });
+  }
+  assert.deepEqual(await open(key, h.room, "pin", h.pid, pinCt), pinObj);
+  const late = await member("late22", { key, room: h.room });
+  assert.deepEqual(late.snap.pin, { ct: pinCt, by: h.pid }, "joiners get the pin");
+  // only the host pins while "only the host controls" is on
+  await h.req("settings", { hostOnly: true });
+  await assert.rejects(g.req("pin", { ct: await sealAs(g, "pin", pinObj) }), /Only the host/);
+  await h.req("settings", { hostOnly: false });
+  const gPin = await sealAs(g, "pin", { ...pinObj, s: "other" });
+  await g.req("pin", { ct: gPin });
+  assert.deepEqual((await h.next("pin", (m) => m.data.ct === gPin)).data, { ct: gPin, by: g.pid });
+  await g.req("pin", { ct: null });
+  assert.deepEqual((await h.next("pin", (m) => m.data.ct === null)).data, { ct: null, by: g.pid });
+  assert.equal((await late.req("join", { e2ee: 1, roomId: h.room, cid: late.cid })).pin, null, "unpinned");
+  await h.req("pin", { ct: pinCt });
+  // away: a member whose connection drops (no leave) is marked away for the others, then cleared on return
+  for (const m of [h, g, late]) m.drain("members"), m.drain("pin"), m.drain("settings"), m.drain("system");
+  x.close();
+  const aw = await h.next("members", (m) => m.data.members.some((p) => p.id === x.pid && p.away === true));
+  assert.equal(aw.data.members.filter((p) => p.away).length, 1);
+  const x2 = await member("x22b", { key, room: h.room, cid: x.cid });
+  assert.equal(x2.pid, x.pid);
+  await h.next("members", (m) => m.data.members.some((p) => p.id === x.pid && !p.away));
+  // a clean leave: no away, just gone
+  late.drain("members");
+  await x2.req("leave", {});
+  const gone = await late.next("members", (m) => !m.data.members.some((p) => p.id === x.pid));
+  assert.ok(!gone.data.members.some((p) => p.away));
+  x2.close();
+  for (const m of [h, g, late]) m.close();
+  ok("2.2 signals (ev: encrypted, relayed to others only, rate-limited, never stored), buffer/drop/resume reasons, encrypted pin kept with the party, away flag on drop");
+}
+
+{
   // videoIds become links on the invite page, so anything but the known shapes is dropped:
   // no open redirect through netparty.tech/j/<code> to another site
   const bad = [
@@ -723,6 +836,8 @@ if (!process.env.TARGET) {
   await h.req("profile", { ct: await seal(key, room, "profile", hp, { name: "Hostname-" + MARK, avatar: "🦊" }) });
   await h.req("chat", { ct: await seal(key, room, "chat", hp, { t: "text", text: "survive this " + MARK }) });
   await h.req("chat", { ct: await seal(key, room, "chat", hp, { t: "gif", url: "https://static.klipy.com/ii/x/" + MARK + ".gif" }) });
+  const pinCt = await seal(key, room, "pin", hp, { id: "Q1w2E3r4T5y6", uid: hp, s: "pinned " + MARK });
+  await h.req("pin", { ct: pinCt });
   await sleep(450);
   const dump = JSON.stringify([...disk]);
   assert.ok(disk.size === 1 && dump.includes(room));
@@ -736,6 +851,7 @@ if (!process.env.TARGET) {
   const g = fake(hub2);
   const gs = await g.req("join", { e2ee: 1, roomId: room, cid: guestCid });
   assert.equal(gs.state.position, 42000);
+  assert.deepEqual(gs.pin, { ct: pinCt, by: hp }, "the pin survives a restart (ciphertext)");
   const line = gs.history.find((x) => x.kind === "chat");
   assert.equal((await open(key, room, "chat", line.from, line.ct)).text, "survive this " + MARK);
   assert.equal((await open(key, room, "profile", hp, gs.profiles[hp])).name, "Hostname-" + MARK);
@@ -781,6 +897,7 @@ ok("host handoff on disconnect (leave event for " + sysLeft.data.id + ")");
     assert.ok(!f.text.includes(KEY), "the room key reached the server");
     assert.ok(!f.text.includes(MARK), "plaintext marker in a server message: " + f.text.slice(0, 200));
     assert.ok(!f.text.includes("🫶") && !f.text.includes("snippet"), "a message reaction or reply quote in a server message: " + f.text.slice(0, 200));
+    assert.ok(!f.text.includes("Rahul") && !/"(t|ty|ids|on|sp|mn|uid)":/.test(f.text), "a 2.2 signal or pin field in a server message: " + f.text.slice(0, 200));
   }
   const plain = allFrames.filter((f) => /"(name|byName|text|emoji|avatar|payload|cid|re|mr|mid|s|e)":/.test(f.text));
   assert.deepEqual(plain.map((f) => f.text.slice(0, 120)), [], "no plaintext fields in any server message");

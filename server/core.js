@@ -25,6 +25,8 @@ const limits = {
   profile: [10, 10_000],
   page: [10, 10_000],
   ice: [10, 60_000], // voice joins / reconnects asking for relay credentials
+  ev: [24, 10_000], // 2.2: ephemeral encrypted signals (typing, "my video is loading", waiting status)
+  pin: [10, 10_000], // 2.2: pin / unpin a message
 };
 
 // ---- ciphertext sizes. Wire format (built by the extension): base64url(0x01 | 12-byte IV |
@@ -33,13 +35,21 @@ const ctChars = (plainBytes) => Math.ceil(((1 + 12 + 16 + plainBytes) * 4) / 3);
 const pad64 = (n) => Math.ceil(n / 64) * 64;
 // worst case JSON: every UTF-16 unit escaped as \uXXXX (6 bytes), plus the field names
 export const MAX_CHAT_CT = ctChars(pad64(MAX_CHAT * 6 + 64)); // text, or a GIF (url ≤ 600 + size)
-export const MAX_PROFILE_CT = ctChars(pad64(MAX_NAME * 2 * 6 + 16 * 6 + 64)); // { name, avatar }
+// 2.2: { name, avatar (emoji), hd? ("av:<slug>", a picture bundled with the extension), img? (the member's
+// own photo: a 96 x 96 data: WebP / JPEG of at most 9 KB, base64 <= MAX_PROFILE_IMG characters) }
+export const MAX_PROFILE_IMG = 12400;
+export const MAX_PROFILE_CT = ctChars(pad64(MAX_NAME * 2 * 6 + 16 * 6 + 64 + 64 + MAX_PROFILE_IMG + 64));
 export const MAX_REACT_CT = ctChars(pad64(16 * 6 + 32)); // { e: one emoji }
 export const MAX_CHECK_CT = ctChars(128); // the room's key-check value
 export const MAX_SIGNAL_CT = 32_768; // WebRTC offer/answer or ICE candidate
 // "Sync any video" (2.0): the host's page address { u: url (≤ 2048 chars), d: duration } as one ciphertext
 export const MAX_PAGE_URL = 2048;
 export const MAX_PAGE_CT = ctChars(pad64(MAX_PAGE_URL * 6 + 128));
+// 2.2: an ephemeral signal ({ t: "ty" } typing, { t: "buf" } loading, { t: "wait", ids } waiting for members),
+// relayed to the others and never stored
+export const MAX_EV_CT = ctChars(pad64(1024));
+// 2.2: the pinned message { id, uid, name?, s (80-character snippet), g?, sp? }, kept with the party
+export const MAX_PIN_CT = ctChars(pad64(80 * 6 + MAX_NAME * 6 + 256));
 const MIN_CT = ctChars(1);
 const isCt = (s, max) => typeof s === "string" && s.length >= MIN_CT && s.length <= max && /^[A-Za-z0-9_-]+$/.test(s);
 
@@ -47,7 +57,8 @@ export const NEED_UPDATE =
   "Update NetParty to version 1.7 or newer: party chat is now end-to-end encrypted, and this version can't start or join parties. Get it at netparty.tech.";
 export const LEGACY_ROOM =
   "This party was started with an older NetParty that doesn't encrypt chat. Ask the host to update NetParty and start a new party.";
-const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode", "rate"]);
+// 2.2: "buffer" (paused while a member's video loads), "drop" (paused when a member dropped), "resume" (both over)
+const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode", "rate", "buffer", "drop", "resume"]);
 
 // ---- shared validators (also used by the GIF proxy in gifs.js; the extension has copies
 // and applies them to decrypted content)
@@ -91,6 +102,9 @@ export function isKlipyMediaUrl(s) {
 //   YouTube      "yt:<11-char id>"                 -> https://www.youtube.com/watch?v=<id>
 //   Prime Video  "pv:<host>/detail/<id>", "pv:<host>/dp/<id>" or "pv:<host>/gp/video/detail/<id>",
 //                <host> = www.primevideo.com or one of the Amazon stores in PRIME_HOSTS
+//   HBO Max      "hm:<uuid>" or "hm:<uuid>/<uuid>" (2.2)    -> https://play.hbomax.com/video/watch/<uuid>[/<uuid>]
+//   Crunchyroll  "cr:<episode id>" (2.2)                 -> https://www.crunchyroll.com/watch/<id>
+//   SonyLIV      "sl:/<shows|movies|…>/…/<slug>-<id>" (2.2) -> https://www.sonyliv.com/<path>?watch=true
 //   Any video    "av:<16 random base64url chars>" (2.0, a video on a page the host chose). It names no
 //                site and never becomes a link here: the page's address travels end-to-end encrypted
 //                (room.page) and only the guests' browsers can read it.
@@ -98,6 +112,9 @@ export const PRIME_HOSTS = [
   "www.primevideo.com",
   ...["com", "co.uk", "de", "co.jp", "in", "ca", "com.au", "fr", "it", "es", "com.br", "com.mx", "nl"].map((t) => "www.amazon." + t),
 ];
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const HM_RE = new RegExp(`^hm:${UUID}(\\/${UUID})?$`);
+const SL_RE = /^sl:\/(shows|sports|movies|clip|trailer|music-videos)(\/[a-z0-9-]{1,120}-\d{4,})?\/[a-z0-9-]{0,120}-?\d{5,}$/;
 const PV_RE = /^pv:([a-z0-9.-]+)(\/(?:detail|dp|gp\/video\/detail)\/[A-Za-z0-9._-]{6,100})$/;
 export function validVideoId(v) {
   if (typeof v !== "string" || !v || v.length > 512) return false;
@@ -105,6 +122,9 @@ export function validVideoId(v) {
   if (v.startsWith("yt:")) return /^yt:[A-Za-z0-9_-]{11}$/.test(v);
   if (v.startsWith("av:")) return /^av:[A-Za-z0-9_-]{16}$/.test(v);
   if (v.startsWith("hs:")) return /^hs:(\/[A-Za-z0-9._~%-]+)+\/\d{5,}\/watch$/.test(v);
+  if (v.startsWith("hm:")) return HM_RE.test(v);
+  if (v.startsWith("cr:")) return /^cr:[A-Z0-9]{6,16}$/.test(v);
+  if (v.startsWith("sl:")) return SL_RE.test(v);
   const pv = PV_RE.exec(v);
   if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
   return false;
@@ -172,6 +192,7 @@ export function iceProvider(env = {}, fetchFn = globalThis.fetch) {
 }
 
 // private per-tab reconnect secret: 128 random bits as hex (the extension makes 32 hex chars)
+const cleanPin = (p) => (p && isCt(p.ct, MAX_PIN_CT) && typeof p.by === "string" && /^[a-z0-9]{1,16}$/.test(p.by) ? { ct: p.ct, by: p.by } : null);
 const cleanCid = (s) => (typeof s === "string" && /^[0-9a-f]{32,64}$/.test(s) ? s : null);
 const announcesE2ee = (data) => data?.e2ee === 1 || data?.e2ee === true;
 
@@ -219,6 +240,8 @@ function memberList(room) {
     host: m.pid === room.hostId,
     inVoice: !!m.inVoice,
     profile: room.profiles.get(m.pid) || null,
+    // 2.2: disconnected without leaving, in the grace period (older clients ignore the field)
+    ...(m.away ? { away: true } : {}),
   }));
 }
 
@@ -241,6 +264,7 @@ function snapshot(room, client) {
     state: room.state,
     kc: room.kc,
     page: room.page || null,
+    pin: room.pin || null,
     members: memberList(room),
     profiles: knownProfiles(room),
     history: room.history,
@@ -276,7 +300,7 @@ function save(room) {
     if (room.ended) return;
     prune(room);
     const { id, state, hostOnly, hostCid, history, kc } = room;
-    const rec = { id, e2ee: true, state, hostOnly, hostCid, kc, history, page: room.page || null, profiles: [...room.profiles], seats: [...room.seats], savedAt: Date.now() };
+    const rec = { id, e2ee: true, state, hostOnly, hostCid, kc, history, page: room.page || null, pin: room.pin || null, profiles: [...room.profiles], seats: [...room.seats], savedAt: Date.now() };
     Promise.resolve(store.put(id, rec)).catch(() => {});
   }, 300);
 }
@@ -315,6 +339,7 @@ async function lookup(code) {
             hostCid: cleanCid(saved.hostCid),
             kc: isCt(saved.kc, MAX_CHECK_CT) ? saved.kc : null,
             page: isCt(saved.page, MAX_PAGE_CT) ? saved.page : null,
+            pin: cleanPin(saved.pin),
             history: Array.isArray(saved.history) ? saved.history.slice(-HISTORY) : [],
             profiles: new Map(Array.isArray(saved.profiles) ? saved.profiles : []),
             seats: new Map(Array.isArray(saved.seats) ? saved.seats : []),
@@ -571,6 +596,32 @@ const handlers = {
     reply({ ok: true });
   },
 
+  // 2.2: ephemeral encrypted signal (typing, "my video is loading", "waiting for …"): relayed to everyone
+  // else in the party as { from, ct } and never stored
+  ev(client, data, reply) {
+    const room = inRoom(client);
+    if (!room) return reply(null, "Not in a party.");
+    if (!isCt(data?.ct, MAX_EV_CT)) return reply(null, "Bad signal.");
+    if (limited(client, "ev")) return reply(null, "Slow down.");
+    broadcast(room, { type: "ev", data: { from: client.pid, ct: data.ct } }, client.pid);
+    reply({ ok: true });
+  },
+
+  // 2.2: the pinned message, encrypted ({ ct } to pin, { ct: null } to unpin). Kept with the party so
+  // people who join later see it. Whoever may control playback may pin (the host, or anyone when
+  // the party doesn't have "only the host controls" on).
+  pin(client, data, reply) {
+    const room = inRoom(client);
+    if (!room) return reply(null, "Not in a party.");
+    if (room.hostOnly && client.pid !== room.hostId) return reply(null, "Only the host can pin messages.");
+    if (data?.ct !== null && !isCt(data?.ct, MAX_PIN_CT)) return reply(null, "Bad pin.");
+    if (limited(client, "pin")) return reply(null, "Slow down.");
+    room.pin = data.ct === null ? null : { ct: data.ct, by: client.pid };
+    save(room);
+    broadcast(room, { type: "pin", data: room.pin || { ct: null, by: client.pid } });
+    reply({ ok: true });
+  },
+
   // encrypted { name, avatar }, shown next to this member everywhere
   profile(client, data, reply) {
     const room = inRoom(client);
@@ -707,8 +758,9 @@ function connect(sendRaw) {
       if (client.inVoice) {
         client.inVoice = false;
         broadcast(room, { type: "voice", data: { event: "leave", id: client.pid } }, client.pid);
-        broadcast(room, membersMsg(room));
       }
+      // 2.2: everyone learns this member dropped (away: true) without a clean leave, so the party can pause
+      broadcast(room, membersMsg(room));
       client.graceTimer = setTimeout(() => {
         if (client.roomId) leaveRoom(client);
         if (room.members.size === 0) room.emptySince = Date.now();
@@ -759,6 +811,9 @@ export function watchUrlFor(videoId, roomId) {
   if (videoId.startsWith("yt:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${code}`;
   // Prime Video: autoplay=1 opens the player on the title page
   if (videoId.startsWith("pv:")) return `https://${videoId.slice(3)}?autoplay=1&npParty=${code}`;
+  if (videoId.startsWith("hm:")) return `https://play.hbomax.com/video/watch/${videoId.slice(3)}?npParty=${code}`;
+  if (videoId.startsWith("cr:")) return `https://www.crunchyroll.com/watch/${videoId.slice(3)}?npParty=${code}`;
+  if (videoId.startsWith("sl:")) return `https://www.sonyliv.com${videoId.slice(3)}?watch=true&npParty=${code}`;
   const base = videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : "https://www.netflix.com/watch/" + videoId;
   return `${base}?npParty=${code}`;
 }
@@ -766,7 +821,8 @@ export const isAnyVideo = (videoId) => typeof videoId === "string" && videoId.st
 export const siteFor = (videoId) => {
   const v = String(videoId || "");
   if (isAnyVideo(v)) return "the host's site";
-  return v.startsWith("hs:") ? "JioHotstar" : v.startsWith("yt:") ? "YouTube" : v.startsWith("pv:") ? "Prime Video" : "Netflix";
+  const sites = { "hs:": "JioHotstar", "yt:": "YouTube", "pv:": "Prime Video", "hm:": "HBO Max", "cr:": "Crunchyroll", "sl:": "SonyLIV" };
+  return sites[v.slice(0, 3)] || "Netflix";
 };
 
 export const EDGE_STORE = "https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki";
@@ -897,7 +953,7 @@ ${install("Open the video")}`
 <a class="btn" id="go" hidden href="${esc(watch)}" data-watch="${esc(watch)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Join on ${site}</a>
 <noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party's encrypted chat with the key in your invite link.</p></noscript>
 <p class="note">🔒 Chat is end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
-<p class="note">${browsers(site === "YouTube" ? "You need" : `You need your own ${site} account and`, site === "Prime Video" ? "1.8" : "1.7")}</p>
+<p class="note">${browsers(site === "YouTube" ? "You need" : `You need your own ${site} account and`, ["HBO Max", "Crunchyroll", "SonyLIV"].includes(site) ? "2.2" : site === "Prime Video" ? "1.8" : "1.7")}</p>
 ${install("Join on " + site)}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NetParty invite</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">

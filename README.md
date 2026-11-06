@@ -1,70 +1,93 @@
-# NetParty — watch Netflix, JioHotstar, YouTube, Prime Video and videos on sites you choose together
+# NetParty: watch Netflix, Prime Video, YouTube, JioHotstar, HBO Max, Crunchyroll, SonyLIV and other video sites together
 
-A Chrome extension (also Edge, Brave, and Firefox via [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/netparty/), built by `scripts/build-firefox.mjs`) + tiny sync server. Everyone in the party
-needs the extension and, for Netflix, JioHotstar and Prime Video, their own account on the service.
+NetParty is a free, open-source browser extension and a small sync server for watch parties. Start a party on a video,
+send one link, and everyone's play, pause and seek stay in sync, with end-to-end encrypted chat, voice and video chat
+beside the video. Everyone needs the extension and, for the streaming services, their own account on the service.
+Website: https://netparty.tech
 
-Supported:
+## Install
+
+| Browser | Where |
+| --- | --- |
+| Firefox | [Firefox Add-ons (AMO)](https://addons.mozilla.org/en-US/firefox/addon/netparty/) |
+| Microsoft Edge | [Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki) |
+| Chrome, Brave and other Chromium browsers | the zip from [netparty.tech](https://netparty.tech/#install) (or this repo's `extension/` folder): `chrome://extensions` → **Developer mode** → **Load unpacked** |
+| Opera | coming soon |
+
+The Firefox package is built from the same source by `node scripts/build-firefox.mjs`.
+
+## Supported sites
+
 - **Netflix** (`netflix.com/watch/...`)
 - **JioHotstar** (`hotstar.com/in/.../watch`, movies, shows and episodes)
 - **YouTube** (`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported)
-- **Prime Video** : a title's page on `primevideo.com`
+- **Prime Video**: a title's page on `primevideo.com`
   (`/detail/<id>`, also under `/region/…` and `/-/<lang>/`) or on an Amazon store's Prime Video pages,
   `amazon.<tld>/gp/video/detail/<ASIN>` (`.com`, `.co.uk`, `.de`, `.co.jp`, `.in`, `.ca`, `.com.au`, `.fr`, `.it`,
   `.es`, `.com.br`, `.com.mx`, `.nl`; the extension also runs on `/Amazon-Video/` pages). Start from the title's page;
   Amazon product pages (`amazon.<tld>/<name>/dp/<ASIN>`) aren't supported.
-- **Videos on sites you choose** (new in 2.0): on any other http(s) page, the popup's **Sync this tab** starts a
+- **HBO Max** (2.2): `play.hbomax.com/video/watch/<id>[/<id>]` (`play.max.com` redirects there)
+- **Crunchyroll** (2.2): `crunchyroll.com/watch/<id>/<slug>`, also under a language prefix (`/fr/watch/…`). The video
+  plays in Crunchyroll's player frame (`static.crunchyroll.com/vilos-v2/…`); NetParty's frame agent drives it there
+- **SonyLIV** (2.2): the player (`?watch=true`) on `sonyliv.com/shows/<show>-<id>/<episode>-<id>`, `/movies/<slug>-<id>`
+  and the other title paths (`/sports/…`, `/clip/…`, `/trailer/…`, `/music-videos/…`)
+- **Videos on sites you choose** (2.0): on any other http(s) page, the popup's **Sync this tab** starts a
   party for the page's video. NetParty runs there only after that click (`activeTab` + `scripting`), or on sites
   you set to **Always allow on this site** (an optional host permission for that one site). See
   [Sync any video](#sync-any-video).
 
-Features
-- **End-to-end encrypted chat**: messages, GIFs, reactions, names and pictures (and voice-call setup)
-  are encrypted in the browser with a key that lives only in the invite link; the server can't read them
-  (see [End-to-end encryption](#end-to-end-encryption))
-- Playback sync: play, pause, seek, and episode changes follow the party
+## Features
+
+Watching together
+- Playback sync: play, pause, seek and episode changes follow the party
   (server-clock sync, 1 s seek threshold, drift correction every 3 s)
-- Invite links: `https://netparty.tech/j/<code>#k=<key>` opens an invite page that sends
-  friends to the right title (auto-joins) and lets them download the extension while the party is live
-- Split-screen chat: the player shrinks to make room for a docked chat column (nothing covers the
-  player controls); hide it to go back to full width
-- Chat with message bubbles, Send button and Enter to send, unread badge and message previews
-  (works in fullscreen; keys typed in chat never reach the site's hotkeys)
-- Profile pictures: pick a cute emoji (🐶 🐼 🦊 🍕 🍩 🍿 …) in the popup or by clicking your picture in the
-  chat panel; it shows next to your messages and in the people list, and updates live for everyone
-- Emoji picker in the chat bar (smileys, gestures, animals, food, activities, symbols, recently used), with
-  search by name or keyword (2.1): type "fire" or "lol", Enter picks the first result
-- Reply to a message (2.1): hover a chat line (tap or long-press on touch) → **Reply**. The reply shows a small
-  quote of the original (name + one line, or "GIF"); click the quote to jump to the original
-- Reactions on messages (2.1): hover a line → **React** → 👍 ❤️ 😂 😮 😢 🔥 or **+** for any emoji. Chips under
-  the message show counts (hover for who); tap a chip to add or remove yours. Kept in the party's history, so
-  people who join or reload see them. Replies and reactions are end-to-end encrypted like any chat message
-- 🎉 Reactions: tap one of 5 emojis and it floats up over everyone's video (also in fullscreen).
-  Defaults 😂 😭 💀 🥰 😱; change them in the tray (pencil) or the popup's Chat settings
-- GIFs from KLIPY, with the picker pre-filled with what you're watching, plus quick chips
-  (reaction, lol, omg, popcorn). Needs the server's KLIPY key, see "GIFs" below
-- Links in chat are clickable (open in a new tab)
-- Chat text size: Small / Medium / Large (Aa in the chat bar, or the popup's Chat settings)
-- Voice chat: peer-to-peer WebRTC audio, mute, volume, speaking indicator
-- Video chat (1.8): turn your camera on next to voice; everyone with a camera on shows as a 16:9 tile, docked in
-  the chat panel by default (1.9) or popped out into a floating window you can drag, resize and fold.
-  640x360 at up to 24 fps, at most 4 cameras at once, peer to peer (see the TURN note below)
-- Change your name or picture from the panel: click your picture (or your camera tile's name) → Your profile
-- Light and dark themes for the chat panel and popup: follows your system, or pick one in Settings → Theme
-- Every chat line shows the sender's picture and name, your own included
-- Host-only control lock, host hand-off when the host leaves, auto-reconnect
+- Waits for loading videos (2.2): when someone's video stalls for over a second, everyone pauses ("Waiting for
+  Rahul to load…") and plays on together from the same moment once it has loaded, or after 20 seconds anyway
+- Pauses on drop-outs (2.2): a member whose connection drops mid-video pauses the party until they're back (within
+  the server's 15-second grace), then it plays on by itself; if they don't come back, anyone in control gets Resume
+- Next episode keeps the party together; host-only control lock, host hand-off when the host leaves, auto-reconnect
+- Invite links: `https://netparty.tech/j/<code>#k=<key>` opens an invite page that sends friends to the right title
+  (auto-joins) and lets them get the extension while the party is live
+- Split-screen chat: the player shrinks to make room for a docked chat column (nothing covers the player controls)
+
+Chat
+- **End-to-end encrypted**: messages, GIFs, reactions, names, pictures and voice-call setup are encrypted in the
+  browser with a key that lives only in the invite link; the server can't read them
+  (see [End-to-end encryption](#end-to-end-encryption))
+- Message bubbles, unread badge and previews, works in fullscreen; keys typed in chat never reach the site's hotkeys
+- Replies and reactions on messages (2.1), emoji picker with search (2.1), 🎉 reactions floating over the video,
+  GIFs from KLIPY, clickable links, text size Small / Medium / Large
+- Typing indicator, @mentions, spoilers (`||hidden words||` or the **Spoiler** switch), edit and delete your own
+  messages, and one pinned message per party (2.2)
+- Light and dark themes for the chat panel and popup
+
+Voice and video
+- Voice chat: WebRTC audio between friends, mute, volume, speaking indicator
+- Video chat (1.8): up to 4 cameras as 16:9 tiles, docked in the chat panel or popped out into a floating window
+  (640x360 at up to 24 fps)
+- Works on any network: peer to peer when the two networks allow it, otherwise through a Cloudflare TURN relay
+  (UDP, TCP and TLS on 443). Relay credentials are refreshed for long parties and reconnects (2.2)
+- Lower the video while friends talk (2.2): the video plays at 30% of its volume while someone else speaks
+
+Profile
+- Your name, and a picture: one of 48 **HD pictures** (2.2, Microsoft Fluent Emoji 3D, bundled with the extension),
+  an emoji, or **your own photo** (2.2): cropped and shrunk to 96 x 96 in your browser, kept in this browser only and
+  shared only with your party, end-to-end encrypted. Pick it in the popup or by clicking your picture in the panel
+- Settings in the panel (⚙ in the chat bar) and the popup switch off the waiting, the drop-out pause and the
+  lowering of the video (all on by default)
 
 ## Quick start (2 minutes)
 
-1. **Download** this repo: green **Code** button → **Download ZIP**, then unzip it
-   (or `git clone https://github.com/velvetthunder15/netparty.git`).
+1. **Get it**: Firefox and Edge from their add-on stores (see [Install](#install)). Chrome: download the zip from
+   [netparty.tech](https://netparty.tech/#install) and unzip it (or clone this repo).
 2. **Install** in Chrome: open `chrome://extensions`, turn on **Developer mode**,
-   click **Load unpacked**, and pick the `extension` folder.
+   click **Load unpacked**, and pick the unzipped folder (the repo's `extension` folder).
 3. **Pin** NetParty from the puzzle-piece menu.
-4. **Host**: open any title on Netflix, JioHotstar or Prime Video (or a YouTube video), press play, click NetParty → **Start a party**
+4. **Host**: open any title on Netflix, JioHotstar, Prime Video, HBO Max, Crunchyroll or SonyLIV (or a YouTube video), press play, click NetParty → **Start a party**
    (or the **Start a NetParty** button on the page).
    The invite link is copied to your clipboard.
 5. **Invite**: send the link. It opens an invite page: friends without NetParty get a
-   download + 3-step install there, then press **Join on Netflix/JioHotstar/YouTube/Prime Video** and land on the same title, in sync.
+   download + 3-step install there, then press **Join on Netflix** (or JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll, SonyLIV) and land on the same title, in sync.
 6. **Talk**: the chat panel opens on the right; the round purple button reopens it.
    Type and press Enter (or the send arrow). **Join voice chat** and allow the mic to talk; the camera
    button in the voice bar turns on video.
@@ -81,15 +104,17 @@ No server setup needed: the extension uses the hosted server by default.
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
 | Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
 | Video | In voice, the camera button turns your camera on/off. Tiles sit in the chat panel; the pop-out button floats them over the video (drag by the bar, resize from the corner, arrow folds it away, dock button puts them back). With the chat closed they float until you reopen it |
-| Your name / picture | Click your picture in the panel (or the name on your camera tile) → **Your profile**: type a name and press Enter, or pick a picture. Or icon → name field |
+| Your name / picture | Click your picture in the panel (or the name on your camera tile) → **Your profile**: type a name and press Enter, pick an HD picture or an emoji, or **Upload photo** (**Remove photo** takes it away). Or icon → **You** |
 | Theme | Icon → **Settings** → **Theme**: System (default, follows your computer), Light or Dark |
 | Emoji / GIF / react | Chat bar: 🙂 opens emoji (type in its search box to find one), **GIF** opens the GIF search, 🎉 opens the reaction tray (pencil = change them) |
 | Reply / react to a message | Hover a chat line (tap it on touch) → **Reply** or **React**; Esc or × cancels a reply; tap a reaction chip to add or remove yours |
+| Edit / delete / pin | Hover your own line → **Edit** (Enter saves, Esc cancels) or **Delete** (press twice). **Pin** (host, or anyone while everyone controls playback) puts it in the bar above the chat |
+| Mention / spoiler | Type **@** and pick a name (arrows + Enter or Tab). Put `||double bars||` around a spoiler, or press the crossed-out eye in the chat bar to hide the whole message |
+| Party settings | ⚙ in the chat bar, or icon → **Settings** → **Party and voice**: waiting for loading videos, pausing on drop-outs, lowering the video while friends talk |
 | Text size | **Aa** in the chat bar cycles Small / Medium / Large; or icon → **Settings** |
 | Sync another site | Open the video, icon → **Sync this tab**. Friends: invite link → **Open the video** → icon on that page → **Join party on this tab** |
 | Theater (other sites) | **Theater** in the panel: the video fills the window next to the chat (the player's own fullscreen hides the chat) |
 | Lock controls | Host: icon → **Only I can play, pause and skip** |
-| Change your name or picture | Icon → **You** (the picture opens the picker), or click your own picture in the chat panel |
 | Leave | Exit the title, or **Leave party**. If the host leaves, the party ends for everyone; a guest leaving just leaves. Next episode keeps the party going. |
 
 Tips
@@ -99,6 +124,8 @@ Tips
   (the host closing it ends it). While Prime shows you an ad, sync pauses for you and you catch up afterwards.
   Episodes that play inside the same player without changing the address aren't followed automatically:
   everyone picks the next episode.
+- HBO Max, Crunchyroll, SonyLIV (2.2): start the party from the NetParty icon on a playing episode (no "Start a
+  NetParty" button on their pages yet). Ads play separately for each person; sync pauses for you while yours shows.
 - YouTube: ads play separately for each person. While yours plays, the panel shows "Waiting for ad to finish"
   and nothing is synced; when it ends you jump to where the party is. Switching video moves the whole party.
 - Use headphones on voice to avoid echo.
@@ -198,14 +225,19 @@ How it works
   in `chrome.storage.session` for that tab (memory only, not synced, not readable by the site; deleted when
   the party ends, you leave, or the tab closes). Reloads, episode/video changes and reconnects keep it.
 - **What is encrypted.** Chat text, GIF messages (the KLIPY URL), reactions, display names and pictures (one
-  encrypted "profile" per member), WebRTC voice setup (SDP and ICE candidates, which contain IP addresses), and
-  (2.0) the page address and video length of an any-video party.
+  encrypted "profile" per member: `{ name, avatar, hd?, img? }`, where 2.2 adds the HD picture's id and an uploaded
+  photo), WebRTC voice setup (SDP and ICE candidates, which contain IP addresses), and
+  (2.0) the page address and video length of an any-video party, and (2.2) mentions, spoilers, edits, deletes, the
+  pinned message (kept with the party as ciphertext) and the typing / "my video is loading" signals (relayed, never stored).
   Each message gets a fresh 96-bit IV; the additional data binds it to the party code, the kind of message and
   the sender's public member id, so it can't be replayed into another party or passed off as someone else's.
   Plaintext is padded to 64-byte steps so sizes leak less. Format: `base64url(0x01 | IV | ciphertext+tag)`.
 - **Checks move to the receiver.** The server can't see content, so each browser checks what it decrypts:
-  GIFs must be `https` on KLIPY's media hosts, reactions and pictures must be a single emoji, names at most 24
-  characters with no control characters, text at most 500. Anything else (or anything that fails to decrypt) is
+  GIFs must be `https` on KLIPY's media hosts, reactions and emoji pictures must be a single emoji, an HD picture
+  must be one of the bundled ids (`av:<slug>`), a photo must be a `data:` WebP, JPEG or PNG of at most 12,400
+  characters that decodes as an image (never a URL; it's shown from a `blob:` or `data:` URL or drawn on a
+  `<canvas>`, whichever the site's CSP allows), names at most 24 characters with no control characters, text at
+  most 500. Anything else (or anything that fails to decrypt) is
   dropped. The server still checks shape and size of every ciphertext and rate-limits chat, reactions and profiles.
 - **Join/leave lines** ("Rahul joined") are stored as "member *pid* joined" and named by each browser.
 - **Seats.** Each tab has a private 128-bit reconnect id (`cid`) that only the server sees; everyone else sees
@@ -219,7 +251,7 @@ How it works
 What the server can still see: the party code; members' random ids and how many there are; when messages,
 reactions and voice-setup messages are sent and roughly how big they are; playback state (playing/paused,
 position, speed, timestamps) and the video id of what's playing (the invite page needs it to send friends to the right
-title; for a video on another site it's a random `av:` id), plus who is in voice and muted/speaking; IP addresses and connection times (and Cloudflare's own request
+title; for a video on another site it's a random `av:` id), plus who is in voice and muted/speaking, and whose connection dropped (2.2); when typing / "my video is loading" signals are sent (2.2, encrypted and never stored); IP addresses and connection times (and Cloudflare's own request
 logs); GIF search terms, which have to go to KLIPY through our `/api/gifs` proxy (not logged; nothing about the
 party or names is sent with them).
 
@@ -271,36 +303,61 @@ messages honestly (it can't read or forge them, but it could drop or delay them)
   routes keys typed in the panel away from the site's hotkeys
 - `extension/content.js` – party logic, clock sync, playback sync, chat (emoji, GIFs, links), reactions, voice and video
   (WebRTC mesh: the caller offers a video slot up front, so the camera is added with `replaceTrack`, no renegotiation),
-  overlay (shadow DOM, light/dark), Prime Video's overlay player
-- `extension/emoji-data.js` – bundled emoji lists (pictures, picker, default reactions); shared by content script, popup, background
+  overlay (shadow DOM, light/dark), Prime Video's overlay player, HBO Max / SonyLIV / Crunchyroll adapters (2.2), typing,
+  mentions, spoilers, edit / delete, pins, buffer-aware sync, pause on drop and auto-duck (2.2)
+- `extension/emoji-data.js` – bundled emoji lists (pictures, picker, default reactions) and the list of HD pictures; shared by content script, popup, background
+- `extension/avatars/` – the 48 HD pictures (`av-<slug>.webp`, 128 px, Microsoft Fluent Emoji 3D, MIT; see `LICENSES.md` there).
+  The background worker reads them for the content script, so they aren't web-accessible resources
 - `extension/page.js` – runs in the site's page: drives Netflix's internal player API
   (setting `video.currentTime` directly triggers Netflix error M7375) and the plain
-  HTML5 `<video>` on JioHotstar (YouTube and Prime Video's `<video>` are driven straight from content.js)
+  HTML5 `<video>` on JioHotstar (YouTube, Prime Video, HBO Max and SonyLIV's `<video>` are driven straight from
+  content.js; Crunchyroll's, inside its player frame, through `anyvideo.js` running there as an agent)
 - `server/core.js` – rooms, seats (private cid → public pid), state relay, encrypted chat/profile/reaction
   relay with size checks and rate limits, encrypted WebRTC signaling relay, invite page (shared)
 - `server/gifs.js` – KLIPY GIF search proxy (shared by Node and the Worker)
 - `server/server.js` – Node transport; `server/worker/` – Cloudflare transport
 - `GET /j/<code>` – invite page (reads the key from `#k=` in the browser only); `/j/<code>/netparty.zip` – extension download, only while that party is live
   (Worker bundles it: run `npm run deploy` in `server/`; Node: set `EXTENSION_ZIP=/path/to.zip`)
-- `e2e/` – real-Chromium tests: two browsers, fake Netflix/JioHotstar/YouTube pages, a mock KLIPY;
-  `run.mjs` (invite → join → chat → sync), `lifecycle.mjs`, `features.mjs` (avatars, emoji, reactions,
-  text size, links, GIFs; `CSP=strict` for a strict image CSP), `youtube.mjs` (start, sync, ads, video change, dock),
-  `prime.mjs` (mock Prime Video / Amazon pages: start, invite, sync both ways, ads, dock, title change, leaving),
-  `anyvideo.mjs` (2.0: local test pages on two origins, popup Sync this tab / Join party on this tab, encrypted page
-  address on the invite page, sync, speed, drift nudges, element swap, Theater, shadow DOM, same-origin and
-  cross-origin iframes, picker, mismatch, live, canvas-only, Always allow; see the file header for how activeTab is
-  stood in for), `v18.mjs` (own avatar, light/dark + contrast audit, video chat with fake cameras: docked view, pop out, drag,
-  resize, dock back, fullscreen, reload, panel closed; profile name editing; camera denied, HiDPI);
-  `e2e/firefox/` runs the Firefox build (incl. Firefox ↔ Chromium voice and video)
+- `e2e/` – browser tests, see [Development and testing](#development-and-testing)
 
 Protocol frames: `{ type, reqId?, data }`; replies echo `reqId`.
 Shared state: `{ playing, position (ms), at (server ms), videoId }`.
 Expected position = `position + (playing ? serverNow − at : 0)`.
 
+## Development and testing
+
+```bash
+cd server && npm install && npm test          # protocol, encryption, persistence and leak tests (Node server)
+TARGET=wss://netparty.tech node server/test.js  # the same against a deployed server (EXPECT_TURN=1 also checks the relay)
+node scripts/build-firefox.mjs                 # Firefox (AMO) package from extension/
+```
+
+`e2e/` drives real Chromium (Playwright) with the unpacked extension against `fakesite.mjs` (fake Netflix, JioHotstar,
+YouTube, Prime Video, HBO Max, Crunchyroll and SonyLIV pages and a mock KLIPY) and a local server, through a
+recording proxy that checks no WebSocket frame carries names, messages, keys or pictures in the clear. Run one with
+`SCRIPT=<suite>.mjs ./go.sh` (`CSP=strict` adds a strict image CSP to the fake Netflix). See `e2e/README.md`.
+
+| Suite | What it covers |
+| --- | --- |
+| `run.mjs` | invite → join → chat → sync → reloads keep seats and history |
+| `lifecycle.mjs` | leaving, host ending the party, episode changes |
+| `features.mjs` | pictures, emoji, reactions, text size, links, GIFs, popup, voice signaling, reload, invite-link errors (also `CSP=strict`) |
+| `youtube.mjs`, `prime.mjs` | YouTube and Prime Video: start, sync, ads, dock, title changes |
+| `anyvideo.mjs` | Sync any video (2.0): popup flows, encrypted page address, speed, drift, iframes, Theater |
+| `v18.mjs` | video chat: docked and floating cameras, layouts, themes and contrast, HiDPI, camera denied |
+| `scroll.mjs` | chat scroll position |
+| `chat2.mjs` | 2.1 replies, message reactions, emoji search, with a 2.0.2 build from git (also `CSP=strict`) |
+| `chat3.mjs` | 2.2 typing, mentions, spoilers, edit / delete, pins, buffer-aware sync, pause on drop, auto-duck, with 2.1.0 and 2.0.2 builds (also `CSP=strict`) |
+| `platforms.mjs` | 2.2 HBO Max, Crunchyroll and SonyLIV on test pages |
+| `avatars.mjs` | 2.2 HD pictures, photo upload / remove, the 2.1.0 emoji fallback, `blob:` / `data:` / `<canvas>` fallbacks, hostile profiles, leak audit (also `CSP=strict`) |
+| `relaycreds.mjs` | 2.2 relay credentials: calls use the newest ones, a reconnect after a dropped socket uses the new ones |
+| `firefox/` | the Firefox build: `ffrun.mjs`, `ffcross.mjs` (Firefox ↔ Chromium chat, sync, voice, video), `ffavatars.mjs` |
+
 ## Known limits
 
 - Emoji are drawn by each computer's own emoji font: Apple's emoji on Macs and iPhones, Segoe on
-  Windows, Noto on Android/Linux (no emoji images are bundled).
+  Windows, Noto on Android/Linux. The 48 HD pictures are bundled images.
+- NetParty 2.1 and older show a member's HD picture or photo as the closest emoji.
 - YouTube's real page can change its layout; the split-screen dock narrows `ytd-watch-flexy` and the top bar.
 - Episode changes reload followers' tabs; voice reconnects automatically after.
 - Voice is a mesh: great up to ~6 people in voice, heavier beyond that. Video is limited to 4 cameras, and each
@@ -310,78 +367,31 @@ Expected position = `position + (playing ? serverNow − at : 0)`.
   it, and `video.currentTime` may not match the time Prime shows (everyone gets the same offset, so sync holds).
 - Netflix's internal player API is undocumented and can change.
 - JioHotstar support is untested on a live account so far; live sports/TV streams are not synced (no shared timeline).
+- HBO Max, Crunchyroll and SonyLIV support (2.2) is built from their public URL formats and page structure and tested
+  on test pages that copy it, not on the real services (we can't sign in to them). Their ad markers and title
+  selectors are the least certain parts; SonyLIV's title page counts as the player once a large video shows.
+- Older NetParty versions in the same party (2.1, 2.0) see mentions as plain "@Name" and spoilers as "[spoiler]",
+  keep showing edited and deleted messages as they were first sent, and don't show typing, waiting or pins.
 - Everyone in a party watches on the same service; a Netflix party can't include JioHotstar viewers. On Prime Video,
   guests open the title on the host's store (primevideo.com or that amazon.<tld>).
 
 ## Credits
 
-Teleparty's extension was studied for inspiration using
-[REA (rea-agents)](https://www.npmjs.com/package/rea-agents), a reverse-engineering CLI and MCP server.
-No Teleparty or REA code is included; NetParty is an original implementation.
+- HD profile pictures: [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (3D style),
+  Copyright (c) Microsoft Corporation, MIT License; trimmed and resized to 128 px WebP. Licence and file list in
+  `extension/avatars/LICENSES.md` and `extension/avatars/LICENSE-FluentEmoji-MIT.txt`. Not an endorsement by Microsoft.
+- Inter font (SIL Open Font License) in the panel and popup.
+- GIF search by [KLIPY](https://klipy.com).
+- Teleparty's extension was studied for inspiration using
+  [REA (rea-agents)](https://www.npmjs.com/package/rea-agents), a reverse-engineering CLI and MCP server.
+  No Teleparty or REA code is included; NetParty is an original implementation.
 
-## v1.3.1
-- Split-screen no longer crops the video: only the site's player box is narrowed (Netflix `.sizing-wrapper` / `.watch-video--player-view`, JioHotstar the outermost full-width player container) and the player re-lays out the picture itself.
-- Reloading the page (or changing episode) keeps your seat: chat history is replayed (last 150 lines), the host stays host, voice reconnects, the chat panel stays open or closed as you left it, and friends don't see "left/joined" spam. A dropped connection keeps its seat for 15 seconds.
-- The chat panel only shows on watch pages, so Netflix's browse pages aren't covered.
+## Version history
 
-## v1.4.0
-
-- **Start a NetParty** button on Netflix (home billboard, next to More Info, and the title details pop-up) and JioHotstar (title page, under Watch). One click opens the title and creates the party with the chat open.
-- Leaving the title ends the party: the host exiting (back to browse, another page) closes it for everyone and friends see "<host> ended the party"; a guest exiting just leaves. Nobody gets pulled back into the movie anymore. Going to the next episode stays on a watch page, so the party continues and friends follow.
-- Joining from a browse page sends you to the party's title first.
-- Parties are saved on the server, so a server restart no longer causes "Party not found"; tabs reconnect and rejoin on their own and keep retrying (no more giving up after a few tries).
-
-## v1.6.0
-
-- **YouTube**: watch pages (`youtube.com/watch?v=…`) with a **Start a NetParty** button next to Like,
-  play/pause/seek sync, switching video moves the party, ads pause sync for that viewer ("Waiting for ad
-  to finish") and they catch up afterwards, split-screen dock in default, theater and fullscreen. Invite
-  pages and the popup name the right platform.
-- **Profile pictures**: emoji avatars on a soft circle (random one to start), in the popup and the panel,
-  shown in the people list and next to chat messages, updated live.
-- **Emoji picker** in the chat bar (inserts at the cursor, recently used row, Esc closes).
-- **🎉 Reactions** float over everyone's video (hover 🎉 for the tray; each click sends one, rate limited to 12 per 3 s), customisable.
-- **GIFs** via KLIPY (server-side key; add `KLIPY_KEY`), suggested from the current title, "Powered by KLIPY".
-- **Links** in chat are clickable; **chat text size** Small / Medium / Large.
-- Protocol additions are optional fields and new message types (`avatar`, `react`, chat `gif`), so 1.5
-  clients keep working in the same party (they see "GIF" for a GIF and no reactions).
-
-## v1.7.0
-
-- **End-to-end encrypted chat** (see [End-to-end encryption](#end-to-end-encryption)): messages, GIFs, reactions,
-  names, pictures and voice setup are encrypted with a per-party key that lives only in the invite link and the
-  participants' browsers. Invite links now look like `https://netparty.tech/j/<code>#k=<key>`; **share the full
-  link** (a bare code no longer works). 1.6 clients are asked to update.
-- **Security fix:** chat history no longer exposes anyone's reconnect id. Members are identified by a random
-  public id; the private 128-bit per-tab id only ever goes to the server, so nobody can reclaim someone else's
-  seat or the host role.
-- The server stores only ciphertext, and an idle saved party is deleted within 6 hours (checked every 15 min).
-- The invite page names who invited you by decrypting it in your browser, and refuses links without a valid key.
-
-## v1.9.2
-
-- The panel and popup use the bundled **Inter** font (SIL OFL) on every system.
-
-## v1.9.1
-
-- The popped-out camera window resizes from **any edge or corner**.
-- Lines one person sends within a minute **stack** under one name and picture.
-
-## v1.9.0
-
-- **Cameras docked in the chat panel** by default: big 16:9 tiles (up to ~62% of the panel), chat keeps 4+ lines,
-  compact panel chrome while they show. **Pop out** into a floating, resizable window (drag anywhere, fold, dock back;
-  keyboard too; works in fullscreen); the choice, place and size are kept per tab. Chat closed → cameras float.
-- **Your profile** in the panel now edits your name as well as your picture.
-
-## v1.8.0
-
-- **Prime Video** (primevideo.com and amazon.<tld>/gp/video): start button, sync, ads, dock, invites. Untested on a live account.
-- **Video chat**: optional camera tiles on the voice mesh (640x360, ≤24 fps, max 4 cameras), draggable and collapsible.
-- **Light mode** (System / Light / Dark in Settings), WCAG AA contrast in both themes.
-- Your own messages show your picture and name. Crisp icons on HiDPI (SVG logo, 32 px toolbar icon).
-- Security: only known title-id shapes become links (invite page, follow-the-host). Full list in [CHANGELOG.md](CHANGELOG.md).
+Every release is in [CHANGELOG.md](CHANGELOG.md). 2.2.0 added HBO Max, Crunchyroll and SonyLIV, buffer-aware sync,
+pause on drop-outs, typing, @mentions, spoilers, edit / delete, pinned messages, lowering the video while friends talk,
+HD profile pictures and your own photo, and fresher relay credentials for voice and video.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube and Prime Video are trademarks of their owners; NetParty is not affiliated with them.
+MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll and SonyLIV are trademarks of their owners; NetParty is not affiliated with them.

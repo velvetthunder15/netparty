@@ -94,12 +94,15 @@
     <!-- not on a website NetParty can run on -->
     <section id="vOff" class="hidden">
       <div class="divider off-div"><span>or open</span></div>
-      <p class="lead" id="offLead">Open Netflix, JioHotstar, YouTube or Prime Video to start or join a party, or open any page with a video and click NetParty there.</p>
+      <p class="lead" id="offLead">Open Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll or SonyLIV to start or join a party, or open any page with a video and click NetParty there.</p>
       <div class="three">
         <button class="ghost" data-open="https://www.netflix.com/browse">Netflix</button>
         <button class="ghost" data-open="https://www.hotstar.com/in/home">JioHotstar</button>
         <button class="ghost" data-open="https://www.youtube.com/">YouTube</button>
         <button class="ghost" data-open="https://www.primevideo.com/">Prime Video</button>
+        <button class="ghost" data-open="https://play.hbomax.com/">HBO Max</button>
+        <button class="ghost" data-open="https://www.crunchyroll.com/">Crunchyroll</button>
+        <button class="ghost" data-open="https://www.sonyliv.com/">SonyLIV</button>
       </div>
     </section>
 
@@ -120,6 +123,12 @@
           <button type="button" role="radio" data-font="m">Medium</button>
           <button type="button" role="radio" data-font="l">Large</button>
         </div>
+      </div>
+      <div class="pref">
+        <span class="pref-label">Party and voice</span>
+        <label class="toggle pref-toggle"><input type="checkbox" data-pref="syncWait" /><span>Wait when someone's video is loading</span></label>
+        <label class="toggle pref-toggle"><input type="checkbox" data-pref="dropPause" /><span>Pause when someone drops out</span></label>
+        <label class="toggle pref-toggle"><input type="checkbox" data-pref="autoDuck" /><span>Lower the video while friends talk</span></label>
       </div>
       <div class="pref">
         <span class="pref-label">🎉 Reactions <small>(click one to change it)</small></span>

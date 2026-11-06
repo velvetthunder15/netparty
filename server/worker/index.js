@@ -15,6 +15,12 @@ import imgJio from "./site/jiohotstar-star.webp";
 import svgNetflix from "./site/netflix.svg";
 import svgYoutube from "./site/youtube.svg";
 import svgPrime from "./site/primevideo.svg";
+import svgHbo from "./site/hbo.svg";
+import svgCrunchyroll from "./site/crunchyroll.svg";
+import avFox from "./site/av-fox.webp";
+import avPanda from "./site/av-panda.webp";
+import avRobot from "./site/av-robot.webp";
+import avUnicorn from "./site/av-unicorn.webp";
 import imgOg from "./site/og.jpg";
 import imgIcon512 from "./site/icon-512.png";
 import imgFavicon48 from "./site/favicon-48.png";
@@ -31,15 +37,15 @@ const HTML = "text/html; charset=utf-8";
 // link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
 const OG_TAGS = `<meta property="og:image" content="https://netparty.tech/og.jpg" />
 <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, JioHotstar, YouTube, Prime Video and other video sites" />
+<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and other video sites" />
 <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://netparty.tech/og.jpg" />
 `;
 const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/i, OG_TAGS + "</head>"));
 
 // SEO layer, applied at load so a recopy of the Hark build keeps it: keyword title and
 // description, canonical, robots, icons, alt text, and JSON-LD built from the visible FAQ.
-const SEO_TITLE = "NetParty: Free Watch Party for Netflix, YouTube, Prime Video & Any Video Site";
-const SEO_DESC = "Watch Netflix, Prime Video, JioHotstar, YouTube and videos on most other sites together in sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
+const SEO_TITLE = "NetParty: Free Watch Party for Netflix, Prime Video, YouTube, HBO Max, Crunchyroll & SonyLIV";
+const SEO_DESC = "Watch Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and videos on most other sites together in sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
 const stripTags = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 function withSeo(html) {
   const faq = [...html.matchAll(/<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/gi)]
@@ -54,7 +60,7 @@ function withSeo(html) {
       applicationCategory: "BrowserApplication", operatingSystem: "Windows, macOS, Linux, ChromeOS",
       image: ["https://netparty.tech/og.jpg", "https://netparty.tech/og-square.jpg"], publisher: { "@id": "https://netparty.tech/#org" },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      featureList: "Synced play, pause and seek; sync videos on most other sites; end-to-end encrypted chat; voice and video chat; emoji reactions; GIFs; host controls",
+      featureList: "Synced play, pause and seek on Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV and JioHotstar; sync videos on most other sites; waits when someone buffers; end-to-end encrypted chat; replies, reactions and mentions; voice and video chat with relay; HD avatars or your own photo; GIFs; host controls",
       license: "https://opensource.org/licenses/MIT" },
   ];
   if (faq.length) graph.push({ "@type": "FAQPage", mainEntity: faq });
@@ -80,6 +86,8 @@ function withSeo(html) {
     .replace('<img src="jiohotstar-star.webp" width="64" height="64" alt=""', '<img src="jiohotstar-star.webp" width="64" height="64" alt="JioHotstar"')
     .replace('<img src="youtube.svg" width="22" height="22" alt=""', '<img src="youtube.svg" width="22" height="22" alt="YouTube"')
     .replace('<img src="primevideo.svg" width="27" height="22" alt=""', '<img src="primevideo.svg" width="27" height="22" alt="Prime Video"')
+    .replace('<img src="hbo.svg" width="22" height="22" alt=""', '<img src="hbo.svg" width="22" height="22" alt="HBO Max"')
+    .replace('<img src="crunchyroll.svg" width="22" height="22" alt=""', '<img src="crunchyroll.svg" width="22" height="22" alt="Crunchyroll"')
     .replace('<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt=""', '<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
@@ -94,8 +102,8 @@ const withPrivacySeo = (html) => html.replace(/<link rel="icon"[^>]*>\s*/gi, "")
 const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n\nSitemap: https://netparty.tech/sitemap.xml\n";
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://netparty.tech/</loc><lastmod>2026-11-03</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-10-28</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+<url><loc>https://netparty.tech/</loc><lastmod>2026-11-06</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-06</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
 const siteIndexOg = withSeo(withOg(siteIndex));
@@ -122,6 +130,12 @@ const SITE = {
   "/netflix.svg": [svgNetflix, "image/svg+xml"],
   "/youtube.svg": [svgYoutube, "image/svg+xml"],
   "/primevideo.svg": [svgPrime, "image/svg+xml"],
+  "/hbo.svg": [svgHbo, "image/svg+xml"],
+  "/crunchyroll.svg": [svgCrunchyroll, "image/svg+xml"],
+  "/av-fox.webp": [avFox, "image/webp"],
+  "/av-panda.webp": [avPanda, "image/webp"],
+  "/av-robot.webp": [avRobot, "image/webp"],
+  "/av-unicorn.webp": [avUnicorn, "image/webp"],
   "/og.jpg": [imgOg, "image/jpeg"],
   "/inter-latin.woff2": [fontInter, "font/woff2"],
   "/jbmono-latin.woff2": [fontMono, "font/woff2"],

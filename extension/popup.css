@@ -44,6 +44,8 @@ summary { cursor: pointer; color: var(--dim); font-size: 12px; }
 details input { margin-bottom: 8px; }
 .emo { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }
 .three { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .three .ghost { margin: 0; padding: 9px 4px; font-size: 13px; }
+.three .ghost:last-child:nth-child(odd) { grid-column: span 2; }
+.pref-toggle { margin: 8px 0 0; }
 #vMe { margin-bottom: 12px; }
 .me { display: flex; gap: 8px; align-items: center; }
 .me input { flex: 1; min-width: 0; }
@@ -78,3 +80,10 @@ button, .toggle { -webkit-tap-highlight-color: transparent; }
 button { transition: transform .12s; }
 button:active:not(:disabled) { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } button:active:not(:disabled) { transform: none; } }
+/* 2.2 HD pictures and your photo */
+.avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; pointer-events: none; }
+.avatar.has-hd img { width: 84%; height: 84%; border-radius: 0; object-fit: contain; }
+.avatar-opt.hd { display: grid; place-items: center; overflow: hidden; }
+.avatar-opt.hd img { width: 84%; height: auto; aspect-ratio: 1; object-fit: contain; display: block; pointer-events: none; }
+.avatar-grid { max-height: 260px; overflow-y: auto; scrollbar-width: thin; align-content: start; grid-auto-rows: max-content; }
+.avatar-sub { grid-column: 1 / -1; font-size: 11px; color: var(--dim); padding: 6px 2px 0; }

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "2.1.0",
-  "description": "Watch Netflix, JioHotstar, YouTube, Prime Video and videos on sites you choose in sync, with encrypted chat, voice and video.",
+  "version": "2.2.0",
+  "description": "Watch Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and any video in sync, with encrypted chat and voice.",
   "minimum_chrome_version": "116",
   "action": {
     "default_popup": "popup.html",
@@ -36,6 +36,10 @@
     "https://www.jiohotstar.com/*",
     "https://www.youtube.com/*",
     "https://www.primevideo.com/*",
+    "https://play.hbomax.com/*",
+    "https://play.max.com/*",
+    "https://www.crunchyroll.com/*",
+    "https://www.sonyliv.com/*",
     "https://static.klipy.com/*",
     "https://static1.klipy.com/*",
     "https://static2.klipy.com/*"
@@ -52,6 +56,10 @@
         "https://www.jiohotstar.com/*",
         "https://www.youtube.com/*",
         "https://www.primevideo.com/*",
+        "https://play.hbomax.com/*",
+        "https://play.max.com/*",
+        "https://www.crunchyroll.com/*",
+        "https://www.sonyliv.com/*",
         "https://www.amazon.com/gp/video/*",
         "https://www.amazon.com/Amazon-Video/*",
         "https://www.amazon.co.uk/gp/video/*",
@@ -91,6 +99,10 @@
         "https://www.jiohotstar.com/*",
         "https://www.youtube.com/*",
         "https://www.primevideo.com/*",
+        "https://play.hbomax.com/*",
+        "https://play.max.com/*",
+        "https://www.crunchyroll.com/*",
+        "https://www.sonyliv.com/*",
         "https://www.amazon.com/gp/video/*",
         "https://www.amazon.com/Amazon-Video/*",
         "https://www.amazon.co.uk/gp/video/*",
@@ -123,6 +135,16 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://static.crunchyroll.com/*"
+      ],
+      "js": [
+        "anyvideo.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [

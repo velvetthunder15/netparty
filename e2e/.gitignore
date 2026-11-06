@@ -8,3 +8,4 @@ suite.done
 firefox/build/
 store/
 ice.json
+*.wav

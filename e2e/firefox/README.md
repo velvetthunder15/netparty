@@ -12,6 +12,7 @@ only speaks wss://, just like with netparty.tech.
 | `ffany.mjs` | 2.0 "Sync any video" in Firefox on the local test pages (`../anysite.mjs`): popup Sync this tab, invite page, Open the video → Join party on this tab, sync both ways, speed, drift nudge, element swap, Theater, Always allow + reload, cross-origin iframe (Allow), picker, mismatch, live stream. Uses a test copy of the build with `http://localhost/*` in `host_permissions` in place of the activeTab grant |
 | `ffpopup.mjs` | popup Start a party (link really on the clipboard) and Join by pasting the invite link |
 | `ffcross.mjs` | Firefox host + Chromium guest: join, chat both ways, sync both ways, voice, camera tiles both ways (1.8) |
+| `ffavatars.mjs` | 2.2 profile pictures: Firefox host (fake Netflix with a strict image CSP, `NPIMG=none` for `img-src 'self'`, `NPIMG=data` to add `data:`) and a Chromium guest: HD pictures and uploaded photos both ways (createImageBitmap + WebP encoding in Firefox), shown from blob: URLs despite the page CSP, leak audit |
 | `ffgif.mjs` | background GIF API fetch (CORS for moz-extension://) and KLIPY media, GIF picker renders |
 | `ffprod.mjs` | against the live wss://netparty.tech: create, prod invite page, join, chat both ways, sync, end |
 | `ffprodgif.mjs` | against the live netparty.tech: GIF search/trending and a KLIPY image from the add-on's moz-extension:// origin |
@@ -27,6 +28,7 @@ SCRIPT=firefox/ffrun.mjs IDLE=25000 QUIET=75 ./e2e/go.sh
 SCRIPT=firefox/ffpopup.mjs ./e2e/go.sh
 SCRIPT=firefox/ffcross.mjs ./e2e/go.sh
 SCRIPT=firefox/ffgif.mjs ./e2e/go.sh
+SCRIPT=firefox/ffavatars.mjs ./e2e/go.sh; NPIMG=data SCRIPT=firefox/ffavatars.mjs ./e2e/go.sh
 cd e2e && npx web-ext lint -s firefox/build
 ```
 

@@ -63,7 +63,7 @@ export async function run({
   script = path.resolve(E2E, process.env.SCRIPT || "run.mjs"),
   timeout = Number(process.env.TMO || 230),
   log = path.resolve(E2E, process.env.LOG || "run.log"),
-  ports = [8443, 8444, 8450, 8451, 8787, 8789, 8790, 8791, 8792, 8793, 8796, 8899],
+  ports = [8443, 8444, 8450, 8451, 8787, 8789, 8790, 8791, 8792, 8793, 8794, 8796, 8899],
   services = [
     { script: path.join(E2E, "fakesite.mjs"), cwd: E2E, log: path.join(E2E, "fake.log"), ports: [8443, 8444] },
     { script: path.join(SERVER_DIR, "server.js"), cwd: SERVER_DIR, log: SERVER_LOG, ports: [8787], env: { PORT: "8787" } },

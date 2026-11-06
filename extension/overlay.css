@@ -116,8 +116,8 @@ svg { width: 18px; height: 18px; display: block; }
 .np-section-label { padding: 4px 16px 6px; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
 .np-people { display: flex; gap: 12px; overflow-x: auto; padding: 10px 16px 12px; scrollbar-width: none; }
 .np-person { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; flex: none; }
-/* Profile pictures are emoji drawn by the system's colour emoji font (vector or 136 px+
-   bitmaps), so they stay sharp at any zoom or screen density; no raster images are scaled up. */
+/* Emoji profile pictures are drawn by the system's colour emoji font (vector or 136 px+ bitmaps), so
+   they stay sharp at any zoom; HD pictures are 128 px files and photos 96 px, shown at 44 px or less. */
 .np-emo { font-family: var(--emoji); font-style: normal; font-weight: 400; line-height: 1; -webkit-font-smoothing: antialiased; }
 .np-avatar {
   position: relative; width: 44px; height: 44px; border-radius: 50%;
@@ -468,19 +468,19 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .np-qbtn.np-qmore { font: inherit; font-size: 22px; font-weight: 400; color: var(--dim); }
 
 /* reply strip above the chat box */
-.np-replybar {
+.np-replybar, .np-editbar {
   display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 4px 4px 9px; border-left: 3px solid var(--accent);
   border-radius: 4px 10px 10px 4px; background: var(--card); font-size: 12px; color: var(--dim);
 }
-.np-replybar[hidden] { display: none; }
-.np-replybar > svg { width: 14px; height: 14px; flex: none; color: var(--accent2); }
+.np-replybar[hidden], .np-editbar[hidden] { display: none; }
+.np-replybar > svg, .np-editbar > svg { width: 14px; height: 14px; flex: none; color: var(--accent2); }
 .np-replybar-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .np-replybar-txt b { color: var(--text); font-weight: 600; }
-.np-replybar-x {
+.np-replybar-x, .np-editbar-x {
   flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--dim);
   display: grid; place-items: center; -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
 }
-.np-replybar-x svg { width: 13px; height: 13px; }
+.np-replybar-x svg, .np-editbar-x svg { width: 13px; height: 13px; }
 
 /* emoji search */
 /* the search box takes its room from the grid, so the picker is no taller than before (≈ 270 px) */
@@ -498,10 +498,10 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .np-for-msg .np-emo-tabs::before { content: "React"; align-self: center; padding: 0 6px; font-size: 12px; color: var(--accent2); white-space: nowrap; }
 
 /* soft touch */
-.np-act:active, .np-quote:active:not(.np-quote-noref), .np-rchip:active, .np-qbtn:active, .np-replybar-x:active { transform: scale(0.96); opacity: 0.8; }
+.np-act:active, .np-quote:active:not(.np-quote-noref), .np-rchip:active, .np-qbtn:active, .np-replybar-x:active, .np-editbar-x:active { transform: scale(0.96); opacity: 0.8; }
 @media (hover: hover) {
   .np-msg:hover .np-acts { display: flex; }
-  .np-act:hover, .np-replybar-x:hover { background: var(--card); color: var(--text); }
+  .np-act:hover, .np-replybar-x:hover, .np-editbar-x:hover { background: var(--card); color: var(--text); }
   .np-quote:hover:not(.np-quote-noref) { background: var(--hover); }
   .np-rchip:hover { border-color: var(--accent); }
   .np-qbtn:hover { background: var(--card); }
@@ -512,3 +512,147 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   .np-msg.np-flash .np-bubble { animation-duration: 0.01s; box-shadow: 0 0 0 3px var(--accent); }
   .np-quote.np-gone { animation: none; }
 }
+
+/* ---- 2.2: mentions, spoilers, edit / delete, pinned message, typing, waiting, settings */
+.np-act[hidden], .np-pin-x[hidden], .np-hold-btn[hidden] { display: none; }
+.np-act.np-on { color: var(--accent2); }
+.np-act-del.np-act-confirm { background: var(--bad-fill); color: #fff; }
+/* the bar grows toward the middle of the chat, so it never pokes out of it */
+.np-msg:not(.np-mine) .np-acts { right: auto; left: -4px; }
+.np-mine .np-acts { left: auto; right: -4px; }
+
+.np-mention { font-weight: 600; color: var(--accent2); }
+.np-mine .np-mention { color: #fff; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.np-mention-me { background: rgba(124, 92, 255, 0.24); border-radius: 4px; padding: 0 2px; }
+.np-msg.np-at-me .np-bubble { box-shadow: 0 0 0 2px var(--accent); }
+
+.np-spoiler {
+  display: inline-block; max-width: 100%; vertical-align: bottom; margin: 0; padding: 0 4px; border: 0; border-radius: 5px;
+  background: var(--hover); color: inherit; font: inherit; line-height: inherit; text-align: inherit; white-space: pre-wrap;
+  overflow-wrap: anywhere; cursor: pointer; transition: background 0.15s, transform 0.1s, opacity 0.1s;
+}
+.np-mine .np-spoiler { background: rgba(255, 255, 255, 0.22); }
+.np-spoiler-t { filter: blur(5px); user-select: none; transition: filter 0.2s; }
+.np-spoiler.np-shown { background: rgba(124, 92, 255, 0.16); }
+.np-spoiler.np-shown .np-spoiler-t { filter: none; user-select: text; }
+.np-spoiler:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.np-edited { font-size: calc(var(--np-fs) * 0.72); color: var(--dim); margin-left: 6px; white-space: nowrap; }
+.np-mine .np-edited { color: #f1eeff; }
+.np-bubble.np-deleted, .np-mine .np-bubble.np-deleted { background: none; border: 1px dashed var(--dash); color: var(--dim); font-style: italic; }
+.np-mine .np-deleted .np-time { color: var(--dim); }
+.np-quote-del, .np-quote-sp { font-style: italic; }
+
+/* pinned message bar above the chat */
+.np-pinbar {
+  display: flex; align-items: center; gap: 6px; min-width: 0; margin: 2px 16px 4px; padding: 3px 4px 3px 9px;
+  border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px 10px 10px 4px; background: var(--card); font-size: 12px;
+}
+.np-pinbar[hidden] { display: none; }
+.np-pin-icon { width: 14px; height: 14px; flex: none; color: var(--accent2); }
+.np-pin-txt {
+  flex: 1; min-width: 0; display: flex; gap: 5px; padding: 3px 0; border: 0; background: none; color: var(--text); font-size: 12px;
+  text-align: left; white-space: nowrap; overflow: hidden; transition: transform 0.1s, opacity 0.1s;
+}
+.np-pin-name { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.np-pin-s { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--dim); }
+.np-pin-sp { font-style: italic; }
+.np-pin-txt.np-gone { animation: np-nudge 0.35s; }
+.np-pin-x {
+  flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--dim);
+  display: grid; place-items: center; transition: transform 0.1s, opacity 0.1s;
+}
+.np-pin-x svg { width: 13px; height: 13px; }
+.np-camdock .np-pinbar { margin: 2px 12px 2px; }
+
+/* waiting for a member / someone dropped */
+.np-hold {
+  display: flex; align-items: center; gap: 8px; margin: 4px 16px 6px; padding: 7px 8px 7px 11px; border-radius: 10px;
+  border: 1px solid var(--accent); background: rgba(124, 92, 255, 0.14); color: var(--text); font-size: 13px; line-height: 1.35;
+}
+.np-hold[hidden] { display: none; }
+.np-hold-txt { flex: 1; min-width: 0; }
+.np-hold-btn { flex: none; margin: 0; }
+
+/* "Rahul is typing…" over the top edge of the composer (no layout jump) */
+.np-typing {
+  position: absolute; left: 16px; right: 16px; bottom: 100%; padding: 6px 0 3px; font-size: 12px; color: var(--dim);
+  background: linear-gradient(transparent, var(--bg) 45%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+}
+.np-typing[hidden] { display: none; }
+
+/* @mention suggestions */
+.np-mention-pop {
+  position: absolute; left: 10px; right: 10px; bottom: calc(100% + 4px); z-index: 6; display: flex; flex-direction: column; gap: 1px; padding: 4px;
+  background: var(--pop); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow);
+}
+.np-mention-pop[hidden] { display: none; }
+.np-mention-opt {
+  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: none;
+  color: var(--text); text-align: left; transition: transform 0.1s, opacity 0.1s;
+}
+.np-mention-opt.np-on { background: var(--card); }
+.np-mention-av { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: hsl(var(--h) 70% 82%); font-size: 14px; }
+.np-mention-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* settings switches */
+.np-set-pop { padding-bottom: 6px; }
+.np-switch {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; border: 0; background: none; color: var(--text);
+  text-align: left; transition: transform 0.1s, opacity 0.1s;
+}
+.np-switch-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.np-switch-label { font-size: 13px; font-weight: 600; }
+.np-switch small { font-size: 11.5px; line-height: 1.3; color: var(--dim); }
+.np-switch-track { flex: none; position: relative; width: 34px; height: 20px; border-radius: 999px; background: var(--round); box-shadow: inset 0 0 0 1px var(--line); transition: background 0.15s; }
+.np-switch-track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); transition: transform 0.15s;
+}
+.np-switch[aria-checked="true"] .np-switch-track { background: var(--fill); box-shadow: none; }
+.np-switch[aria-checked="true"] .np-switch-track::after { transform: translateX(14px); }
+.np-switch:focus-visible, .np-mention-opt:focus-visible, .np-pin-txt:focus-visible, .np-pin-x:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* a mention of you, while the chat is closed */
+.np-badge.np-badge-at { background: var(--fill); box-shadow: 0 0 0 2px #fff; }
+.np-toast.np-toast-at { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 6px 22px var(--shadow); }
+
+/* soft touch */
+.np-spoiler:active, .np-pin-txt:active, .np-pin-x:active, .np-mention-opt:active, .np-switch:active { transform: scale(0.96); opacity: 0.8; }
+@media (hover: hover) {
+  .np-pin-x:hover, .np-mention-opt:hover { background: var(--card); color: var(--text); }
+  .np-pin-txt:hover .np-pin-s { color: var(--text); }
+  .np-switch:hover { background: var(--card); }
+  .np-spoiler:not(.np-shown):hover { background: var(--round-hover); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-spoiler, .np-spoiler-t, .np-pin-txt, .np-pin-x, .np-mention-opt, .np-switch, .np-switch-track, .np-switch-track::after { transition: none; }
+  .np-spoiler:active, .np-pin-txt:active, .np-pin-x:active, .np-mention-opt:active, .np-switch:active { transform: none; }
+  .np-pin-txt.np-gone { animation: none; }
+}
+
+/* ---- 2.2 HD pictures and your own photo (an <img>, or a <canvas> where the site's CSP blocks images),
+   drawn inside the same circles as the emoji pictures */
+.np-pic { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; pointer-events: none; user-select: none; -webkit-user-drag: none; }
+.np-pic-hd .np-pic { width: 86%; height: 86%; margin: 7%; object-fit: contain; border-radius: 0; }
+.np-avatar-pic.np-pic-img, .np-opt-pic, .np-up-pic { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 50%; overflow: hidden; }
+.np-mav.np-pic-img, .np-mention-av.np-pic-img { overflow: hidden; }
+.np-cam-pic.np-pic-img .np-pic { width: clamp(34px, calc(var(--tw, 160px) * 0.34), 120px); height: auto; aspect-ratio: 1; margin: 0; }
+.np-cam-pic.np-pic-hd .np-pic { border-radius: 0; }
+.np-cam-pic.np-pic-photo .np-pic { border-radius: 50%; }
+.np-avatar-pop .np-avatar-scroll { overflow-y: auto; min-height: 0; flex: 1 1 auto; max-height: 330px; scrollbar-width: thin; }
+.np-hd-grid { padding-bottom: 6px; }
+.np-avatar-hd { overflow: hidden; }
+.np-photo-row { display: flex; gap: 6px; padding: 6px 10px 2px; flex-wrap: wrap; }
+.np-photo-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 12px 3px 3px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: 12px;
+  -webkit-tap-highlight-color: transparent; transition: transform 0.1s, opacity 0.1s;
+}
+.np-photo-btn:active { transform: scale(0.96); opacity: 0.8; }
+.np-photo-btn.np-photo-remove { padding: 3px 12px; }
+.np-photo-btn[hidden] { display: none; }
+.np-photo-btn.np-on { border-color: var(--accent); }
+.np-photo-btn .np-up-pic { width: 26px; height: 26px; flex: none; background: var(--card2); font-size: 15px; }
+.np-photo-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) { .np-photo-btn:hover { border-color: var(--accent); } }

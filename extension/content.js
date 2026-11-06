@@ -1,4 +1,4 @@
-// NetParty content script (Netflix, JioHotstar, YouTube, Prime Video, and since 2.0 any page the user chose
+// NetParty content script (Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll, SonyLIV, and since 2.0 any page the user chose
 // to sync: see anyvideo.js). Owns: the party connection, clock sync, playback sync, text chat (emoji, GIFs, links),
 // reactions, voice and video chat (WebRTC mesh) and the in-page overlay.
 (() => {
@@ -22,6 +22,9 @@
   // "yt:" + the YouTube video id ("yt:dQw4w9WgXcQ", from /watch?v=…),
   // or "pv:" + the Prime Video title page ("pv:www.primevideo.com/detail/<id>",
   // "pv:www.amazon.co.uk/gp/video/detail/<ASIN>"), while its player is open,
+  // "hm:" + the HBO Max watch ids ("hm:<uuid>" or "hm:<uuid>/<uuid>", from play.hbomax.com/video/watch/…, 2.2),
+  // "cr:" + the Crunchyroll episode id ("cr:GY0973WVY", from www.crunchyroll.com/watch/<id>/<slug>, 2.2),
+  // "sl:" + the SonyLIV title path ("sl:/shows/<show>-<id>/<episode>-<id>", "sl:/movies/<slug>-<id>", 2.2),
   // or "av:" + 16 random characters for a video on any other page (2.0). An "av:" id names no site and is
   // never turned into a link: the page's address travels end-to-end encrypted ("page", see anyPage).
   // Same shapes as validVideoId in server/core.js: anything else is never turned into a link.
@@ -30,12 +33,18 @@
     ...["com", "co.uk", "de", "co.jp", "in", "ca", "com.au", "fr", "it", "es", "com.br", "com.mx", "nl"].map((t) => "www.amazon." + t),
   ];
   const PV_RE = /^pv:([a-z0-9.-]+)(\/(?:detail|dp|gp\/video\/detail)\/[A-Za-z0-9._-]{6,100})$/;
+  const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  const HM_RE = new RegExp(`^hm:${UUID}(\\/${UUID})?$`);
+  const SL_RE = /^sl:\/(shows|sports|movies|clip|trailer|music-videos)(\/[a-z0-9-]{1,120}-\d{4,})?\/[a-z0-9-]{0,120}-?\d{5,}$/;
   function validVideoId(v) {
     if (typeof v !== "string" || !v || v.length > 512) return false;
     if (/^\d{1,12}$/.test(v)) return true;
     if (v.startsWith("yt:")) return /^yt:[A-Za-z0-9_-]{11}$/.test(v);
     if (v.startsWith("av:")) return /^av:[A-Za-z0-9_-]{16}$/.test(v);
     if (v.startsWith("hs:")) return /^hs:(\/[A-Za-z0-9._~%-]+)+\/\d{5,}\/watch$/.test(v);
+    if (v.startsWith("hm:")) return HM_RE.test(v);
+    if (v.startsWith("cr:")) return /^cr:[A-Z0-9]{6,16}$/.test(v);
+    if (v.startsWith("sl:")) return SL_RE.test(v);
     const pv = PV_RE.exec(v);
     if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
     return false;
@@ -46,7 +55,19 @@
   const IS_HOTSTAR = !IS_ANY && /(^|\.)(jio)?hotstar\.com$/.test(location.hostname);
   const IS_YT = !IS_ANY && /(^|\.)youtube\.com$/.test(location.hostname);
   const IS_PRIME = !IS_ANY && PRIME_HOSTS.includes(location.hostname);
-  const SITE_NAME = IS_ANY ? "this page" : IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : "Netflix";
+  // 2.2: HBO Max (play.hbomax.com; play.max.com is its old address), Crunchyroll, SonyLIV
+  const IS_HBO = !IS_ANY && (location.hostname === "play.hbomax.com" || location.hostname === "play.max.com");
+  const IS_CR = !IS_ANY && location.hostname === "www.crunchyroll.com";
+  const IS_SL = !IS_ANY && location.hostname === "www.sonyliv.com";
+  const SITE_NAME = IS_ANY ? "this page" : IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : IS_HBO ? "HBO Max" : IS_CR ? "Crunchyroll" : IS_SL ? "SonyLIV" : "Netflix";
+  // sites whose <video> NetParty drives straight from here (no page script): YouTube, Prime Video, HBO Max, SonyLIV
+  const DIRECT = IS_YT || IS_PRIME || IS_HBO || IS_SL;
+  // the biggest <video> showing on the page (players keep spare or preview <video>s around)
+  const shownVideos = () =>
+    [...document.querySelectorAll("video")].filter((v) => {
+      const r = v.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
   const largest = (vids) => {
     if (vids.length < 2) return vids[0] || null;
     const area = (v) => {
@@ -86,6 +107,13 @@
     const m = p.match(/\/gp\/video\/detail\/([A-Za-z0-9._-]{6,100})(?=\/|$)/);
     return m ? `/gp/video/detail/${m[1]}` : null;
   }
+  // SonyLIV: title pages and the player share one address (the player adds ?watch=true); a page counts as the
+  // player while it says so in the address or a big <video> is showing
+  const slPlayerOpen = () =>
+    new URLSearchParams(location.search).get("watch") === "true" || shownVideos().some((v) => v.getBoundingClientRect().width >= innerWidth * 0.6);
+  // Crunchyroll: the episode's player is an iframe from static.crunchyroll.com (its "vilos" player); a newer
+  // player may put the <video> in the page itself. Both work.
+  const crFrameEl = () => document.querySelector('iframe[src*="//static.crunchyroll.com/"]');
   const videoIdFromUrl = () => {
     // any page: the party's own id (or a placeholder before there is one). The page counts as the
     // "watch page" for as long as NetParty runs on it; the video itself is found by anyV.
@@ -94,6 +122,20 @@
       const t = primeTitlePath();
       const v = t && "pv:" + location.hostname + t;
       return v && validVideoId(v) && primePlayer() ? v : null;
+    }
+    if (IS_HBO) {
+      const m = location.pathname.match(/^\/video\/watch\/([0-9a-f-]{36})(?:\/([0-9a-f-]{36}))?\/?$/);
+      const v = m && "hm:" + m[1] + (m[2] ? "/" + m[2] : "");
+      return v && validVideoId(v) ? v : null;
+    }
+    if (IS_CR) {
+      // /watch/<id>/<slug>, also under a language prefix (/fr/watch/…, /pt-br/watch/…)
+      const m = location.pathname.match(/^(?:\/[a-z]{2}(?:-[a-z]{2,4})?)?\/watch\/([A-Z0-9]{6,16})(?:\/|$)/);
+      return m ? "cr:" + m[1] : null;
+    }
+    if (IS_SL) {
+      const v = "sl:" + location.pathname.replace(/\/+$/, "");
+      return validVideoId(v) && slPlayerOpen() ? v : null;
     }
     if (IS_YT) {
       if (location.pathname !== "/watch") return null; // Shorts, live chat pop-outs etc. aren't supported
@@ -106,7 +148,15 @@
   };
   // compare by content id so slug, language-prefix or store differences don't matter
   const videoKey = (v) =>
-    v && v.startsWith("hs:") ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1] : v && v.startsWith("pv:") ? "pv:" + v.split("/").pop() : v;
+    v && v.startsWith("hs:")
+      ? "hs:" + (v.match(/(\d+)\/watch$/) || [])[1]
+      : v && v.startsWith("pv:")
+        ? "pv:" + v.split("/").pop()
+        : v && v.startsWith("hm:")
+          ? v.slice(0, 39) // the first id names the episode
+          : v && v.startsWith("sl:")
+            ? "sl:" + (v.match(/(\d+)$/) || [])[1]
+            : v;
   const sameVideo = (a, b) => (IS_ANY ? isAv(b) : videoKey(a) === videoKey(b));
   // null for anything that isn't a known title shape (a party member can't send us elsewhere)
   const watchUrl = (videoId, roomId) => {
@@ -115,11 +165,31 @@
     if (videoId.startsWith("yt:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${roomId}`;
     // Prime Video: autoplay=1 opens the player on the title page
     if (videoId.startsWith("pv:")) return `https://${videoId.slice(3)}?autoplay=1&npParty=${roomId}`;
+    if (videoId.startsWith("hm:")) return `https://play.hbomax.com/video/watch/${videoId.slice(3)}?npParty=${roomId}`;
+    if (videoId.startsWith("cr:")) return `https://www.crunchyroll.com/watch/${videoId.slice(3)}?npParty=${roomId}`;
+    if (videoId.startsWith("sl:")) return `https://www.sonyliv.com${videoId.slice(3)}?watch=true&npParty=${roomId}`;
     return (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) + `?npParty=${roomId}`;
   };
-  const HAS_ADS = IS_YT || IS_PRIME;
+  const HAS_ADS = IS_YT || IS_PRIME || IS_HBO || IS_CR || IS_SL;
+  // an ad marker that is on screen and says something (players keep empty ad containers around)
+  const shownAd = (sel, root = document) =>
+    [...root.querySelectorAll(sel)].some((n) => {
+      const r = n.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) return false;
+      const cs = getComputedStyle(n);
+      return cs.display !== "none" && cs.visibility !== "hidden" && parseFloat(cs.opacity || "1") > 0.05 && (!!n.textContent.trim() || !!n.querySelector("video, iframe"));
+    });
+  // 2.2 ad markers. HBO Max (ad tiers): the player's ad badge / countdown. SonyLIV: Google IMA's ad layer over the
+  // player. Crunchyroll: reported by the player frame (see anyvideo.js), or the same markers in the page.
+  // Built from public page structure and checked against test pages only (we can't sign in to these services).
+  const HBO_AD = '[data-testid*="ad-badge" i], [data-testid*="ad_badge" i], [data-testid*="ad-countdown" i], [class*="AdBadge"], [class*="AdCountdown"]';
+  const SL_AD = ".ima-ad-container, .videoAdUi, [class*=\"ad-break-overlay\" i], [data-testid*=\"ad-break\" i]";
+  const CR_AD = '[data-testid*="ad-indicator" i], [class*="ad-indicator" i], [title="Advertisement"]';
   // YouTube and Prime Video play ads in the main player: no sync while one is on screen
   const adPlaying = () => {
+    if (IS_HBO) return shownAd(HBO_AD);
+    if (IS_SL) return shownAd(SL_AD);
+    if (IS_CR) return crFrame.ad || shownAd(CR_AD);
     if (IS_PRIME) {
       // Prime's player shows an ad countdown ("Ad 0:15") during ad breaks
       const box = primePlayer()?.box;
@@ -146,6 +216,15 @@
     } else if (IS_YT) {
       t = document.querySelector("ytd-watch-metadata h1, h1.ytd-watch-metadata, #above-the-fold #title h1")?.textContent || "";
       if (!t.trim()) t = document.title.replace(/^\(\d+\)\s*/, "").replace(/\s*-\s*YouTube\s*$/i, "");
+    } else if (IS_HBO) {
+      t = document.querySelector('[data-testid="player-ux-asset-title"], [class^="Title-Beam-Web-Ent"]')?.textContent || "";
+      if (!t.trim()) t = document.title.replace(/\s*[|•–-]\s*(HBO\s*)?Max.*$/i, "").replace(/^(HBO\s*)?Max$/i, "");
+    } else if (IS_CR) {
+      t = document.querySelector('[data-t="episode-title"], h1.title, .erc-current-media-info h1')?.textContent || "";
+      if (!t.trim()) t = (document.querySelector('meta[property="og:title"]')?.content || document.title || "").replace(/^watch\s+/i, "").replace(/\s*[|–-]\s*crunchyroll.*$/i, "");
+    } else if (IS_SL) {
+      t = document.querySelector('[class*="playerTitle"], [class*="player-title"], [class*="contentTitle"]')?.textContent || "";
+      if (!t.trim()) t = (document.querySelector('meta[property="og:title"]')?.content || document.title || "").replace(/^watch\s+(latest\s+)?/i, "").replace(/\s*(full\s+hd\s+)?(movie|episode|tv series|tv show)?\s*online.*$/i, "").replace(/\s*[|–-]\s*sony\s*liv.*$/i, "");
     } else if (IS_HOTSTAR) {
       t = document.querySelector('meta[property="og:title"]')?.content || document.title || "";
       t = t.split(/\s[|–-]\s/)[0].replace(/^watch\s+/i, "").replace(/\s+(full\s+)?(movie|episode|season\s*\d*)?\s*online.*$/i, "");
@@ -165,7 +244,8 @@
     return titleCache.title;
   };
   // the main player <video>: skip tiny previews/ads by preferring the largest one on screen
-  const mainVideo = () => (IS_ANY ? anyV.video : IS_PRIME ? primePlayer()?.video || null : largest([...document.querySelectorAll("video")]));
+  const mainVideo = () =>
+    IS_ANY ? anyV.video : IS_PRIME ? primePlayer()?.video || null : IS_CR ? crFrame.topVideo() : DIRECT && !IS_YT ? largest(shownVideos()) : largest([...document.querySelectorAll("video")]);
   const fmt = (ms) => {
     const t = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
@@ -200,7 +280,9 @@
   // same limits as the server (server/core.js): ciphertext length for chat / profile / reaction / signal
   const ctChars = (n) => Math.ceil(((1 + 12 + 16 + n) * 4) / 3);
   const pad64 = (n) => Math.ceil(n / 64) * 64;
-  const CT_MAX = { chat: ctChars(pad64(500 * 6 + 64)), profile: ctChars(pad64(24 * 2 * 6 + 16 * 6 + 64)), react: ctChars(pad64(16 * 6 + 32)), signal: 32768 };
+  // profile (2.2): { name, avatar (emoji), hd? ("av:<slug>"), img? (a data: photo up to IMG_MAX characters) }
+  const IMG_MAX = 12400;
+  const CT_MAX = { chat: ctChars(pad64(500 * 6 + 64)), profile: ctChars(pad64(24 * 2 * 6 + 16 * 6 + 64 + 64 + IMG_MAX + 64)), react: ctChars(pad64(16 * 6 + 32)), signal: 32768 };
   const e2e = (() => {
     const enc = new TextEncoder();
     const b64u = (bytes) => {
@@ -298,6 +380,12 @@
     return true;
   }
   const cleanAvatar = (a) => (AVATAR_LIST.includes(a) || isSingleEmoji(a, 8) ? a : null);
+  // 2.2 HD pictures: "av:<slug>" of a bundled file (avatars/av-<slug>.webp), nothing else
+  const HD = new Map((globalThis.NP_EMOJI?.hd || []).map((x) => [x.id, x]));
+  const cleanHd = (a) => (typeof a === "string" && a.startsWith("av:") && HD.has(a.slice(3)) ? a : null);
+  // 2.2 profile photo: a small data: image (WebP / JPEG / PNG), never a URL; it's decoded before it's shown
+  const IMG_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/]+={0,2}$/;
+  const cleanImg = (s) => (typeof s === "string" && s.length <= IMG_MAX && IMG_RE.test(s) ? s : null);
   // names: no control or invisible direction characters, one line, at most 24 characters
   const cleanName = (s) =>
     typeof s === "string" ? [...s.replace(/[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu, "").replace(/\s+/g, " ").trim()].slice(0, 24).join("") : "";
@@ -325,11 +413,13 @@
   // one line of text for a reply quote: no control or invisible characters, at most 80 characters
   const cleanSnippet = (s) =>
     typeof s === "string" ? [...s.replace(/[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu, " ").replace(/\s+/g, " ").trim()].slice(0, SNIPPET).join("") : "";
-  // a reply's quote: { id?, uid?, name?, s, g? } (g: the quoted line was a GIF)
+  // a reply's quote: { id?, uid?, name?, s, g?, sp? } (g: the quoted line was a GIF; sp (2.2): it had a
+  // spoiler, so the quote only says "Spoiler")
   function cleanRe(r) {
     if (!r || typeof r !== "object" || Array.isArray(r)) return null;
     const g = r.g === 1 || r.g === true;
-    const s = g ? "" : cleanSnippet(r.s);
+    const sp = !g && (r.sp === 1 || r.sp === true);
+    const s = g ? "" : sp ? "Spoiler" : cleanSnippet(r.s);
     if (!g && !s) return null;
     return {
       id: MID_RE.test(r.id || "") ? r.id : null,
@@ -337,8 +427,53 @@
       name: cleanName(r.name) || null,
       s,
       g,
+      sp,
     };
   }
+  // ---- 2.2: @mentions, spoilers, edits and deletes, all inside the encrypted chat line.
+  // A mention { p, i, n }: the "@Name" at text[i, i + n) as it was typed names member p (shown with p's current
+  // name). A spoiler { i, n, s }: the "[spoiler]" placeholder at text[i, i + n) stands for the hidden text s, so
+  // clients older than 2.2 show "[spoiler]" and never the hidden text. Edits { t: "me", id, text, mn?, sp? } and
+  // deletes { t: "md", id } only count when they come from the line's own sender (the pid the ciphertext is
+  // bound to); older clients drop both without showing anything.
+  const SP_PH = "[spoiler]";
+  const PID_RE = /^[a-z0-9]{1,16}$/;
+  function cleanMarks(text, p) {
+    const out = {};
+    const taken = [];
+    const free = (i, n) => !taken.some(([a, b]) => i < b && a < i + n);
+    if (Array.isArray(p.sp)) {
+      const sp = [];
+      for (const x of p.sp.slice(0, 10)) {
+        if (!x || !Number.isInteger(x.i) || x.i < 0 || x.n !== SP_PH.length || text.substr(x.i, x.n) !== SP_PH || typeof x.s !== "string" || !free(x.i, x.n)) continue;
+        const hid = x.s.trim().slice(0, 500);
+        if (!hid) continue;
+        sp.push({ i: x.i, n: x.n, s: hid });
+        taken.push([x.i, x.i + x.n]);
+      }
+      if (sp.length) out.sp = sp;
+    }
+    if (Array.isArray(p.mn)) {
+      const mn = [];
+      for (const x of p.mn.slice(0, 10)) {
+        if (!x || !Number.isInteger(x.i) || !Number.isInteger(x.n) || x.i < 0 || x.n < 2 || x.n > 25 || x.i + x.n > text.length || text[x.i] !== "@") continue;
+        if (typeof x.p !== "string" || !PID_RE.test(x.p) || !free(x.i, x.n)) continue;
+        mn.push({ p: x.p, i: x.i, n: x.n });
+        taken.push([x.i, x.i + x.n]);
+      }
+      if (mn.length) out.mn = mn;
+    }
+    return out;
+  }
+  // the text as it was typed (spoilers back between ||…||), to edit it
+  const rawText = (text, sp) => {
+    let out = "", at = 0;
+    for (const x of [...(sp || [])].sort((a, b) => a.i - b.i)) {
+      out += text.slice(at, x.i) + "||" + x.s + "||";
+      at = x.i + x.n;
+    }
+    return out + text.slice(at);
+  };
   // decrypted chat payload -> { text } or { gif: { url, w, h } } (plus mid / re), a message reaction
   // { mr: { id, e, on } }, or null if it isn't valid. 2.0.x clients only know "text" and "gif" and
   // ignore the extra fields, and drop "mr" lines entirely.
@@ -353,12 +488,31 @@
     if (p?.t === "gif") return isKlipyMediaUrl(p.url) ? { gif: { url: p.url, w: dim(p.w), h: dim(p.h) }, ...extra() } : null;
     if (p?.t === "text" && typeof p.text === "string") {
       const text = p.text.trim().slice(0, 500);
-      return text ? { text, ...extra() } : null;
+      return text ? { text, ...cleanMarks(text, p), ...extra() } : null;
     }
+    if (p?.t === "me" && MID_RE.test(p.id || "") && typeof p.text === "string") {
+      const text = p.text.trim().slice(0, 500);
+      return text ? { me: { id: p.id, text, ...cleanMarks(text, p) } } : null;
+    }
+    if (p?.t === "md") return MID_RE.test(p.id || "") ? { md: { id: p.id } } : null;
     if (p?.t === "mr") return MID_RE.test(p.id || "") && isSingleEmoji(p.e, 16) && typeof p.on === "boolean" ? { mr: { id: p.id, e: p.e, on: p.on } } : null;
     return null;
   }
-  const cleanProfile = (p) => ({ name: cleanName(p?.name) || "Guest", avatar: cleanAvatar(p?.avatar) });
+  // 2.1 and older read only { name, avatar }: avatar stays an emoji (the HD picture's closest one)
+  const cleanProfile = (p) => {
+    const hd = cleanHd(p?.hd) || cleanHd(p?.avatar);
+    return { name: cleanName(p?.name) || "Guest", avatar: cleanAvatar(p?.avatar) || (hd ? HD.get(hd.slice(3)).emoji : null), hd, img: cleanImg(p?.img) };
+  };
+  // our own: chrome.storage.sync avatar (an emoji or "av:<slug>") + chrome.storage.local avatarPhoto
+  let mineMemo = null;
+  function myPic() {
+    const k = party.avatar + "|" + (party.photo ? party.photo.length + party.photo.slice(-24) : "");
+    if (mineMemo?.k !== k) {
+      const hd = cleanHd(party.avatar);
+      mineMemo = { k, avatar: hd ? HD.get(hd.slice(3)).emoji : cleanAvatar(party.avatar), hd, img: cleanImg(party.photo) };
+    }
+    return mineMemo;
+  }
 
   // room keys for this tab (kept by the background in chrome.storage.session)
   const keys = {
@@ -533,6 +687,7 @@
         function onFrame(m) {
           if (m.op === "hello") {
             if (cur) return; // a video in this page wins
+            if (m.again && agent && agent.frameId === m.frameId) return; // the agent we drive, still there (2.2 heartbeat)
             const f = lib.candidates().frames.find((x) => x.origin === m.origin);
             agent = { frameId: m.frameId, origin: m.origin, el: f?.el || null, chain: f?.chain || [] };
             frameHint = null;
@@ -563,6 +718,7 @@
               position: Math.round((x.currentTime || 0) * 1000),
               playing: !x.paused,
               buffering: x.readyState < 3 && !x.paused,
+              ready: x.readyState >= 3,
               duration: x.duration === Infinity ? -1 : Math.round((x.duration || 0) * 1000),
               live: x.duration === Infinity,
             };
@@ -571,7 +727,7 @@
           const r = await toAgent({ op: "status" });
           if (!r || !Number.isFinite(r.position)) return null;
           lastDur = r.live ? Infinity : r.duration > 0 ? r.duration / 1000 : NaN;
-          return { position: r.position, playing: !!r.playing, buffering: !!r.buffering, duration: r.duration, live: !!r.live };
+          return { position: r.position, playing: !!r.playing, buffering: !!r.buffering, ready: r.ready !== false, duration: r.duration, live: !!r.live };
         }
         async function setRate(r, nudge) {
           if (cur?.v) cur.v.playbackRate = r;
@@ -613,6 +769,15 @@
           resetAsk: () => (pickerShown = false),
           status,
           seek: async (ms) => (cur?.v ? (cur.v.currentTime = Math.max(0, ms) / 1000) : toAgent({ op: "seek", position: ms })),
+          // 2.2 auto-duck: read or set (0..1) the video's volume
+          async volume(v) {
+            if (cur?.v) {
+              if (Number.isFinite(v)) cur.v.volume = Math.min(1, Math.max(0, v));
+              return cur.v.volume;
+            }
+            const r = await toAgent({ op: "vol", vol: Number.isFinite(v) ? v : undefined });
+            return Number.isFinite(r?.vol) ? r.vol : null;
+          },
           play: async () => (cur?.v ? cur.v.play()?.catch(() => {}) : toAgent({ op: "play" })),
           pause: async () => (cur?.v ? cur.v.pause() : toAgent({ op: "pause" })),
           // the party's speed (from a remote update); also ends any nudge
@@ -708,26 +873,89 @@
   // live stream on either side: only play and pause are synced
   const anyLive = () => IS_ANY && (anyV.live || party.page?.d === -1);
 
+  // ------------------------------------------- Crunchyroll's player frame (2.2)
+  // The episode plays in an iframe from static.crunchyroll.com. The manifest puts anyvideo.js into that frame
+  // (all_frames), where it runs as the same small agent "Sync any video" uses for cross-origin players: it
+  // finds the frame's <video> and this script drives it through the extension's background (never through
+  // the page's own messaging). If a newer player puts the <video> in the page itself, that one is used.
+  const crFrame = (() => {
+    let agent = null; // { frameId }
+    let ad = false;
+    const toAgent = (m) => (agent ? chrome.runtime.sendMessage({ cmd: "npAgent", frameId: agent.frameId, ...m }).catch(() => null) : Promise.resolve(null));
+    const topVideo = () => (IS_CR ? largest(shownVideos().filter((v) => v.getBoundingClientRect().width >= 200)) : null);
+    // keep the frame's ad flag fresh (sync stops asking the player for its position while an ad shows)
+    if (IS_CR) setInterval(() => agent && !topVideo() && api.status(), 1000);
+    const api = {
+      topVideo,
+      get ad() {
+        return ad;
+      },
+      get ready() {
+        return !!agent || !!topVideo();
+      },
+      onFrame(m) {
+        if (!IS_CR || m.origin !== "https://static.crunchyroll.com") return;
+        if (m.op === "hello") {
+          if (agent && agent.frameId === m.frameId) return; // a heartbeat from the frame we already drive
+          agent = { frameId: m.frameId };
+          ad = false;
+          setTimeout(() => party.roomId && party.state && applyRemote(party.state, "attach"), 300);
+          return;
+        }
+        if (!agent || m.frameId !== agent.frameId || topVideo()) return;
+        if (m.op === "lost") return void (agent = null);
+        if (m.op === "event" && (m.kind === "play" || m.kind === "pause" || m.kind === "seeked")) onLocalPlayerEvent(m.kind);
+      },
+      async status() {
+        const r = await toAgent({ op: "status" });
+        if (!r || !Number.isFinite(r.position)) return null;
+        ad = !!r.ad;
+        return { position: r.position, playing: !!r.playing, buffering: !!r.buffering, ready: r.ready !== false, duration: r.duration };
+      },
+      seek: (ms) => toAgent({ op: "seek", position: ms }),
+      play: () => toAgent({ op: "play" }),
+      pause: () => toAgent({ op: "pause" }),
+      async volume(v) {
+        const r = await toAgent({ op: "vol", vol: Number.isFinite(v) ? v : undefined });
+        return Number.isFinite(r?.vol) ? r.vol : null;
+      },
+    };
+    return api;
+  })();
+
   // ------------------------------------------------- page-context bridge
+  // status() -> { position (ms), playing, buffering, ready (enough data to play on), duration } or null
   const bridge = (() => {
     if (IS_ANY) return { status: () => anyV.status(), seek: (ms) => anyV.seek(ms), play: () => anyV.play(), pause: () => anyV.pause() };
     // YouTube: a plain HTML5 <video> in #movie_player, driven straight from here. (No page
     // script needed, which matters because youtube.com enforces a nonce-based script-src.)
-    // Prime Video: the HTML5 <video> in its overlay player, the same way.
-    if (IS_YT || IS_PRIME) {
+    // Prime Video: the HTML5 <video> in its overlay player, the same way. HBO Max and SonyLIV (2.2): the
+    // biggest <video> on screen. Crunchyroll (2.2): the <video> in the page if there is one, else the
+    // player frame's (crFrame).
+    if (DIRECT || IS_CR) {
       const v = IS_PRIME
         ? () => primePlayer()?.video || null
-        : () => document.querySelector("#movie_player video.html5-main-video") || document.querySelector("#movie_player video") || mainVideo();
+        : IS_YT
+          ? () => document.querySelector("#movie_player video.html5-main-video") || document.querySelector("#movie_player video") || mainVideo()
+          : () => mainVideo();
       const status = () => {
         const x = v();
-        if (!x) return null;
+        if (!x) return IS_CR ? crFrame.status() : null;
         return {
           position: Math.round((x.currentTime || 0) * 1000),
           playing: !x.paused,
           buffering: x.readyState < 3 && !x.paused,
+          ready: x.readyState >= 3,
           duration: Math.round((x.duration || 0) * 1000),
         };
       };
+      if (IS_CR)
+        return {
+          status: async () => status(),
+          seek: async (ms) => (v() ? (v().currentTime = Math.max(0, ms) / 1000) : crFrame.seek(ms)),
+          play: async () => (v() ? await v().play()?.catch(() => {}) : crFrame.play()),
+          pause: async () => (v() ? v().pause() : crFrame.pause()),
+        };
       return {
         status: async () => status(),
         seek: async (position) => {
@@ -956,7 +1184,8 @@
     profiles: new Map(), // pid -> { name, avatar } (decrypted)
     profileCt: new Map(), // pid -> the ciphertext it came from
     name: "Guest",
-    avatar: null,
+    avatar: null, // an emoji or "av:<slug>" (2.2)
+    photo: null, // 2.2: your own photo (data: WebP / JPEG), kept in chrome.storage.local
     serverUrl: "wss://netparty.tech",
     error: null,
   };
@@ -971,16 +1200,24 @@
     st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) * (Number.isFinite(st.rate) && st.rate > 0 ? st.rate : 1) : 0);
 
   async function loadPrefs() {
-    const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions", "theme"]);
+    const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions", "theme", ...PREF_KEYS]);
+    for (const k of PREF_KEYS) prefs[k] = p[k] !== false;
     party.serverUrl = p.serverUrl || party.serverUrl;
     party.name = p.name || party.name;
     party.avatar = p.avatar || null;
+    party.photo = (await chrome.storage.local.get("avatarPhoto").catch(() => ({}))).avatarPhoto || null;
     ui.setFont(p.chatFont);
     ui.setReactions(p.reactions);
     ui.setTheme(p.theme);
   }
 
   chrome.storage.onChanged.addListener((ch, area) => {
+    if (area === "local" && ch.avatarPhoto) {
+      party.photo = ch.avatarPhoto.newValue || null;
+      sendProfile();
+      ui.render();
+      ui.refreshNames();
+    }
     if (area !== "sync") return;
     if (ch.name) {
       party.name = ch.name.newValue || "Guest";
@@ -991,11 +1228,15 @@
       party.avatar = ch.avatar.newValue || null;
       sendProfile();
       ui.render();
+      ui.refreshNames();
     }
     if (ch.chatFont) ui.setFont(ch.chatFont.newValue);
     if (ch.theme) ui.setTheme(ch.theme.newValue);
     if (ch.reactions) ui.setReactions(ch.reactions.newValue);
     if (ch.serverUrl) party.serverUrl = ch.serverUrl.newValue;
+    let pref = false;
+    for (const k of PREF_KEYS) if (ch[k]) (prefs[k] = ch[k].newValue !== false), (pref = true);
+    if (pref) ui.prefsChanged();
   });
 
   async function ensureConnected() {
@@ -1025,16 +1266,23 @@
     return p;
   };
 
-  // our encrypted { name, avatar }, sent after every join and whenever it changes
+  // our encrypted { name, avatar, hd?, img? }, sent after every join and whenever it changes
   async function sendProfile() {
     if (!party.roomId || !party.me || !e2e.ready) return;
-    const mine = { name: cleanName(party.name) || "Guest", avatar: cleanAvatar(party.avatar) };
+    const pic = myPic();
+    const mine = { name: cleanName(party.name) || "Guest", avatar: pic.avatar, ...(pic.hd ? { hd: pic.hd } : {}), ...(pic.img ? { img: pic.img } : {}) };
     party.profiles.set(party.me, mine);
-    try {
-      const ct = await e2e.seal("profile", party.me, mine);
-      if (ct.length > CT_MAX.profile) return;
-      await net.request("profile", { ct });
-    } catch {}
+    for (const p of pic.img ? [mine, { ...mine, img: undefined }] : [mine]) {
+      try {
+        const ct = await e2e.seal("profile", party.me, p);
+        if (ct.length > CT_MAX.profile) continue;
+        await net.request("profile", { ct });
+        return;
+      } catch (e) {
+        // a server from before 2.2 refuses a profile with a photo: send it without one
+        if (!/Bad profile/.test(String(e?.message || e))) return;
+      }
+    }
   }
   // the party's info from a peek/join/create reply: is it encrypted, and is our key its key?
   async function verifyParty(info, key) {
@@ -1125,7 +1373,9 @@
       throw e;
     }
     if (!snap.returning) ui.system("You joined the party.");
-    await applyRemote(snap.state, "join");
+    // the newest state: a playback update that arrived while joining (2.2: e.g. the party playing on again right
+    // after pausing for this member's drop-out) wins over the snapshot's
+    await applyRemote(party.roomId === snap.roomId && party.state ? party.state : snap.state, "join");
     // came back after an episode change with voice on: reconnect voice too
     if (sessionStorage.getItem("netpartyVoice")) voice.join().catch(() => {});
     return snap;
@@ -1159,6 +1409,8 @@
     }
     party.profiles.clear();
     party.profileCt.clear();
+    hold.reset();
+    typing.reset();
     e2e.clear();
     net.stop();
     for (const k of ["netpartyRoom", "netpartyVoice", "netpartyPanel"]) sessionStorage.removeItem(k);
@@ -1230,11 +1482,21 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     const c = cleanChat(p);
     if (!c) return null;
     if (c.mr) return { kind: "mr", from: h.from, ts: h.ts, ...c.mr };
+    if (c.me) return { kind: "me", from: h.from, ts: h.ts, ...c.me };
+    if (c.md) return { kind: "md", from: h.from, ts: h.ts, ...c.md };
     return { kind: "chat", id: h.from, ts: h.ts, ...c, mid: c.mid || ctMid(h.ct) };
   }
 
   // A create/join/rejoin reply: the party, its members and history (decrypted here). Runs in
   // the inbound queue so live messages that follow it are shown after the history.
+  // 2.2: the pinned message { id, uid, name?, s, g?, sp? } from its ciphertext (bound to whoever pinned it)
+  async function openPin(pin) {
+    if (!pin || typeof pin.ct !== "string" || typeof pin.by !== "string") return null;
+    const p = await e2e.open("pin", pin.by, pin.ct);
+    if (!p || !MID_RE.test(p.id || "")) return null;
+    const re = cleanRe(p);
+    return re ? { ...re, id: p.id, by: pin.by } : null;
+  }
   async function onJoined(snap, key = e2e.keyStr) {
     if (!snap?.e2ee) throw new Error(E2E.OLD_SERVER);
     if (!(await e2e.checkKey(key, snap.kc))) throw new Error(E2E.BAD_KEY);
@@ -1260,6 +1522,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       replaying = false;
     }
     ui.loadHistory(lines);
+    ui.setPin(await openPin(snap.pin));
+    evServer = true;
     if (decryptWarned) ui.system("Can't decrypt some messages — check your invite link. They're hidden.");
     sendProfile();
     // keep the chat open/closed the way it was before a reload
@@ -1300,11 +1564,15 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     const cur = await bridge.status();
     if (!cur) return; // player not ready yet; watchPlayer() re-applies once it is
     if (adPlaying()) return;
+    // 2.2: a newer party state came in while we asked the player (its own apply takes over; this one is stale)
+    const stale = () => !!party.state && st !== party.state;
+    if (stale()) return;
     suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
     const target = expectedPosition(st);
     if (IS_ANY) await anyV.setBase(st.rate);
     // live streams: there's no shared timeline, so only play / pause follow the party
     if (!(IS_ANY && anyLive()) && Math.abs(target - cur.position) >= SEEK_THRESHOLD_MS) await bridge.seek(target);
+    if (stale()) return;
     if (st.playing && !cur.playing) await bridge.play();
     if (!st.playing && cur.playing) await bridge.pause();
     suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
@@ -1324,6 +1592,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       if (Date.now() < suppressUntil || adPlaying()) return; // an ad started, or a remote action is being applied
       const st = await bridge.status();
       if (!st || !party.roomId || !Number.isFinite(st.position) || !videoIdFromUrl() || adPlaying()) return;
+      // 2.2: nothing to tell when the player already matches the party (e.g. the late "seeked" of a seek we made
+      // for the party while this video was still loading; it would otherwise read as this viewer's own seek)
+      if (kind !== "rate" && party.state && st.playing === party.state.playing && Math.abs(st.position - expectedPosition(party.state)) < 1500) return;
       if (!canControl()) {
         ui.system("Only the host can control playback.");
         return applyRemote(party.state, "revert");
@@ -1339,7 +1610,13 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       };
       // only count it once the server took it (a rejected update must not hide an
       // episode change from the check in watchPlayer)
-      net.request("state", state).then(() => (party.state = state), (e) => ui.system(e.message));
+      net.request("state", state).then(
+        () => {
+          party.state = state;
+          hold.userAction(); // a person decided: nothing waits or resumes on its own
+        },
+        (e) => ui.system(e.message),
+      );
     }, 250);
   }
 
@@ -1454,7 +1731,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   //   the party carries on.
   // * a pending invite or "Start a NetParty" request is acted on once a player opens.
   // ride out the site's own route changes (Prime's overlay player swaps its <video> between episodes)
-  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : 2500;
+  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : IS_SL || IS_CR ? 4000 : 2500;
   let offWatchSince = 0;
   let busy = false;
   let booted = false; // the boot sequence below decides first (reload / rejoin)
@@ -1707,6 +1984,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
     return {
       inject() {
+        // 2.2 services (HBO Max, Crunchyroll, SonyLIV): no buttons on their pages yet; the popup starts parties there
+        if (IS_HBO || IS_CR || IS_SL) return;
         try {
           IS_YT ? youtube() : IS_PRIME ? prime() : IS_HOTSTAR ? hotstar() : netflix();
         } catch (e) {
@@ -1747,6 +2026,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           if (what) ui.system(`${nameOf(msg.data.by)} ${what}`);
         }
         applyRemote(msg.data, "remote");
+        hold.onState(msg.data);
         break;
       case "page": {
         // any-video parties: the host's page changed (address or video)
@@ -1764,6 +2044,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         party.hostId = msg.data.hostId;
         if (await absorbProfiles(party.members.map((m) => [m.id, m.profile]))) ui.refreshNames();
         ui.render();
+        hold.onMembers();
         break;
       case "settings":
         party.hostOnly = msg.data.hostOnly;
@@ -1776,8 +2057,28 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         if (line && !seenCt.has(msg.data.ct)) {
           seenCt.add(msg.data.ct);
           if (line.kind === "mr") ui.msgReact(line);
-          else ui.chat(line);
+          else if (line.kind === "me") ui.msgEdit(line);
+          else if (line.kind === "md") ui.msgDelete(line);
+          else {
+            typing.heard(line.id); // their line is here: they stopped typing
+            ui.chat(line);
+          }
         }
+        break;
+      }
+      case "ev": {
+        // 2.2 ephemeral signal: typing, my video is loading, the party is waiting
+        if (!party.roomId || typeof msg.data?.from !== "string" || !memberHere(msg.data.from)) break;
+        const p = await e2e.open("ev", msg.data.from, msg.data.ct);
+        if (!p || typeof p.t !== "string") break;
+        if (p.t === "ty") typing.got(msg.data.from);
+        else if (p.t === "buf" || p.t === "wait") hold.onEv(msg.data.from, { t: p.t, on: p.on === 1 || p.on === true, ids: p.ids, why: typeof p.why === "string" ? p.why : "" });
+        break;
+      }
+      case "pin": {
+        // 2.2: the pinned message changed (null: unpinned)
+        if (!party.roomId) break;
+        ui.setPin(await openPin(msg.data));
         break;
       }
       case "react": {
@@ -1836,8 +2137,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   // --------------------------------------------------------- voice + video chat
   // A WebRTC mesh between everyone in voice: audio, plus an optional camera (1.8). Connection
   // setup (SDP, ICE) goes through the server end-to-end encrypted, media flows peer to peer
-  // (DTLS-SRTP). No TURN server yet: behind some networks (symmetric NAT, strict campus Wi-Fi)
-  // peers can't reach each other and that link fails.
+  // (DTLS-SRTP), or through the Cloudflare TURN relay when the two networks can't reach each other
+  // (symmetric NAT, strict campus Wi-Fi). Relay credentials come from voiceJoin / voiceIce and are
+  // valid >= 12h from when we got them (server mints 24h, caches 12h); ICE_MAX_AGE refreshes earlier.
   //
   // Video: whoever starts a connection offers a video slot next to the audio (sendrecv, no track
   // yet), so turning the camera on later only puts a track into that slot (replaceTrack): no
@@ -1856,6 +2158,23 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   const voice = (() => {
     let localStream = null;
     let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+    let iceAt = 0; // when iceServers came from the server (0 = never)
+    const ICE_MAX_AGE = 6 * 3600 * 1000; // creds are good for >= 12h after we receive them
+    const setIce = (list) => {
+      if (Array.isArray(list) && list.length) {
+        iceServers = list;
+        iceAt = Date.now();
+      }
+    };
+    // fresh relay credentials before building a connection that may need the relay; `force` on a
+    // reconnect after a failure (the old ones may be what expired)
+    async function freshIce(force) {
+      if (!force && iceAt && Date.now() - iceAt < ICE_MAX_AGE) return;
+      try {
+        const r = await net.request("voiceIce", {});
+        setIce(r?.iceServers);
+      } catch {}
+    }
     // id -> { pc, audio, pendingIce: [], sendQ, vt (video transceiver), video (their camera track),
     //        camOn (their camera is on), v18 (they run 1.8+: sent us a cam message or offered video) }
     const peers = new Map();
@@ -1894,6 +2213,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
     function makePeer(id, offerer) {
       const pc = new RTCPeerConnection({ iceServers });
+      // which relay credentials this link uses (the username's last 4 characters only; e2e checks it)
+      log("peer", offerer ? "call" : "answer", "relay", iceServers.filter((s) => s.username).map((s) => String(s.username).slice(-4)).join(",") || "none");
       const audio = new Audio();
       audio.autoplay = true;
       audio.volume = volume;
@@ -1923,10 +2244,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
             ui.system("Voice/video link to " + nameOf(id) + " dropped. Reconnecting…");
             setTimeout(async () => {
               if (!active || peers.get(id) !== entry) return;
-              try {
-                const r = await net.request("voiceIce", {});
-                if (r?.iceServers?.length) iceServers = r.iceServers;
-              } catch {}
+              await freshIce(true);
               if (!active || peers.get(id) !== entry) return;
               closePeer(id);
               callPeer(id).catch((e) => log("recall failed", e));
@@ -1972,6 +2290,8 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
 
     async function callPeer(id) {
+      await freshIce(false);
+      if (!active) return;
       const entry = makePeer(id, true);
       const offer = await entry.pc.createOffer();
       await entry.pc.setLocalDescription(offer);
@@ -2120,7 +2440,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         sessionStorage.setItem("netpartyVoice", "1");
         startMeter();
         const res = await net.request("voiceJoin", {});
-        if (res.iceServers?.length) iceServers = res.iceServers;
+        setIce(res.iceServers);
         // newcomer calls everyone already in voice (one side offers, so no glare)
         for (const id of res.peers) callPeer(id).catch((e) => log("call failed", e));
         ui.system("You joined voice chat. Headphones avoid echo.");
@@ -2129,12 +2449,14 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       async rejoin() {
         for (const id of [...peers.keys()]) closePeer(id);
         const res = await net.request("voiceJoin", {});
+        setIce(res.iceServers); // was ignored: after a socket reconnect we kept the old credentials
         for (const id of res.peers) callPeer(id).catch(() => {});
       },
       async leave() {
         sessionStorage.removeItem("netpartyVoice");
         if (!active) return;
         active = false;
+        duck.restore(); // the video's volume back to exactly yours
         cameraOff();
         for (const id of [...peers.keys()]) closePeer(id);
         localStream?.getTracks().forEach((t) => t.stop());
@@ -2195,7 +2517,13 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       if (payload.sdp && typeof payload.sdp === "object") {
         const sdp = { type: payload.sdp.type, sdp: String(payload.sdp.sdp || "") };
         if (sdp.type === "offer") {
+          // a second offer from the same peer is their reconnect after a failure: the answering side
+          // needs fresh relay credentials too, or a relay-only link fails again on our expired ones
+          // (runs inside this peer's rxQ chain, so later ICE candidates still wait for us)
+          const reconnect = !!entry;
           if (entry) closePeer(from);
+          await freshIce(reconnect);
+          if (!active) return;
           entry = makePeer(from, false);
           await entry.pc.setRemoteDescription(sdp);
           // a 1.8 caller offered a video slot: answer it as two-way (1.7 callers don't offer one)
@@ -2234,6 +2562,428 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     return api;
   })();
 
+  // ------------------------------------------------ 2.2: settings, signals, waiting
+  // Party and voice settings from the popup or the panel (storage.sync; on unless switched off).
+  const prefs = { syncWait: true, dropPause: true, autoDuck: true };
+  const PREF_KEYS = Object.keys(prefs);
+
+  // Ephemeral signals: encrypted like everything else (AAD kind "ev", bound to the sender), relayed by the
+  // server to the other members and never stored. { t: "ty" } I'm typing; { t: "buf", on } my video is
+  // (no longer) stuck loading; { t: "wait", on, ids, why? } the party is waiting for these members.
+  const CT_EV = ctChars(pad64(1024));
+  let evServer = true; // false once the server says it doesn't know signals (a server older than 2.2)
+  async function sendEv(obj) {
+    if (!evServer || !party.roomId || !party.me || !e2e.ready || !net.open) return false;
+    try {
+      const ct = await e2e.seal("ev", party.me, obj);
+      if (ct.length > CT_EV) return false;
+      await net.request("ev", { ct });
+      return true;
+    } catch (e) {
+      if (/Unknown type/.test(e?.message || "")) evServer = false;
+      return false;
+    }
+  }
+  const memberHere = (pid) => party.members.some((m) => m.id === pid);
+  const cleanIds = (ids) => (Array.isArray(ids) ? [...new Set(ids.filter((x) => typeof x === "string" && PID_RE.test(x)))].slice(0, 50) : []);
+
+  // ---- typing indicator: sent at most every 3 s while typing, shown for 5 s after the last one
+  const typing = (() => {
+    const who = new Map(); // pid -> last "typing" time
+    let lastSent = 0;
+    let timer = 0;
+    const live = () => {
+      const now = Date.now();
+      for (const [pid, t] of who) if (now - t > 5000 || !memberHere(pid)) who.delete(pid);
+      return [...who.keys()];
+    };
+    const redraw = () => {
+      clearTimeout(timer);
+      ui.typing(live());
+      if (who.size) timer = setTimeout(redraw, 1000);
+    };
+    return {
+      // the chat box changed: tell the others (throttled)
+      ping() {
+        const now = Date.now();
+        if (now - lastSent < 3000) return;
+        lastSent = now;
+        sendEv({ t: "ty" });
+      },
+      sent: () => (lastSent = 0), // after sending a line, the next keystroke says "typing" again
+      got(pid) {
+        if (pid === party.me || !memberHere(pid)) return;
+        who.set(pid, Date.now());
+        redraw();
+      },
+      heard(pid) {
+        if (who.delete(pid)) redraw();
+      },
+      reset() {
+        who.clear();
+        lastSent = 0;
+        redraw();
+      },
+    };
+  })();
+
+  // ---- buffer-aware sync and pause-on-drop. One member decides for the party (the "authority"): the host,
+  // or while the host is away (disconnected) the first member who isn't. Only a member whose own video is
+  // stuck says so; the authority pauses everyone, then plays everyone on from the same moment when all are
+  // ready (or after 20 s). A member who drops without leaving pauses the party until they're back (within the
+  // server's 15 s grace) or, once they're gone, until someone presses Resume. Pauses, plays and seeks by
+  // people always win over both.
+  const WAIT_MAX_MS = 20000;
+  const hold = (() => {
+    const mine = { since: 0, reported: false, lastSent: 0, readySince: 0 }; // my own video
+    const bufs = new Map(); // pid -> time of their last "loading" report (what the authority knows)
+    const cooldown = new Map(); // pid -> time until which their loading doesn't pause the party (after a timeout)
+    const overruled = new Set(); // members whose current stall someone played over: not waited for until they've loaded
+    let waiting = null; // authority: { ids: Set, since, position }
+    let seen = null; // everyone: the wait as announced { ids: [], since, by }
+    let drop = null; // everyone: { ids: Set (away), gone: Set (left for good), by }
+    let awayPrev = new Set();
+    let lastResume = 0;
+    let ticking = false;
+    const authority = () => {
+      const here = party.members.filter((m) => !m.away);
+      return here.some((m) => m.id === party.hostId) ? party.hostId : here[0]?.id || null;
+    };
+    const amAuthority = () => !!party.me && authority() === party.me && (!party.hostOnly || party.me === party.hostId);
+    const rate = () => (IS_ANY && anyV.base !== 1 ? { rate: anyV.base } : {});
+    async function setState(playing, position, reason) {
+      const state = { playing, position: Math.max(0, Math.round(position)), at: clock.serverNow(), videoId: videoIdFromUrl() || party.state?.videoId, reason, ...rate() };
+      await net.request("state", state);
+      party.state = { ...state, by: party.me };
+      await applyRemote(party.state, reason);
+      ui.render();
+    }
+    function show() {
+      ui.hold();
+    }
+    // ---- authority: start / end waiting for loading members
+    const waitLog = new Map(); // pid -> times the party waited for them
+    async function startWait(ids) {
+      // someone whose video keeps stalling: after 3 waits in 90 s the party stops waiting for them for a minute
+      const now = Date.now();
+      for (const id of [...ids]) {
+        const list = (waitLog.get(id) || []).filter((t) => now - t < 90000);
+        if (list.length >= 3) {
+          cooldown.set(id, now + 60000);
+          waitLog.delete(id);
+          ids.delete(id);
+        } else waitLog.set(id, [...list, now]);
+      }
+      if (!ids.size) return;
+      const position = expectedPosition(party.state);
+      waiting = { ids, since: Date.now(), position };
+      log("wait for", [...ids], "at", position);
+      try {
+        await setState(false, position, "buffer");
+      } catch {
+        waiting = null;
+        return;
+      }
+      seen = { ids: [...ids], since: Date.now(), by: party.me };
+      sendEv({ t: "wait", on: 1, ids: [...ids] });
+      show();
+      if (!ui.isOpen()) notice(holdText());
+    }
+    async function endWait(why) {
+      const w = waiting;
+      waiting = null;
+      if (!w) return;
+      log("wait over", why);
+      lastResume = Date.now();
+      if (why === "t") for (const id of w.ids) cooldown.set(id, Date.now() + 60000);
+      if (why !== "c") await setState(true, w.position, "resume").catch(() => {});
+      sendEv({ t: "wait", on: 0, why, ids: [...w.ids] });
+      onWait(party.me, { on: 0, why, ids: [...w.ids] });
+    }
+    // anyone: the wait as announced by the authority
+    function onWait(from, p) {
+      const ids = cleanIds(p.ids);
+      if (p.on) {
+        seen = { ids, since: Date.now(), by: from };
+      } else {
+        if (p.why === "t" && ids.length) {
+          const whose = ids.length > 1 ? "Some videos were" : ids[0] === party.me ? "Your video was" : `${nameOf(ids[0])}'s video was`;
+          ui.system(`${whose} still loading after 20 seconds, so the party played on.`);
+        }
+        seen = null;
+      }
+      show();
+    }
+    const names = (ids) => {
+      const n = ids.map((id) => (id === party.me ? "you" : nameOf(id)));
+      if (n.length <= 2) return n.join(" and ");
+      return n.length + " people";
+    };
+    // ---- my own video, checked every 300 ms while in a party
+    async function tick() {
+      if (ticking || !party.roomId || !party.state) return;
+      ticking = true;
+      try {
+        const now = Date.now();
+        const usable = !!videoIdFromUrl() && !adPlaying() && !(IS_ANY && (anyMismatch || anyV.picking || !anyV.ready));
+        const st = usable ? await bridge.status() : null;
+        if (!party.roomId || !party.state) return;
+        const stuck = !!st && st.ready === false && (party.state.playing || mine.reported);
+        if (!mine.reported) overruled.delete(party.me);
+        if (stuck) {
+          mine.readySince = 0;
+          if (!mine.since) mine.since = now;
+          if (!mine.reported && party.state.playing && now - mine.since > 1000) {
+            mine.reported = true;
+            mine.lastSent = now;
+            log("my video is stuck loading");
+            sendEv({ t: "buf", on: 1 });
+          } else if (mine.reported && now - mine.lastSent > 5000) {
+            mine.lastSent = now; // still loading (also tells a new authority)
+            sendEv({ t: "buf", on: 1 });
+          }
+        } else {
+          mine.since = 0;
+          if (mine.reported) {
+            if (!mine.readySince) mine.readySince = now;
+            if (!st || now - mine.readySince >= 400) {
+              mine.reported = false;
+              log("my video loaded");
+              sendEv({ t: "buf", on: 0 });
+            }
+          }
+        }
+        // ---- the authority's part
+        if (!amAuthority()) {
+          waiting = null;
+          return;
+        }
+        for (const [pid, t] of bufs) if (now - t > 12000 || !party.members.some((m) => m.id === pid && !m.away)) bufs.delete(pid);
+        const ids = new Set([...bufs.keys()].filter((pid) => !(cooldown.get(pid) > now) && !overruled.has(pid)));
+        if (mine.reported && !(cooldown.get(party.me) > now) && !overruled.has(party.me)) ids.add(party.me);
+        if (!waiting) {
+          if (seen && seen.by !== party.me && now - seen.since > WAIT_MAX_MS + 5000 && !party.state.playing) {
+            // took over from an authority that went away mid-wait
+            seen = null;
+            await setState(true, party.state.position, "resume").catch(() => {});
+            show();
+          } else if (prefs.syncWait && ids.size && party.state.playing && now - lastResume > 3000 && !drop) await startWait(ids);
+        } else if (!prefs.syncWait || !ids.size) await endWait("r");
+        else if (now - waiting.since > WAIT_MAX_MS) await endWait("t");
+        else if ([...ids].join() !== [...waiting.ids].join()) {
+          waiting.ids = ids;
+          seen = { ids: [...ids], since: seen?.since || now, by: party.me };
+          sendEv({ t: "wait", on: 1, ids: [...ids] });
+          show();
+        }
+      } catch (e) {
+        log("hold", e?.message);
+      } finally {
+        ticking = false;
+      }
+    }
+    setInterval(tick, 300);
+
+    // ---- pause on drop
+    async function onMembers() {
+      const away = new Set(party.members.filter((m) => m.away).map((m) => m.id));
+      const present = new Set(party.members.map((m) => m.id));
+      const newly = [...away].filter((id) => !awayPrev.has(id) && id !== party.me);
+      awayPrev = away;
+      if (drop) {
+        for (const id of [...drop.ids])
+          if (!away.has(id)) {
+            drop.ids.delete(id);
+            if (!present.has(id)) drop.gone.add(id);
+          }
+        for (const id of newly) drop.ids.add(id);
+      }
+      if (!drop && newly.length && prefs.dropPause && amAuthority() && party.state?.playing && !waiting) {
+        drop = { ids: new Set(newly), gone: new Set(), by: party.me };
+        show();
+        try {
+          await setState(false, expectedPosition(party.state), "drop");
+        } catch {
+          drop = null;
+        }
+        if (drop && !ui.isOpen()) notice(holdText());
+      }
+      // everyone who dropped is back: whoever paused plays on (or the authority, if they're gone too)
+      if (drop && !drop.ids.size && !drop.gone.size) {
+        const resp = memberHere(drop.by) && !away.has(drop.by) ? drop.by : authority();
+        const d = drop;
+        if (resp === party.me && party.state && !party.state.playing) {
+          drop = null;
+          setState(true, party.state.position, "resume").catch(() => (drop = d));
+        } else if (resp !== party.me && party.state?.playing) drop = null;
+      }
+      show();
+    }
+    // a playback update from someone (already applied)
+    function onState(st) {
+      const r = st?.reason;
+      if (r === "drop") {
+        const away = party.members.filter((m) => m.away).map((m) => m.id);
+        drop = { ids: new Set(away), gone: new Set(), by: st.by };
+      } else if (r === "buffer") {
+        // (the wait itself is announced by a signal)
+      } else if (r === "resume") {
+        drop = null;
+        seen = null;
+      } else if (r) userAction();
+      show();
+    }
+    // someone played, paused or jumped: they decide, nothing waits or resumes on its own any more
+    function userAction() {
+      if (waiting) {
+        const w = waiting;
+        waiting = null;
+        lastResume = Date.now();
+        for (const id of w.ids) overruled.add(id); // don't pause again for this same stall
+        sendEv({ t: "wait", on: 0, why: "c", ids: [...w.ids] });
+      }
+      seen = null;
+      drop = null;
+      show();
+    }
+    function holdText() {
+      if (seen?.ids.length) {
+        const ids = seen.ids.filter((id) => id === party.me || memberHere(id));
+        if (ids.length === 1 && ids[0] === party.me) return "Your video is loading. Everyone is waiting for you…";
+        if (ids.length) return `Waiting for ${names(ids)} to load…`;
+      }
+      if (drop?.ids.size) return `${names([...drop.ids])} disconnected, paused`;
+      if (drop?.gone.size) return `${names([...drop.gone])} left. Press Resume to play on.`;
+      return "";
+    }
+    return {
+      tick,
+      onMembers,
+      onState,
+      userAction,
+      text: holdText,
+      get canResume() {
+        return !!drop?.gone.size && canControl();
+      },
+      async resume() {
+        if (!party.state || !canControl()) return;
+        drop = null;
+        seen = null;
+        show();
+        try {
+          await setState(true, party.state.position, "play");
+        } catch (e) {
+          ui.system(e.message);
+        }
+      },
+      onEv(from, p) {
+        if (p.t === "buf") {
+          if (p.on) bufs.set(from, Date.now());
+          else {
+            bufs.delete(from);
+            overruled.delete(from);
+          }
+        } else if (p.t === "wait") onWait(from, p);
+      },
+      reset() {
+        Object.assign(mine, { since: 0, reported: false, lastSent: 0, readySince: 0 });
+        bufs.clear();
+        cooldown.clear();
+        overruled.clear();
+        waiting = seen = drop = null;
+        awayPrev = new Set();
+      },
+      // test hook: { waiting, seen, drop, mine } (no secrets)
+      get debug() {
+        return { waiting: !!waiting, seen: seen && seen.ids, drop: drop && { ids: [...drop.ids], gone: [...drop.gone] }, reported: mine.reported, authority: authority() };
+      },
+    };
+  })();
+
+  // ---- auto-duck (voice chat): while a friend in voice is talking, the video plays at 30% of its volume;
+  // 600 ms after they stop it goes back to exactly where it was. Only while you're in voice; a change you make
+  // to the volume while it's lowered wins (it isn't put back over).
+  const duck = (() => {
+    let base = null; // your own volume while it's lowered
+    let factor = 1; // 1 = your volume, 0.3 = lowered
+    let lastSet = null;
+    let quietSince = 0;
+    let off = false; // you changed the volume while lowered: leave it alone until everyone's quiet
+    let busy = false;
+    const directVideo = () => (IS_ANY ? anyV.video : IS_CR ? crFrame.topVideo() : IS_PRIME ? primePlayer()?.video || null : mainVideo());
+    async function vol(v) {
+      const x = directVideo();
+      if (x) {
+        if (Number.isFinite(v)) x.volume = Math.min(1, Math.max(0, v));
+        return x.volume;
+      }
+      if (IS_CR) return crFrame.volume(v);
+      if (IS_ANY) return anyV.volume(v);
+      return null;
+    }
+    const talking = () =>
+      party.members.some((m) => {
+        if (m.id === party.me) return false;
+        const i = voice.peerInfo(m.id);
+        return i.speaking && !i.muted;
+      });
+    async function restore() {
+      if (base !== null) await vol(base);
+      base = lastSet = null;
+      factor = 1;
+    }
+    async function tick() {
+      if (busy) return;
+      busy = true;
+      try {
+        if (!voice.active || !prefs.autoDuck || !party.roomId) {
+          if (base !== null) await restore();
+          off = false;
+          return;
+        }
+        const now = Date.now();
+        const speak = talking();
+        if (speak) quietSince = 0;
+        else if (!quietSince) quietSince = now;
+        if (off) {
+          if (!speak) off = false;
+          return;
+        }
+        const want = speak || (base !== null && now - quietSince < 600) ? 0.3 : 1;
+        if (base === null) {
+          if (want === 1) return;
+          base = await vol();
+          lastSet = null;
+          if (base === null) return;
+        } else if (lastSet !== null) {
+          const cur = await vol();
+          if (cur !== null && Math.abs(cur - lastSet) > 0.02) {
+            // you moved the volume yourself: that's your volume now
+            base = lastSet = null;
+            factor = 1;
+            off = true;
+            return;
+          }
+        }
+        if (want === factor) return;
+        // smooth: about a quarter of a second each way
+        factor = want < factor ? Math.max(want, factor - 0.14) : Math.min(want, factor + 0.14);
+        if (factor >= 1) return void (await restore());
+        lastSet = await vol(base * factor);
+      } catch {
+      } finally {
+        busy = false;
+      }
+    }
+    setInterval(tick, 50);
+    return {
+      restore,
+      get debug() {
+        return { base, factor, off };
+      },
+    };
+  })();
+
   // ------------------------------------------------------------------ UI
   // Lives in a shadow root so the streaming site's CSS can't break it.
   const ui = (() => {
@@ -2241,16 +2991,119 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     let chatStick = true, chatSaved = 0; // chat scroll: following the newest line, or scrolled-up offset
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
     let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer, headEl, leaveIcon;
+    let setBtn, typingEl, holdBar, holdTxt, holdBtn; // 2.2
     let anyRow, anyNote, theaterBtn, fsBtn, theaterIcon; // any-video mode: Theater, Full screen, notes
     let open = false;
     let unread = 0;
+    let unreadAt = false; // an unread line mentions you (2.2)
     let toastTimer = 0;
     let peopleSig = "";
 
     const hue = (id) => [...String(id)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 7);
     // a member's picture (from their decrypted profile); none yet: a stable one from their id
-    const picOf = (pid) =>
-      (pid === party.me ? cleanAvatar(party.avatar) : party.profiles.get(pid)?.avatar) || E.avatars[hue(pid || "?") % E.avatars.length];
+    const picOf = (pid) => (pid === party.me ? myPic() : party.profiles.get(pid))?.avatar || E.avatars[hue(pid || "?") % E.avatars.length];
+    // 2.2: the whole picture: emoji (always, the fallback), HD picture and photo (when set)
+    const picSpec = (pid) => {
+      const p = pid === party.me ? myPic() : party.profiles.get(pid);
+      return { e: picOf(pid), hd: p?.hd || null, img: p?.img || null };
+    };
+    const fnv = (str) => {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 0x01000193);
+      return (h >>> 0).toString(36);
+    };
+    const imgKeys = new Map(); // photo -> its short key (photos are long strings)
+    const picKey = (sp) => {
+      if (sp.img) {
+        if (!imgKeys.has(sp.img)) {
+          if (imgKeys.size > 200) imgKeys.clear();
+          imgKeys.set(sp.img, "i" + sp.img.length + "." + fnv(sp.img));
+        }
+        return imgKeys.get(sp.img);
+      }
+      return sp.hd ? sp.hd : "e" + sp.e;
+    };
+    // Pictures are drawn without ever loading a URL from outside: an HD picture's bytes come from the
+    // extension (background worker), a photo's from the member's encrypted profile. First shown from a
+    // blob: URL; if the site's CSP (img-src) blocks that, from a data: URL; if that's blocked too, drawn
+    // on a <canvas> (not subject to img-src). Until it's ready, and if it can't be decoded, the emoji shows.
+    const pics = (() => {
+      let mode = "blob"; // -> "data" -> "canvas"
+      const src = new Map(); // key -> Promise<{ dataUrl, blob, bmp, url } | null>
+      function load(k, sp) {
+        if (!src.has(k)) {
+          if (src.size > 150)
+            for (const [key, pr] of src) {
+              if (src.size <= 100) break;
+              src.delete(key);
+              pr.then((x) => x?.url && URL.revokeObjectURL(x.url));
+            }
+          src.set(
+            k,
+            (async () => {
+              const dataUrl = sp.img ? cleanImg(sp.img) : (await chrome.runtime.sendMessage({ cmd: "avatarFile", id: sp.hd.slice(3) }).catch(() => null))?.dataUrl;
+              if (typeof dataUrl !== "string" || !IMG_RE.test(dataUrl)) return null;
+              const [head, b64] = dataUrl.split(",");
+              const bin = atob(b64);
+              const bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              const blob = new Blob([bytes], { type: head.slice(5, head.indexOf(";")) });
+              let bmp;
+              try {
+                bmp = await createImageBitmap(blob); // a real image? (not subject to the page's CSP)
+              } catch {
+                return null;
+              }
+              if (!bmp.width || !bmp.height || bmp.width > 512 || bmp.height > 512) return null;
+              return { dataUrl, blob, bmp, url: null };
+            })().catch(() => null),
+          );
+        }
+        return src.get(k);
+      }
+      async function show(holder, k, sp) {
+        const x = await load(k, sp);
+        if (!x || holder.dataset.pk !== k) return;
+        const done = (node) => {
+          if (holder.dataset.pk !== k) return;
+          holder.classList.add("np-pic-img", sp.img ? "np-pic-photo" : "np-pic-hd");
+          holder.replaceChildren(node);
+        };
+        const attempt = () => {
+          if (holder.dataset.pk !== k) return;
+          if (mode === "canvas") {
+            const c = el("canvas", { class: "np-pic", "aria-hidden": "true" });
+            c.width = x.bmp.width;
+            c.height = x.bmp.height;
+            c.getContext("2d")?.drawImage(x.bmp, 0, 0);
+            return done(c);
+          }
+          const m = mode;
+          const img = el("img", { class: "np-pic", alt: "", draggable: "false", decoding: "async", "aria-hidden": "true" });
+          img.onload = () => done(img);
+          img.onerror = () => {
+            if (mode === m) mode = m === "blob" ? "data" : "canvas";
+            attempt();
+          };
+          if (m === "blob") img.src = x.url ||= URL.createObjectURL(x.blob);
+          else img.src = x.dataUrl;
+        };
+        attempt();
+      }
+      return { show, get mode() { return mode; } };
+    })();
+    // put a picture into its holder (people row, chat line, camera tile, mention list, picker);
+    // does nothing when it already shows that picture
+    function paintSpec(holder, sp) {
+      const k = picKey(sp);
+      if (holder.dataset.pk === k) return holder;
+      holder.dataset.pk = k;
+      holder.classList.remove("np-pic-img", "np-pic-photo", "np-pic-hd");
+      holder.textContent = sp.e;
+      if (sp.img || sp.hd) pics.show(holder, k, sp);
+      return holder;
+    }
+    const paintPic = (holder, pid) => paintSpec(holder, picSpec(pid));
     // SVG icons are built node by node: some sites (YouTube) enforce Trusted Types, so no innerHTML
     const SVG_NS = "http://www.w3.org/2000/svg";
     const svg = (markup) => {
@@ -2288,6 +3141,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       check: '<path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/>',
       theater: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M3 6h18v12H3z"/><path fill="currentColor" d="M5 8h10v8H5z"/>',
       expand: '<path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+      pin: '<path fill="currentColor" d="M16 9V4h1a1 1 0 0 0 0-2H7a1 1 0 0 0 0 2h1v5a3 3 0 0 1-3 3v2h5.97v7l1 1 1-1v-7H19v-2a3 3 0 0 1-3-3z"/>',
+      trash: '<path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zM19 4h-3.5l-1-1h-5l-1 1H5v2h14z"/>',
+      eyeOff: '<path fill="currentColor" d="M12 7a5 5 0 0 1 4.64 6.83l2.92 2.92A11.8 11.8 0 0 0 23 12c-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16A4.9 4.9 0 0 1 12 7zM2 4.27l2.74 2.74A11.8 11.8 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3zM7.53 9.8l1.55 1.55A3 3 0 0 0 12 15c.22 0 .44-.03.65-.08l1.55 1.55A5 5 0 0 1 7.53 9.8z"/>',
+      gear: '<path fill="currentColor" d="M19.14 12.94a7.1 7.1 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.47.47 0 0 0-.47.41l-.36 2.54a7.3 7.3 0 0 0-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.47.47 0 0 0 .12.61l2.03 1.58a7.3 7.3 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54a7 7 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/>',
     };
     const iconBtn = (icon, title, onclick, cls = "") =>
       el("button", { type: "button", class: "np-icon " + cls, title, "aria-label": title, onclick }, svg(icon));
@@ -2305,13 +3162,65 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       updateSend();
       input.focus();
     }
+    // 2.2: the chat box's text -> { text, sp?, mn? }: spoilers (||hidden|| anywhere, or the whole message with
+    // the Spoiler switch on) become "[spoiler]" placeholders, and "@Name" of a member becomes a mention
+    function compose(raw, whole) {
+      let text = "";
+      const sp = [];
+      const hide = (hid) => {
+        sp.push({ i: text.length, n: SP_PH.length, s: hid });
+        text += SP_PH;
+      };
+      if (whole) hide(raw);
+      else {
+        let at = 0;
+        for (const m of raw.matchAll(/\|\|([\s\S]+?)\|\|/g)) {
+          const hid = m[1].trim();
+          if (!hid || sp.length >= 10) continue;
+          text += raw.slice(at, m.index);
+          hide(hid);
+          at = m.index + m[0].length;
+        }
+        text += raw.slice(at);
+      }
+      text = text.trim();
+      if (!text || text.length > 500) return null;
+      const mn = [];
+      const taken = sp.map((x) => [x.i, x.i + x.n]);
+      const low = text.toLowerCase();
+      const hay = low.length === text.length ? low : text;
+      const people = party.members
+        .map((m) => ({ id: m.id, name: nameOf(m.id) }))
+        .filter((x) => x.name && x.id !== party.me)
+        .sort((a, b) => b.name.length - a.name.length);
+      for (const who of people) {
+        const needle = "@" + (hay === low ? who.name.toLowerCase() : who.name);
+        for (let i = hay.indexOf(needle); i >= 0 && mn.length < 10; i = hay.indexOf(needle, i + 1)) {
+          const end = i + needle.length;
+          if (/[\p{L}\p{N}_]/u.test(text[end] || "") || (i > 0 && /[\p{L}\p{N}_]/u.test(text[i - 1]))) continue;
+          if (taken.some(([a, b]) => i < b && a < end)) continue;
+          mn.push({ p: who.id, i, n: end - i });
+          taken.push([i, end]);
+        }
+      }
+      return { text, ...(sp.length ? { sp } : {}), ...(mn.length ? { mn } : {}) };
+    }
     function sendChat() {
-      const text = input.value.trim();
-      if (!text) return;
+      const raw = input.value.trim();
+      if (!raw) return;
+      const built = compose(raw.slice(0, 500), spoilerOn);
+      if (!built) return system("Message not sent: it's too long.");
       input.value = "";
       lastSel = null;
+      mention.close();
+      if (spoilerOn) setSpoiler(false);
       updateSend();
-      sendLine({ t: "text", text: text.slice(0, 500) }).catch((err) => system("Message not sent: " + err.message));
+      typing.sent();
+      if (editing) {
+        const ed = editing;
+        edit.cancel();
+        sendLine({ t: "me", id: ed.mid, ...built }).catch((err) => system("Edit not saved: " + err.message));
+      } else sendLine({ t: "text", ...built }).catch((err) => system("Message not sent: " + err.message));
       input.focus();
     }
     // chat text or GIF (with a fresh message id, and the quote when replying), or a message
@@ -2322,7 +3231,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         payload = { ...payload, mid: newMid() };
         if (replyTo) {
           const r = replyTo;
-          payload.re = { ...(r.id ? { id: r.id } : {}), ...(r.uid ? { uid: r.uid } : {}), ...(r.name ? { name: r.name } : {}), ...(r.g ? { g: 1 } : { s: r.s }) };
+          payload.re = { ...(r.id ? { id: r.id } : {}), ...(r.uid ? { uid: r.uid } : {}), ...(r.name ? { name: r.name } : {}), ...(r.g ? { g: 1 } : r.sp ? { sp: 1, s: "Spoiler" } : { s: r.s }) };
           reply.cancel();
         }
       }
@@ -2357,6 +3266,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         input.focus();
         return;
       }
+      if (active === input && mention.key(e)) return;
       if (e.key === "Enter" && !e.shiftKey && active === input) {
         e.preventDefault();
         sendChat();
@@ -2373,7 +3283,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           e.preventDefault();
           pops.close();
           input.focus();
-        } else if (reply.cancel()) {
+        } else if (edit.cancel() || reply.cancel()) {
           e.preventDefault();
           input.focus();
         } else hide();
@@ -2587,8 +3497,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         const info = lineInfo.get(node);
         if (!info) return;
         const name = nameOf(info.uid);
-        replyTo = { id: info.mid, uid: info.uid, name: info.uid === party.me ? cleanName(party.name) || null : party.profiles.get(info.uid)?.name || null, s: info.s, g: info.g };
-        label.replaceChildren("Replying to ", el("b", {}, name), ": ", el("span", { class: "np-replybar-s" }, info.g ? "GIF" : info.s));
+        edit.cancel();
+        replyTo = { id: info.mid, uid: info.uid, name: info.uid === party.me ? cleanName(party.name) || null : party.profiles.get(info.uid)?.name || null, s: info.s, g: info.g, sp: info.sp };
+        label.replaceChildren("Replying to ", el("b", {}, name), ": ", el("span", { class: "np-replybar-s" }, info.g ? "GIF" : info.sp ? "Spoiler" : info.s));
         strip.hidden = false;
         acts.hide();
         input.focus();
@@ -2602,6 +3513,155 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       return { build, start, cancel, get active() { return !!replyTo; } };
     })();
 
+    // ---- 2.2: edit one of your messages (the text goes back into the chat box; Enter saves, Esc cancels)
+    let editing = null; // { mid } while editing
+    const edit = (() => {
+      let strip;
+      function build() {
+        strip = el(
+          "div",
+          { class: "np-editbar", role: "status" },
+          svg(ICON.edit),
+          el("div", { class: "np-replybar-txt" }, el("b", {}, "Editing your message"), " · Enter saves"),
+          el("button", { type: "button", class: "np-editbar-x", title: "Cancel editing (Esc)", "aria-label": "Cancel editing", onclick: () => (cancel(), input.focus()) }, svg(ICON.close)),
+        );
+        strip.hidden = true;
+        return strip;
+      }
+      function start(node) {
+        const info = lineInfo.get(node);
+        if (!info || info.uid !== party.me || info.g || node.dataset.deleted) return;
+        reply.cancel();
+        if (spoilerOn) setSpoiler(false);
+        editing = { mid: info.mid };
+        strip.hidden = false;
+        input.value = info.raw;
+        input.setSelectionRange(input.value.length, input.value.length);
+        lastSel = null;
+        updateSend();
+        acts.hide();
+        input.focus();
+      }
+      function cancel() {
+        if (!editing) return false;
+        editing = null;
+        strip.hidden = true;
+        input.value = "";
+        mention.close();
+        updateSend();
+        return true;
+      }
+      return { build, start, cancel };
+    })();
+
+    // ---- 2.2: @mentions. Typing "@" (then a few letters) lists the party's members; Enter, Tab or a click
+    // puts "@Name " in the chat box. Names with spaces work: a mention is found by the member's whole name.
+    const mention = (() => {
+      let node = null, list = [], sel = 0, at = -1;
+      function build() {
+        node = el("div", { class: "np-mention-pop", role: "listbox", "aria-label": "Mention someone" });
+        node.hidden = true;
+        return node;
+      }
+      // the "@query" right before the caret, or null
+      function query() {
+        if (shadow?.activeElement !== input) return null;
+        const v = input.value, c = input.selectionStart ?? v.length;
+        if (input.selectionEnd !== c) return null;
+        for (let i = c - 1; i >= 0 && c - i <= 25; i--) {
+          if (v[i] === "@") {
+            if (i > 0 && !/\s/.test(v[i - 1])) return null;
+            return { at: i, q: v.slice(i + 1, c) };
+          }
+          if (v[i] === "\n") return null;
+        }
+        return null;
+      }
+      function update() {
+        if (!node) return;
+        const m = query();
+        const q = m ? m.q.toLowerCase().replace(/\s+/g, " ") : null;
+        list =
+          q === null
+            ? []
+            : party.members
+                .filter((x) => x.id !== party.me)
+                .map((x) => ({ id: x.id, name: nameOf(x.id) }))
+                .filter((x) => {
+                  const n = x.name.toLowerCase();
+                  return !q || n.startsWith(q) || n.split(" ").some((w) => w.startsWith(q));
+                })
+                .slice(0, 6);
+        if (!list.length) return close();
+        at = m.at;
+        sel = Math.min(sel, list.length - 1);
+        node.replaceChildren(
+          ...list.map((x, i) =>
+            keepFocus(
+              el("button", {
+                type: "button", class: "np-mention-opt" + (i === sel ? " np-on" : ""), role: "option", "aria-selected": String(i === sel), "data-pid": x.id,
+                onclick: () => pick(i),
+              }, paintPic(el("span", { class: "np-mention-av np-emo", style: `--h:${hue(x.id)}` }), x.id), el("span", { class: "np-mention-name" }, x.name)),
+            ),
+          ),
+        );
+        node.hidden = false;
+      }
+      function pick(i) {
+        const x = list[i];
+        if (!x) return;
+        const c = input.selectionStart ?? input.value.length;
+        const ins = "@" + x.name + " ";
+        if (input.value.length - (c - at) + ins.length > 500) return close();
+        input.setRangeText(ins, at, c, "end");
+        lastSel = [input.selectionStart, input.selectionEnd];
+        close();
+        updateSend();
+        input.focus();
+      }
+      function close() {
+        list = [];
+        sel = 0;
+        if (node) node.hidden = true;
+      }
+      // keys while the list is open: arrows move, Enter / Tab pick, Esc closes
+      function key(e) {
+        if (!node || node.hidden || !list.length) return false;
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          sel = (sel + (e.key === "ArrowDown" ? 1 : list.length - 1)) % list.length;
+          update();
+          return true;
+        }
+        if (e.key === "Enter" && !e.shiftKey && query()?.q.toLowerCase() === list[sel]?.name.toLowerCase()) {
+          close(); // the whole name is typed already: Enter sends
+          return false;
+        }
+        if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+          e.preventDefault();
+          pick(sel);
+          return true;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          close();
+          return true;
+        }
+        return false;
+      }
+      return { build, update, close, key, get open() { return !!node && !node.hidden; } };
+    })();
+
+    // ---- 2.2: the Spoiler switch in the composer (the whole message is hidden until tapped)
+    let spoilerOn = false, spoilerBtn = null;
+    function setSpoiler(on) {
+      spoilerOn = !!on;
+      if (!spoilerBtn) return;
+      spoilerBtn.classList.toggle("np-on", spoilerOn);
+      spoilerBtn.setAttribute("aria-pressed", String(spoilerOn));
+      input.placeholder = spoilerOn ? "Spoiler message (hidden until tapped)…" : "Message the party…";
+    }
+
     // reactions on chat lines: mid -> Map(emoji -> Set(pid)), for the lines still in the chat
     const msgReactions = (() => {
       const rx = new Map();
@@ -2611,7 +3671,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       // what a reaction from `from` does to the line it points at (ignored if that line isn't here)
       function apply({ from, id, e, on }, draw = true) {
         const node = msgNode(id);
-        if (!node) return;
+        if (!node || node.dataset.deleted) return;
         let m = rx.get(id);
         if (!m) rx.set(id, (m = new Map()));
         let who = m.get(e);
@@ -2700,27 +3760,70 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
     // the hover / tap bar (one, moved to the line it's for)
     const acts = (() => {
-      let bar, on = null, pressT = 0;
+      let bar, on = null, pressT = 0, pinB, editB, delB, delT = 0;
+      const lineOf = () => bar.closest(".np-msg");
       function build() {
+        // 2.2: Pin (the host, or anyone while everyone controls playback), Edit and Delete (your own lines)
+        pinB = el("button", { type: "button", class: "np-act np-act-pin", title: "Pin", "aria-label": "Pin", onclick: (e) => (e.stopPropagation(), pin.toggle(lineOf())) }, svg(ICON.pin));
+        editB = el("button", { type: "button", class: "np-act np-act-edit", title: "Edit", "aria-label": "Edit", onclick: (e) => (e.stopPropagation(), edit.start(lineOf())) }, svg(ICON.edit));
+        delB = el("button", {
+          type: "button", class: "np-act np-act-del", title: "Delete", "aria-label": "Delete",
+          onclick: (e) => {
+            e.stopPropagation();
+            // two steps: the first press asks, a second one within 3 seconds deletes
+            if (!delB.classList.contains("np-act-confirm")) {
+              delB.classList.add("np-act-confirm");
+              delB.title = "Press again to delete";
+              delB.setAttribute("aria-label", "Press again to delete");
+              clearTimeout(delT);
+              delT = setTimeout(resetDel, 3000);
+              return;
+            }
+            resetDel();
+            const info = lineInfo.get(lineOf());
+            if (info && info.uid === party.me) sendLine({ t: "md", id: info.mid }).catch((err) => system("Not deleted: " + err.message));
+          },
+        }, svg(ICON.trash));
         bar = el(
           "div",
           { class: "np-acts", role: "toolbar", "aria-label": "Message actions" },
-          el("button", { type: "button", class: "np-act np-act-reply", title: "Reply", "aria-label": "Reply", onclick: (e) => (e.stopPropagation(), reply.start(bar.closest(".np-msg"))) }, svg(ICON.reply)),
+          el("button", { type: "button", class: "np-act np-act-reply", title: "Reply", "aria-label": "Reply", onclick: (e) => (e.stopPropagation(), reply.start(lineOf())) }, svg(ICON.reply)),
           el("button", {
             type: "button", class: "np-act np-act-react", title: "React", "aria-label": "React",
-            onclick: (e) => (e.stopPropagation(), msgReactions.openQuick(bar.closest(".np-msg"), e.currentTarget)),
+            onclick: (e) => (e.stopPropagation(), msgReactions.openQuick(lineOf(), e.currentTarget)),
           }, svg(ICON.smile)),
+          pinB,
+          editB,
+          delB,
         );
-        keepFocus(bar.firstChild);
-        keepFocus(bar.lastChild);
+        for (const b of bar.children) keepFocus(b);
         return bar;
+      }
+      function resetDel() {
+        clearTimeout(delT);
+        if (!delB) return;
+        delB.classList.remove("np-act-confirm");
+        delB.title = "Delete";
+        delB.setAttribute("aria-label", "Delete");
       }
       // put the bar on a line (mouse: on hover; touch: on tap or long-press)
       function attach(node) {
-        if (!node?.dataset.mid || !lineInfo.has(node)) return;
+        if (!node?.dataset.mid || !lineInfo.has(node) || node.dataset.deleted) return;
         if (!bar) build();
         const col = node.querySelector(".np-mcol");
-        if (col && bar.parentNode !== col) col.append(bar);
+        if (col && bar.parentNode !== col) {
+          resetDel();
+          col.append(bar);
+        }
+        const info = lineInfo.get(node);
+        const mine = info.uid === party.me;
+        editB.hidden = !mine || info.g;
+        delB.hidden = !mine;
+        pinB.hidden = !canControl();
+        const pinned = pin.current?.id === info.mid;
+        pinB.classList.toggle("np-on", pinned);
+        pinB.title = pinned ? "Unpin" : "Pin";
+        pinB.setAttribute("aria-label", pinB.title);
       }
       function show(node) {
         attach(node);
@@ -2732,7 +3835,12 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         on?.classList.remove("np-acts-on");
         on = null;
       }
-      const skip = (t) => t.closest?.("a, .np-quote, .np-reacts, .np-acts, img.np-gif");
+      // a deleted line loses its bar
+      const detach = (node) => {
+        if (bar && node.contains(bar)) bar.remove();
+        if (on === node) hide();
+      };
+      const skip = (t) => t.closest?.("a, .np-quote, .np-reacts, .np-acts, img.np-gif, .np-spoiler");
       function wire(chat) {
         chat.addEventListener("pointerover", (e) => {
           if (e.pointerType !== "mouse") return;
@@ -2759,9 +3867,66 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           on === node ? hide() : show(node);
         });
       }
-      return { wire, hide };
+      return { wire, hide, detach };
     })();
     let lastPointer = "mouse";
+
+    // ---- 2.2: one pinned message for the party, in a bar above the chat (click: jump to it; ×: unpin).
+    // Encrypted { id, uid, name?, s | g | sp } kept by the server with the party, so people who join later see it.
+    const pin = (() => {
+      let cur = null; // { id, uid, name, s, g, sp, by }
+      let bar, txt, x;
+      function build() {
+        txt = el("button", { type: "button", class: "np-pin-txt", title: "Show the pinned message", onclick: () => cur && jumpTo(cur.id, txt) });
+        x = el("button", { type: "button", class: "np-pin-x", title: "Unpin", "aria-label": "Unpin the message", onclick: () => send(null) }, svg(ICON.close));
+        const icon = svg(ICON.pin);
+        icon.classList.add("np-pin-icon");
+        bar = el("div", { class: "np-pinbar", role: "region", "aria-label": "Pinned message" }, icon, txt, x);
+        bar.hidden = true;
+        return bar;
+      }
+      function draw() {
+        if (!bar) return;
+        const node = cur && msgNode(cur.id);
+        if (!cur || node?.dataset.deleted) return void (bar.hidden = true);
+        const info = node && lineInfo.get(node);
+        const what = info ? (info.g ? "GIF" : info.sp ? "Spoiler" : info.s) : cur.g ? "GIF" : cur.s;
+        const sig = [cur.id, quoteName(cur), what, canControl()].join("|");
+        if (sig === bar.dataset.sig && !bar.hidden) return;
+        bar.dataset.sig = sig;
+        txt.replaceChildren(el("b", { class: "np-pin-name" }, quoteName(cur)), el("span", { class: "np-pin-s" + ((info ? info.sp : cur.sp) ? " np-pin-sp" : "") }, what));
+        txt.setAttribute("aria-label", `Pinned: ${quoteName(cur)}: ${what}`);
+        x.hidden = !canControl();
+        bar.hidden = false;
+      }
+      async function send(payload) {
+        try {
+          const ct = payload ? await e2e.seal("pin", party.me, payload) : null;
+          await net.request("pin", { ct });
+        } catch (e) {
+          system(/Unknown type/.test(e.message) ? "Pinning needs an updated party server." : "Couldn't pin: " + e.message);
+        }
+      }
+      return {
+        build,
+        draw,
+        get current() {
+          return cur;
+        },
+        set(p) {
+          cur = p;
+          draw();
+        },
+        toggle(node) {
+          const info = lineInfo.get(node);
+          if (!info || !canControl()) return;
+          acts.hide();
+          if (cur?.id === info.mid) return send(null);
+          const name = info.uid === party.me ? cleanName(party.name) : party.profiles.get(info.uid)?.name;
+          send({ id: info.mid, uid: info.uid, ...(name ? { name } : {}), ...(info.g ? { g: 1 } : info.sp ? { sp: 1, s: "Spoiler" } : { s: info.s }) });
+        },
+      };
+    })();
 
     // ---- 🎉 reactions: tray of 5 (editable), floating emoji over the video for everyone
     const reactions = (() => {
@@ -3081,8 +4246,94 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     })();
 
     // ---- your profile: name + picture (also in the popup)
+    // 2.2 "Upload photo": centre-cropped to a square, 96 x 96, WebP (JPEG where the browser can't
+    // encode WebP) at the best quality that fits 9 KB, as a data: URL. Decoded and drawn by the
+    // browser locally; it only ever leaves inside the encrypted profile.
+    const PHOTO_PX = 96, PHOTO_BYTES = 9000;
+    async function makePhoto(file) {
+      if (!file || !/^image\//.test(file.type || "") || file.size > 25e6) throw new Error("Pick an image file.");
+      let bmp;
+      try {
+        bmp = await createImageBitmap(file);
+      } catch {
+        throw new Error("Couldn't open that picture. Try a JPEG or PNG.");
+      }
+      const side = Math.min(bmp.width, bmp.height);
+      const draw = (fill) => {
+        const c = document.createElement("canvas");
+        c.width = c.height = PHOTO_PX;
+        const g = c.getContext("2d");
+        g.imageSmoothingEnabled = true;
+        g.imageSmoothingQuality = "high";
+        if (fill) (g.fillStyle = "#26232f"), g.fillRect(0, 0, PHOTO_PX, PHOTO_PX); // JPEG has no transparency
+        g.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, PHOTO_PX, PHOTO_PX);
+        return c;
+      };
+      try {
+        for (const type of ["image/webp", "image/jpeg"]) {
+          const c = draw(type === "image/jpeg");
+          for (const q of [0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.4, 0.3]) {
+            const b = await new Promise((r) => c.toBlob(r, type, q));
+            if (!b || b.type !== type) break; // can't encode this type here
+            if (b.size > PHOTO_BYTES) continue;
+            const url = await new Promise((r, j) => {
+              const fr = new FileReader();
+              fr.onload = () => r(fr.result);
+              fr.onerror = j;
+              fr.readAsDataURL(b);
+            });
+            if (cleanImg(url)) return url;
+            break;
+          }
+        }
+      } finally {
+        bmp.close?.();
+      }
+      throw new Error("Couldn't make a small enough picture from that file.");
+    }
+
     const avatarPicker = (() => {
-      let node, nameIn;
+      let node, nameIn, fileIn, removeBtn, upBtn;
+      // pick an HD picture or an emoji (replaces your photo, if you had one)
+      function choose(a) {
+        pops.close();
+        party.avatar = a; // the storage listeners send the new profile to the party
+        chrome.storage.sync.set({ avatar: a }).catch(() => {});
+        if (party.photo) {
+          party.photo = null;
+          chrome.storage.local.remove("avatarPhoto").catch(() => {});
+        }
+        peopleSig = "";
+        render();
+        refreshNames();
+      }
+      async function upload(file) {
+        try {
+          const url = await makePhoto(file);
+          party.photo = url;
+          await chrome.storage.local.set({ avatarPhoto: url }); // this browser only (sync items are capped at 8 KB)
+          pops.close();
+            peopleSig = "";
+          render();
+          refreshNames();
+        } catch (e) {
+          system(e?.message || "Couldn't use that picture.");
+        }
+      }
+      function removePhoto() {
+        pops.close();
+        party.photo = null;
+        chrome.storage.local.remove("avatarPhoto").catch(() => {});
+        peopleSig = "";
+        render();
+        refreshNames();
+      }
+      function marks() {
+        for (const b of node.querySelectorAll(".np-avatar-opt")) b.classList.toggle("np-on", !party.photo && b.dataset.avatar === party.avatar);
+        removeBtn.hidden = !party.photo;
+        upBtn.classList.toggle("np-on", !!party.photo);
+        paintPic(upBtn.querySelector(".np-up-pic"), party.me || "?");
+      }
       // same as the popup: the saved name, or empty (placeholder) while it's an automatic "Guest N"
       const shownName = () => {
         const n = cleanName(party.name);
@@ -3128,25 +4379,49 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
               el("div", { class: "np-field-label np-field-sub" }, "Picture"),
               el(
                 "div",
-                { class: "np-avatar-grid" },
-                ...E.avatars.map((a) =>
-                  el("button", {
-                    type: "button", class: "np-avatar-opt np-emo", title: a, "aria-label": "Use " + a, "data-avatar": a,
-                    onclick: () => {
-                      pops.close();
-                      party.avatar = a; // the storage listener tells the server
-                      chrome.storage.sync.set({ avatar: a }).catch(() => {});
-                      peopleSig = "";
-                      render();
-                    },
-                  }, a),
+                { class: "np-avatar-scroll" },
+                el(
+                  "div",
+                  { class: "np-photo-row" },
+                  (upBtn = el(
+                    "button",
+                    { type: "button", class: "np-photo-btn", title: "Use a photo of your own (only people in your party see it)", onclick: () => fileIn.click() },
+                    el("span", { class: "np-up-pic np-emo" }),
+                    el("span", {}, "Upload photo"),
+                  )),
+                  (removeBtn = el("button", { type: "button", class: "np-photo-btn np-photo-remove", onclick: removePhoto }, "Remove photo")),
+                  (fileIn = el("input", { type: "file", accept: "image/*", hidden: "", "aria-hidden": "true", tabindex: "-1" })),
+                ),
+                el(
+                  "div",
+                  { class: "np-avatar-grid np-hd-grid" },
+                  ...[...HD.values()].map((x) =>
+                    el(
+                      "button",
+                      { type: "button", class: "np-avatar-opt np-avatar-hd np-emo", title: x.label, "aria-label": "Use " + x.label, "data-avatar": "av:" + x.id, onclick: () => choose("av:" + x.id) },
+                      paintSpec(el("span", { class: "np-opt-pic" }), { e: x.emoji, hd: "av:" + x.id, img: null }),
+                    ),
+                  ),
+                ),
+                el("div", { class: "np-field-label np-field-sub" }, "Emoji"),
+                el(
+                  "div",
+                  { class: "np-avatar-grid" },
+                  ...E.avatars.map((a) =>
+                    el("button", { type: "button", class: "np-avatar-opt np-emo", title: a, "aria-label": "Use " + a, "data-avatar": a, onclick: () => choose(a) }, a),
+                  ),
                 ),
               ),
             );
+            fileIn.addEventListener("change", () => {
+              const f = fileIn.files?.[0];
+              fileIn.value = "";
+              if (f) upload(f);
+            });
             panel.append(node);
           }
           if (pops.current !== node) nameIn.value = shownName();
-          for (const b of node.querySelectorAll(".np-avatar-opt")) b.classList.toggle("np-on", b.dataset.avatar === party.avatar);
+          marks();
           pops.open(node, anchor, 0);
           if (pops.current !== node) return;
           // just below what opened it (your picture in the people row, or your camera tile)
@@ -3485,8 +4760,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
           t.node.classList.toggle("np-cam-wait", !c.live);
           const name = c.self ? "You" : nameOf(c.id);
           if (t.nameEl.textContent !== name) t.nameEl.textContent = name;
-          const p = picOf(c.id);
-          if (t.pic.textContent !== p) t.pic.textContent = p;
+          paintPic(t.pic, c.id);
           t.pic.style.setProperty("--h", hue(c.id));
           const info = c.self ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(c.id);
           t.node.classList.toggle("np-speaking", !!info.speaking && !info.muted);
@@ -3616,6 +4890,12 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
 
       input = el("input", { class: "np-input", type: "text", placeholder: "Message the party…", "aria-label": "Message the party", maxlength: "500", autocomplete: "off" });
       input.addEventListener("input", updateSend);
+      input.addEventListener("input", () => {
+        mention.update();
+        if (input.value.trim() && !editing) typing.ping();
+      });
+      input.addEventListener("click", () => mention.update());
+      input.addEventListener("blur", () => setTimeout(() => shadow.activeElement !== input && mention.close(), 150));
       for (const t of ["keyup", "mouseup", "select", "input", "blur"]) input.addEventListener(t, rememberSel);
       sendBtn = iconBtn(ICON.send, "Send (Enter)", sendChat, "np-send");
       sendBtn.type = "submit";
@@ -3626,12 +4906,22 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
       reactBtn.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && reactions.hoverOpen());
       reactBtn.addEventListener("pointerleave", (e) => e.pointerType === "mouse" && reactions.hoverLeave());
       fontBtn = el("button", { type: "button", class: "np-tool np-tool-font", onclick: cycleFont }, "Aa");
-      for (const b of [emojiBtn, gifBtn, reactBtn, fontBtn]) keepFocus(b);
+      spoilerBtn = el("button", {
+        type: "button", class: "np-tool np-tool-sp", title: "Spoiler: hide this message until tapped (or put ||double bars|| around words)",
+        "aria-label": "Spoiler", "aria-pressed": "false", onclick: () => (setSpoiler(!spoilerOn), input.focus()),
+      }, svg(ICON.eyeOff));
+      setBtn = el("button", { type: "button", class: "np-tool np-tool-set", title: "Settings", "aria-label": "Settings", "aria-expanded": "false", onclick: () => settings.toggle() }, svg(ICON.gear));
+      for (const b of [emojiBtn, gifBtn, reactBtn, spoilerBtn, setBtn, fontBtn]) keepFocus(b);
+      typingEl = el("div", { class: "np-typing", "aria-live": "polite" });
+      typingEl.hidden = true;
       composer = el(
         "form",
         { class: "np-composer", onsubmit: (e) => (e.preventDefault(), sendChat()) },
-        el("div", { class: "np-tools" }, emojiBtn, gifBtn, reactBtn, el("span", { class: "np-grow" }), fontBtn),
+        typingEl,
+        mention.build(),
+        el("div", { class: "np-tools" }, emojiBtn, gifBtn, reactBtn, spoilerBtn, el("span", { class: "np-grow" }), setBtn, fontBtn),
         reply.build(),
+        edit.build(),
         el("div", { class: "np-row" }, input, sendBtn),
       );
 
@@ -3670,12 +4960,20 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         el("div", { class: "np-actions" }, copyBtn, leaveBtn),
         anyRow,
         anyNote,
+        (holdBar = el(
+          "div",
+          { class: "np-hold", role: "status" },
+          (holdTxt = el("span", { class: "np-hold-txt" })),
+          (holdBtn = el("button", { type: "button", class: "np-pill np-hold-btn", onclick: () => hold.resume() }, "Resume")),
+        )),
         el("div", { class: "np-section-label" }, "Watching"),
         peopleEl,
         voiceBox,
+        pin.build(),
         chatEl,
         composer,
       );
+      holdBar.hidden = true;
       // keep clicks and scrolls inside the panel from reaching the player
       for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"])
         panel.addEventListener(evt, (e) => e.stopPropagation());
@@ -3721,13 +5019,14 @@ html.np-docked [data-np-shrink] {
       prime: [],
     };
     function playerBox() {
-      for (const sel of PLAYER_BOX[IS_HOTSTAR ? "hotstar" : IS_PRIME ? "prime" : "netflix"] || []) {
+      for (const sel of (IS_HOTSTAR || IS_PRIME || IS_HBO || IS_CR || IS_SL ? [] : PLAYER_BOX.netflix)) {
         const n = document.querySelector(sel);
         if (n && n.getBoundingClientRect().width > 0) return n;
       }
       // generic: the outermost full-width ancestor of the video, below the page root
       const top = document.fullscreenElement || document.body;
-      const v = mainVideo();
+      // Crunchyroll: the player is an iframe (its <video> is in another document)
+      const v = mainVideo() || (IS_CR ? crFrameEl() : null);
       let box = null;
       for (let n = v?.parentElement; n && n !== top && n !== document.documentElement; n = n.parentElement) {
         if (n === host) break;
@@ -3805,6 +5104,7 @@ html.np-docked [data-np-shrink] {
       open = true;
       sessionStorage.setItem("netpartyPanel", "open");
       unread = 0;
+      unreadAt = false;
       mount();
       root.classList.add("np-open");
       toastEl.classList.remove("np-show");
@@ -3832,9 +5132,10 @@ html.np-docked [data-np-shrink] {
       }
     }
 
-    function toast(name, text) {
+    function toast(name, text, atMe = false) {
       if (open) return;
-      toastEl.replaceChildren(el("b", {}, name), " ", text.length > 80 ? text.slice(0, 80) + "…" : text);
+      toastEl.replaceChildren(el("b", {}, name), atMe ? " mentioned you: " : " ", text.length > 80 ? text.slice(0, 80) + "…" : text);
+      toastEl.classList.toggle("np-toast-at", atMe);
       toastEl.classList.add("np-show");
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toastEl.classList.remove("np-show"), 4000);
@@ -3847,11 +5148,72 @@ html.np-docked [data-np-shrink] {
       return `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}`;
     };
 
+    // 2.2: "Waiting for Rahul to load…" / "Rahul disconnected, paused" (+ Resume once they've left)
+    function drawHold() {
+      if (!holdBar) return;
+      const t = party.roomId ? hold.text() : "";
+      if (holdTxt.textContent !== t) holdTxt.textContent = t;
+      holdBar.hidden = !t;
+      holdBtn.hidden = !t || !hold.canResume;
+    }
+    // 2.2: "Rahul is typing…" / "2 people are typing…" just above the chat box
+    function drawTyping(ids) {
+      if (!typingEl) return;
+      const t = !ids.length ? "" : ids.length === 1 ? `${nameOf(ids[0])} is typing…` : `${ids.length} people are typing…`;
+      if (typingEl.textContent !== t) typingEl.textContent = t;
+      typingEl.hidden = !t;
+    }
+    // 2.2: Settings in the panel (the same switches as the popup's Settings)
+    const settings = (() => {
+      let node;
+      const ITEMS = [
+        ["syncWait", "Wait when someone's video is loading", "Pauses everyone and plays on together once it has loaded (or after 20 seconds)."],
+        ["dropPause", "Pause when someone drops out", "Plays on when they're back, or offers Resume if they don't come back."],
+        ["autoDuck", "Lower the video while friends talk", "In voice chat, the video plays quieter while someone speaks."],
+      ];
+      function draw() {
+        if (!node) return;
+        for (const b of node.querySelectorAll("[data-pref]")) b.setAttribute("aria-checked", String(prefs[b.dataset.pref]));
+      }
+      return {
+        draw,
+        toggle() {
+          if (!node) {
+            node = popEl(
+              "np-set-pop",
+              "Settings",
+              el("div", { class: "np-pop-title" }, "Settings"),
+              ...ITEMS.map(([k, label, sub]) =>
+                el("button", {
+                  type: "button", class: "np-switch", role: "switch", "data-pref": k, "aria-checked": "true",
+                  onclick: () => {
+                    const on = !prefs[k];
+                    prefs[k] = on;
+                    draw();
+                    (on ? chrome.storage.sync.remove(k) : chrome.storage.sync.set({ [k]: false })).catch(() => {});
+                  },
+                }, el("span", { class: "np-switch-txt" }, el("span", { class: "np-switch-label" }, label), el("small", {}, sub)), el("span", { class: "np-switch-track", "aria-hidden": "true" })),
+              ),
+            );
+            node.addEventListener("np-close", () => setBtn.classList.remove("np-on"));
+            panel.append(node);
+          }
+          draw();
+          if (pops.current === node) return pops.close();
+          pops.open(node, setBtn);
+          setBtn.classList.add("np-on");
+        },
+      };
+    })();
+
     function render() {
       if (!host) return;
       mount();
-      badge.textContent = unread > 9 ? "9+" : unread ? String(unread) : "";
+      badge.textContent = (unreadAt ? "@" : "") + (unread > 9 ? "9+" : unread ? String(unread) : "");
       badge.style.display = unread ? "" : "none";
+      badge.classList.toggle("np-badge-at", unreadAt);
+      pin.draw();
+      drawHold();
       codeEl.textContent = party.roomId ? "· " + party.roomId : "";
       const leaveLabel = party.me && party.me === party.hostId ? "End the party for everyone" : "Leave party";
       if (leaveIcon.title !== leaveLabel) {
@@ -3866,7 +5228,7 @@ html.np-docked [data-np-shrink] {
         .map((m) => {
           const isMe = m.id === party.me;
           const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
-          return [m.id, nameOf(m.id), picOf(m.id), m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking, info.connected].join(":");
+          return [m.id, nameOf(m.id), picKey(picSpec(m.id)), m.host, isMe ? voice.active : m.inVoice, info.muted, info.speaking, info.connected].join(":");
         })
         .join("|");
       if (pSig !== peopleSig) {
@@ -3876,8 +5238,7 @@ html.np-docked [data-np-shrink] {
             const isMe = m.id === party.me;
             const info = isMe ? { muted: voice.muted, speaking: voice.speaking } : voice.peerInfo(m.id);
             const inVoice = isMe ? voice.active : !!m.inVoice;
-            const pic = picOf(m.id);
-            const avatar = el("div", { class: "np-avatar np-emo", style: `--h:${hue(m.id)}` }, el("span", { class: "np-avatar-pic" }, pic));
+            const avatar = el("div", { class: "np-avatar np-emo", style: `--h:${hue(m.id)}` }, paintPic(el("span", { class: "np-avatar-pic" }), m.id));
             if (m.host) avatar.append(el("span", { class: "np-crown", title: "Host" }, svg(ICON.crown)));
             if (inVoice) avatar.append(el("span", { class: "np-mic" + (info.muted ? " np-off" : ""), title: info.muted ? "Muted" : "In voice" }, svg(info.muted ? ICON.micOff : ICON.mic)));
             const label = nameOf(m.id) + (m.host ? " (host)" : "");
@@ -3992,7 +5353,41 @@ html.np-docked [data-np-shrink] {
       if (nearBottom || !open) chatToBottom();
     }
 
-    // d: { id (sender pid), ts, text } or { id, ts, gif: { url, w, h } } (decrypted and checked)
+    // 2.2: a line's text with its mentions (current names) and spoilers (blurred until tapped, for each viewer)
+    function richText(text, marks = {}) {
+      const ranges = [...(marks.sp || []).map((x) => ({ ...x, k: "sp" })), ...(marks.mn || []).map((x) => ({ ...x, k: "mn" }))].sort((a, b) => a.i - b.i);
+      const out = [];
+      let at = 0;
+      for (const r of ranges) {
+        if (r.i < at) continue;
+        if (r.i > at) out.push(...linkify(text.slice(at, r.i)));
+        if (r.k === "sp") out.push(spoilerEl(r.s));
+        else {
+          const known = r.p === party.me || party.profiles.has(r.p) || party.members.some((m) => m.id === r.p);
+          out.push(el("span", { class: "np-mention" + (r.p === party.me ? " np-mention-me" : ""), "data-mpid": r.p, ...(known ? {} : { "data-orig": text.substr(r.i, r.n) }) }, known ? "@" + nameOf(r.p) : text.substr(r.i, r.n)));
+        }
+        at = r.i + r.n;
+      }
+      if (at < text.length) out.push(...linkify(text.slice(at)));
+      return out;
+    }
+    function spoilerEl(hidden) {
+      const b = el("button", { type: "button", class: "np-spoiler", title: "Spoiler: tap to show", "aria-label": "Spoiler, hidden. Press to show", "aria-expanded": "false" }, el("span", { class: "np-spoiler-t", "aria-hidden": "true" }, hidden));
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const shown = b.classList.toggle("np-shown");
+        b.setAttribute("aria-expanded", String(shown));
+        b.title = shown ? "Spoiler: tap to hide again" : "Spoiler: tap to show";
+        b.setAttribute("aria-label", shown ? "Spoiler: " + hidden : "Spoiler, hidden. Press to show");
+        b.firstChild.setAttribute("aria-hidden", String(!shown));
+      });
+      return b;
+    }
+    const mentionsMe = (d) => d.id !== party.me && !!d.mn?.some((x) => x.p === party.me);
+    // what a line can be quoted, pinned or edited as
+    const infoOf = (d, mid) => ({ mid, uid: d.id, s: d.gif ? "" : d.sp ? "Spoiler" : cleanSnippet(d.text || ""), g: !!d.gif, sp: !!d.sp, raw: d.gif ? "" : rawText(d.text || "", d.sp) });
+
+    // d: { id (sender pid), ts, text, mn?, sp? } or { id, ts, gif: { url, w, h } } (decrypted and checked)
     function chat(d, replay = false) {
       const mine = d.id === party.me;
       const time = new Date(d.ts || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -4006,7 +5401,7 @@ html.np-docked [data-np-shrink] {
         img.addEventListener("load", () => nearBottomScroll());
         media.load(img, d.gif.url);
         body = el("div", { class: "np-bubble np-bubble-gif" }, img, el("span", { class: "np-time" }, time));
-      } else if (text) body = el("div", { class: "np-bubble" }, ...linkify(text), el("span", { class: "np-time" }, time));
+      } else if (text) body = el("div", { class: "np-bubble" }, ...richText(text, d), el("span", { class: "np-time" }, time));
       else return;
       // everyone's lines, ours included, carry the sender's picture and name (ours on the right);
       // more lines from the same person within a minute stack under the first without repeating them
@@ -4018,16 +5413,59 @@ html.np-docked [data-np-shrink] {
       const line = el(
         "div",
         { class: "np-msg" + (mine ? " np-mine" : "") + (cont ? " np-cont" : ""), "data-uid": d.id, "data-ts": String(cont ? prev.dataset.ts : ts), ...(mid ? { "data-mid": mid } : {}) },
-        el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }, picOf(d.id)),
+        paintPic(el("div", { class: "np-mav np-emo", "data-uid": d.id, style: `--h:${hue(d.id)}`, "aria-hidden": "true" }), d.id),
         el("div", { class: "np-mcol" }, el("div", { class: "np-author", "data-uid": d.id, style: `--h:${hue(d.id)}` }, who), ...(d.re ? [quoteEl(d.re)] : []), body),
       );
-      if (mid) lineInfo.set(line, { mid, uid: d.id, s: d.gif ? "" : cleanSnippet(text), g: !!d.gif });
+      if (mid) lineInfo.set(line, infoOf(d, mid));
+      const atMe = mentionsMe(d);
+      if (atMe) line.classList.add("np-at-me");
       addLine(line);
       if (!open && !mine && !replay) {
         unread++;
-        toast(who, d.gif ? "sent a GIF" : text);
+        if (atMe) unreadAt = true;
+        toast(who, d.gif ? "sent a GIF" : text, atMe);
         render();
       }
+      if (mid && pin.current?.id === mid) pin.draw();
+    }
+    // 2.2: an edit from the line's own sender (anyone else's is ignored)
+    function msgEdit(d) {
+      const node = msgNode(d.id);
+      const info = node && lineInfo.get(node);
+      if (!info || node.dataset.uid !== d.from || node.dataset.deleted || info.g) return;
+      const bubble = node.querySelector(".np-bubble");
+      const time = bubble.querySelector(".np-time");
+      bubble.replaceChildren(...richText(d.text, d), el("span", { class: "np-edited" }, "(edited)"), time);
+      lineInfo.set(node, infoOf({ ...d, id: d.from }, info.mid));
+      node.classList.toggle("np-at-me", mentionsMe({ ...d, id: d.from }));
+      if (pin.current?.id === info.mid) pin.draw();
+      nearBottomScroll();
+    }
+    // 2.2: a delete from the line's own sender: "Message deleted" stays in its place
+    function msgDelete(d) {
+      const node = msgNode(d.id);
+      if (!node || node.dataset.uid !== d.from || node.dataset.deleted) return;
+      node.dataset.deleted = "1";
+      acts.detach(node);
+      const col = node.querySelector(".np-mcol");
+      for (const n of col.querySelectorAll(".np-quote, .np-reacts")) n.remove();
+      const bubble = col.querySelector(".np-bubble");
+      const time = bubble.querySelector(".np-time");
+      media.release(bubble);
+      bubble.className = "np-bubble np-deleted";
+      bubble.replaceChildren(el("span", {}, "Message deleted"), time);
+      node.classList.remove("np-at-me");
+      lineInfo.delete(node);
+      msgReactions.forget(d.id);
+      for (const q of chatEl.querySelectorAll(".np-quote[data-qid]"))
+        if (q.dataset.qid === d.id) {
+          const qs = q.querySelector(".np-quote-s");
+          qs.textContent = "Message deleted";
+          qs.className = "np-quote-s np-quote-del";
+        }
+      if (editing?.mid === d.id) edit.cancel();
+      if (replyTo?.id === d.id) reply.cancel();
+      if (pin.current?.id === d.id) pin.draw();
     }
     // the quoted line above a reply: name + one line (or "GIF"); click to jump to the original
     const quoteName = (re) => (re.uid && (re.uid === party.me || party.profiles.has(re.uid)) ? nameOf(re.uid) : re.name || (re.uid ? nameOf(re.uid) : "Someone"));
@@ -4036,9 +5474,10 @@ html.np-docked [data-np-shrink] {
         "button",
         { type: "button", class: "np-quote" + (re.id ? "" : " np-quote-noref"), title: re.id ? "Show the original message" : "", "aria-label": `Reply to ${quoteName(re)}: ${re.g ? "GIF" : re.s}` },
         el("span", { class: "np-quote-name", ...(re.uid ? { "data-quid": re.uid } : {}) }, quoteName(re)),
-        el("span", { class: "np-quote-s" + (re.g ? " np-quote-gif" : "") }, re.g ? "GIF" : re.s),
+        el("span", { class: "np-quote-s" + (re.g ? " np-quote-gif" : re.sp ? " np-quote-sp" : "") }, re.g ? "GIF" : re.s),
       );
       if (re.name) q.dataset.qname = re.name;
+      if (re.id) q.dataset.qid = re.id;
       q.addEventListener("click", (e) => (e.stopPropagation(), jumpTo(re.id, q)));
       return q;
     }
@@ -4079,15 +5518,20 @@ html.np-docked [data-np-shrink] {
         const v = nameOf(n.dataset.uid);
         if (n.textContent !== v) n.textContent = v;
       }
-      for (const n of chatEl.querySelectorAll(".np-mav[data-uid]")) {
-        const v = picOf(n.dataset.uid);
-        if (n.textContent !== v) n.textContent = v;
-      }
+      for (const n of chatEl.querySelectorAll(".np-mav[data-uid]")) paintPic(n, n.dataset.uid);
       for (const n of chatEl.querySelectorAll(".np-quote-name[data-quid]")) {
         const v = quoteName({ uid: n.dataset.quid, name: n.parentNode.dataset.qname || null });
         if (n.textContent !== v) n.textContent = v;
       }
+      // mentions show the member's current name
+      for (const n of chatEl.querySelectorAll(".np-mention[data-mpid]")) {
+        const pid = n.dataset.mpid;
+        const known = pid === party.me || party.profiles.has(pid) || party.members.some((m) => m.id === pid);
+        const v = known ? "@" + nameOf(pid) : n.dataset.orig || n.textContent;
+        if (n.textContent !== v) n.textContent = v;
+      }
       msgReactions.redraw();
+      pin.draw();
     }
     // everything said in the party so far (the server keeps the last 150 lines, encrypted)
     function loadHistory(list) {
@@ -4098,10 +5542,13 @@ html.np-docked [data-np-shrink] {
       reply.cancel();
       acts.hide();
       system("🔒 Chat is end-to-end encrypted. Only people with the invite link can read it.");
-      // reactions are folded onto their lines (in order), then drawn once
+      // reactions, edits and deletes are folded onto their lines (in order), then drawn once
+      edit.cancel();
       for (const h of list) {
         if (h.kind === "chat") chat(h, true);
         else if (h.kind === "mr") msgReactions.apply(h, false);
+        else if (h.kind === "me") msgEdit(h);
+        else if (h.kind === "md") msgDelete(h);
         else sysEvent(h.event, h.id);
       }
       msgReactions.redraw();
@@ -4122,6 +5569,16 @@ html.np-docked [data-np-shrink] {
       render,
       chat,
       msgReact: (d) => host && msgReactions.apply(d),
+      msgEdit: (d) => host && msgEdit(d),
+      msgDelete: (d) => host && msgDelete(d),
+      setPin(p) {
+        if (!host) build();
+        pin.set(p);
+      },
+      typing: (ids) => drawTyping(ids),
+      hold: () => drawHold(),
+      isOpen: () => open,
+      prefsChanged: () => settings.draw(),
       system,
       sysEvent,
       refreshNames: () => {
@@ -4185,6 +5642,7 @@ html.np-docked [data-np-shrink] {
     // a video in a cross-origin iframe (anyvideo.js agent), relayed by the background: nothing to answer
     if (msg?.cmd === "npFrameEvt") {
       if (IS_ANY && Number.isInteger(msg.frameId)) anyV.onFrame(msg);
+      else if (IS_CR && Number.isInteger(msg.frameId)) crFrame.onFrame(msg);
       return;
     }
     if (msg?.cmd === "npAgent") return; // for agents in subframes, not for us
@@ -4195,6 +5653,7 @@ html.np-docked [data-np-shrink] {
             return {
               site: SITE_NAME,
               onWatchPage: !!videoIdFromUrl(),
+              title: videoIdFromUrl() ? currentTitle() : "", // what's playing (the popup and tests; never sent anywhere)
               roomId: party.roomId,
               members: party.members.map((m) => nameOf(m.id)),
               invite: inviteLink(),

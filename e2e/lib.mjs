@@ -27,7 +27,7 @@ export async function launch(dir, { name, avatar, extra = {}, ctxOpts = {}, args
     ...ctxOpts,
     args: [
       `--disable-extensions-except=${ext}`, `--load-extension=${ext}`,
-      "--host-resolver-rules=MAP www.netflix.com:443 127.0.0.1:8443, MAP www.hotstar.com:443 127.0.0.1:8443, MAP www.youtube.com:443 127.0.0.1:8443, MAP static.klipy.com:443 127.0.0.1:8443, MAP www.primevideo.com:443 127.0.0.1:8443, MAP www.amazon.co.uk:443 127.0.0.1:8443",
+      "--host-resolver-rules=MAP www.netflix.com:443 127.0.0.1:8443, MAP www.hotstar.com:443 127.0.0.1:8443, MAP www.youtube.com:443 127.0.0.1:8443, MAP static.klipy.com:443 127.0.0.1:8443, MAP www.primevideo.com:443 127.0.0.1:8443, MAP www.amazon.co.uk:443 127.0.0.1:8443, MAP play.hbomax.com:443 127.0.0.1:8443, MAP play.max.com:443 127.0.0.1:8443, MAP www.crunchyroll.com:443 127.0.0.1:8443, MAP static.crunchyroll.com:443 127.0.0.1:8443, MAP www.sonyliv.com:443 127.0.0.1:8443",
       "--ignore-certificate-errors", "--autoplay-policy=no-user-gesture-required", "--no-sandbox", "--no-proxy-server",
       // voice chat with a fake microphone; plain host candidates so two local browsers can connect
       "--use-fake-device-for-media-stream", ...(prompts ? [] : ["--use-fake-ui-for-media-stream"]), "--disable-features=WebRtcHideLocalIpsWithMdns",
@@ -68,8 +68,10 @@ export const keyOf = (invite) => (String(invite).match(/#k=([A-Za-z0-9_-]{43})$/
 
 // A recording proxy between the extension and the party server: everything the server
 // receives and sends, per connection. HTTP (invite pages, GIF API) is passed through too.
-export function tap(listenPort, targetPort) {
+// rewrite(dir, text, conn) -> text (optional): change a frame on its way (relaycreds.mjs swaps relay credentials)
+export function tap(listenPort, targetPort, rewrite = null) {
   const frames = []; // { conn, dir: "up" | "down", text }
+  const conns = new Map(); // conn -> close() (drop one browser's socket)
   let n = 0;
   const srv = http.createServer(async (req, res) => {
     try {
@@ -91,16 +93,19 @@ export function tap(listenPort, targetPort) {
       const queue = [];
       up.on("open", () => queue.splice(0).forEach((m) => up.send(m)));
       client.on("message", (raw) => {
-        const text = raw.toString();
+        let text = raw.toString();
+        if (rewrite) text = rewrite("up", text, conn);
         frames.push({ conn, dir: "up", text });
         up.readyState === 1 ? up.send(text) : queue.push(text);
       });
       up.on("message", (raw) => {
-        const text = raw.toString();
+        let text = raw.toString();
+        if (rewrite) text = rewrite("down", text, conn);
         frames.push({ conn, dir: "down", text });
         if (client.readyState === 1) client.send(text);
       });
-      const end = () => (client.readyState <= 1 && client.close(), up.readyState <= 1 && up.close());
+      const end = () => (conns.delete(conn), client.readyState <= 1 && client.close(), up.readyState <= 1 && up.close());
+      conns.set(conn, () => client.terminate());
       client.on("close", end);
       up.on("close", end);
       client.on("error", end);
@@ -108,7 +113,7 @@ export function tap(listenPort, targetPort) {
     }),
   );
   srv.listen(listenPort);
-  return { frames, url: `ws://localhost:${listenPort}`, close: () => (wss.close(), srv.close()) };
+  return { frames, conns, url: `ws://localhost:${listenPort}`, close: () => (wss.close(), srv.close()) };
 }
 // which of these strings appear in any recorded frame (empty = nothing leaked)
 export const leaks = (frames, needles) => needles.filter((x) => x && frames.some((f) => f.text.includes(x)));

@@ -1,12 +1,65 @@
 // Emoji data shared by the content script, the popup and the background worker.
-// Plain text emoji only (no images): each OS draws them with its own emoji font,
-// so Mac users get Apple's emoji, Windows Segoe, Android/Linux Noto.
+// Plain text emoji (each OS draws them with its own emoji font, so Mac users get Apple's
+// emoji, Windows Segoe, Android/Linux Noto), plus the list of bundled HD avatar pictures.
 (() => {
   const split = (s) => s.trim().split(/\s+/);
   globalThis.NP_EMOJI = {
     // profile pictures (must match AVATARS in server/core.js)
     avatars: split(`🐶 🐱 🐼 🦊 🐨 🐸 🐵 🐧 🦄 🐯 🐰 🐻 🐮 🐷 🐙 🦁
       🍕 🍩 🍔 🌮 🍣 🧁 🍉 🍓 🍪 🥑 🍦 🍿`),
+    // 2.2 HD profile pictures: [slug, label, closest emoji]. The picture is the bundled file
+    // avatars/av-<slug>.webp (Microsoft Fluent Emoji 3D, MIT, see avatars/LICENSES.md); a profile
+    // sends { avatar: <emoji>, hd: "av:<slug>" } so 2.1 and older show the emoji instead.
+    hd: [
+      ["fox", "Fox", "🦊"],
+      ["panda", "Panda", "🐼"],
+      ["cat", "Cat", "🐱"],
+      ["dog", "Dog", "🐶"],
+      ["tiger", "Tiger", "🐯"],
+      ["lion", "Lion", "🦁"],
+      ["bear", "Bear", "🐻"],
+      ["koala", "Koala", "🐨"],
+      ["bunny", "Bunny", "🐰"],
+      ["hamster", "Hamster", "🐹"],
+      ["monkey", "Monkey", "🐵"],
+      ["penguin", "Penguin", "🐧"],
+      ["owl", "Owl", "🦉"],
+      ["frog", "Frog", "🐸"],
+      ["octopus", "Octopus", "🐙"],
+      ["pig", "Pig", "🐷"],
+      ["raccoon", "Raccoon", "🦝"],
+      ["turtle", "Turtle", "🐢"],
+      ["chick", "Chick", "🐣"],
+      ["unicorn", "Unicorn", "🦄"],
+      ["dragon", "Dragon", "🐲"],
+      ["t-rex", "T-Rex", "🦖"],
+      ["alien", "Alien", "👽"],
+      ["pixel-alien", "Pixel Alien", "👾"],
+      ["robot", "Robot", "🤖"],
+      ["ghost", "Ghost", "👻"],
+      ["pumpkin", "Pumpkin", "🎃"],
+      ["devil", "Little Devil", "😈"],
+      ["genie", "Genie", "🧞"],
+      ["elf", "Elf", "🧝"],
+      ["vampire", "Vampire", "🧛"],
+      ["zombie", "Zombie", "🧟"],
+      ["superhero", "Superhero", "🦸"],
+      ["wizard", "Wizard", "🧙"],
+      ["astronaut", "Astronaut", "🧑‍🚀"],
+      ["ninja", "Ninja", "🥷"],
+      ["detective", "Detective", "🕵️"],
+      ["pilot", "Pilot", "🧑‍✈️"],
+      ["chef", "Chef", "🧑‍🍳"],
+      ["royal", "Royal", "🫅"],
+      ["cool", "Cool Shades", "😎"],
+      ["party", "Party", "🥳"],
+      ["avocado", "Avocado", "🥑"],
+      ["pizza", "Pizza", "🍕"],
+      ["donut", "Donut", "🍩"],
+      ["taco", "Taco", "🌮"],
+      ["cupcake", "Cupcake", "🧁"],
+      ["popcorn", "Popcorn", "🍿"]
+    ].map(([id, label, emoji]) => ({ id, label, emoji })),
     reactions: ["😂", "😭", "💀", "🥰", "😱"], // default 🎉 tray
     categories: [
       {

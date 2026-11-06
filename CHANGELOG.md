@@ -4,6 +4,69 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.2.0] - 2026-11-06
+### Added
+- **HBO Max, Crunchyroll and SonyLIV**: start and join parties on `play.hbomax.com` (and `play.max.com`, which now
+  redirects there) at `/video/watch/<id>`, on Crunchyroll's `/watch/<id>/…` pages (also under a language prefix such
+  as `/fr/`; the video plays in Crunchyroll's player frame from `static.crunchyroll.com`, which NetParty drives from
+  inside that frame) and on SonyLIV's player (`/shows/…`, `/movies/…` and the other title paths with `?watch=true`).
+  Play, pause, seek and episode changes sync; sync stops while an ad shows and catches up after it. Start a party
+  from the popup there (no "Start a NetParty" buttons on those sites yet). Built from the services' public page
+  structure and tested against test pages that copy it: we can't sign in to these services, so they're untested on
+  the real sites.
+- **Waits when someone's video is loading**: if a friend's video stalls for more than a second, the party pauses for
+  everyone ("Waiting for Rahul to load…") and plays on together, from the same moment, once it has loaded. After 20
+  seconds it plays on anyway and says so in the chat. Only the member whose video is stuck says so; the host decides
+  for the party. Anyone pressing play, pause or seek decides instead.
+- **Pauses when someone drops out**: when a member's connection drops while the video plays (not when they press
+  Leave), the party pauses ("Priya disconnected, paused") and plays on by itself when they're back within 15 seconds.
+  If they don't come back, anyone who can control playback gets a **Resume** button.
+- **Typing indicator**: "Rahul is typing…" or "2 people are typing…" above the chat box.
+- **@mentions**: type @ to pick someone from the party (names with spaces work). Mentions show the person's current
+  name; a line that mentions you is highlighted, and the message preview and unread badge say so while the chat is
+  closed.
+- **Spoilers**: put `||double bars||` around words, or switch on **Spoiler** in the chat bar to hide the whole message.
+  Spoilers stay blurred until each person taps them. A reply to a spoiler only quotes "Spoiler".
+- **Edit and delete your messages** from the message's action bar (Delete asks for a second press). Edited messages
+  say "(edited)"; deleted ones leave "Message deleted".
+- **Pin a message**: the host (or anyone, while everyone controls playback) can pin one message. It shows in a bar
+  above the chat; click it to jump to the message, × to unpin. People who join later see it too.
+- **Lower the video while friends talk**: in voice chat the video plays at 30% of its volume while someone else is
+  speaking, and goes back to exactly your volume 600 ms after they stop (or when you leave voice). A change you make
+  while it's lowered is kept.
+- **Settings** in the chat panel (the ⚙ in the chat bar) and in the popup: switch off waiting for loading videos,
+  pausing on drop-outs, or lowering the video while friends talk (all on by default).
+- **HD profile pictures**: 48 new pictures (animals, characters and food from Microsoft's Fluent Emoji 3D set, MIT
+  licence) come with the extension and show first in the picture picker, in the chat panel and the popup. Emoji
+  pictures stay in an **Emoji** section. New installs start with a random HD picture.
+- **Your own photo**: **Upload photo** in the chat panel's "Your profile" crops a picture to a square, shrinks it to
+  96 x 96 and keeps it in this browser only (`chrome.storage.local`, never synced). It goes to the party inside
+  your end-to-end encrypted profile, so only people in your party see it. **Remove photo** takes it away; picking
+  an HD picture or an emoji replaces it.
+
+### Changed
+- Everything new stays end-to-end encrypted. Typing and "my video is loading" are short encrypted signals the server
+  passes on and never stores (a new `ev` message, rate-limited to 24 per 10 seconds); the pinned message is stored
+  with the party as ciphertext only (a new `pin` message). The server now tells the party when a member's connection
+  drops (an `away` flag), and accepts the new playback reasons `buffer`, `drop` and `resume`.
+- Mentions, spoilers, edits and deletes ride inside the encrypted chat line. NetParty 2.1 and 2.0 show mentions as
+  plain "@Name", show "[spoiler]" in place of hidden text, ignore edits and deletes (they keep showing the original
+  message), and ignore typing, waiting and pins.
+- A player event that only repeats what the party is already doing is no longer sent to the party (a seek NetParty
+  made for the party could finish late on a slow connection and look like your own seek).
+- Profiles now carry `{ name, avatar, hd?, img? }`: `avatar` stays an emoji (the HD picture's closest emoji), so
+  NetParty 2.1 and older show 🦊 where 2.2 shows the HD fox, and an emoji instead of a photo. Pictures are never
+  loaded from a URL: HD pictures come from the extension's own files, photos are checked (`data:` WebP, JPEG or
+  PNG only, at most 9 KB, must decode as an image) and shown from a `blob:` URL, a `data:` URL or a `<canvas>`,
+  whichever the site's Content-Security-Policy allows. The server's profile size limit grew to fit a photo
+  (still rate-limited to 10 profile updates per 10 seconds per connection).
+
+### Fixed
+- **Voice and video over the relay after a long party**: relay (TURN) credentials are now re-fetched before a call
+  when they're over 6 hours old, and always when a link is being reconnected after it failed, on both sides (the
+  answering side refreshes when the same friend calls again). After the party connection drops and comes back, voice
+  chat now uses the new credentials from the server instead of the ones from when you first joined.
+
 ## [2.1.0] - 2026-11-06
 ### Added
 - **Replies**: hover a chat line (tap or long-press on touch) and press **Reply**. A strip above the chat box

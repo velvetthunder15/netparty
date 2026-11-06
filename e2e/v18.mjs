@@ -265,7 +265,12 @@ await gp.screenshot({ path: "v19-docked-2cams-guest.png" });
 // widths 1280 → 1920, both themes: the panel never overflows
 for (const [w, h] of [[1440, 900], [1920, 1080], [1280, 720]]) {
   await hp.setViewportSize({ width: w, height: h });
-  await sleep(500);
+  // wait for the relayout instead of a fixed 500 ms: in this sandbox headless Chromium runs animation frames only
+  // every ~500 ms (measured the same for the 2.1.0 build), and the camera layout runs in a frame after the resize.
+  // Settled = the panel has its width for this window (dockWidth) and two reads 700 ms apart agree (longer than one frame).
+  const wantPw = Math.round(Math.min(380, Math.max(300, w * 0.22)));
+  let prevSig = "";
+  await until(async () => { const x = await geom(hp); const sig = JSON.stringify([x.pw, x.tiles]); const ok = x.pw === wantPw && sig === prevSig; prevSig = sig; return ok; }, 6000, 700);
   const g = await geom(hp);
   check(`${w}x${h}: 2 docked cameras fill the panel, 16:9, chat ≥ 4 lines, no overflow`, g.docked && g.tiles.length === 2 && g.tiles.every(r169) && inside(g) && g.share >= 0.4 && g.share <= 0.66 && lines4(g) && g.inputOk && !g.overflow, JSON.stringify({ share: g.share, pw: g.pw, ph: g.ph, tiles: g.tiles, chatH: g.chatH, overflow: g.overflow }));
   out(`geometry 2 cams ${w}x${h}:`, JSON.stringify({ share: g.share, pw: g.pw, tiles: g.tiles.map((t) => [t.w, t.h]), chatH: g.chatH }));
@@ -595,8 +600,12 @@ const crisp = async (p, dpr, where) => {
 await crisp(pop, 2, "popup");
 await crisp(hp, 2, "host overlay");
 await crisp(gp, 3, "guest overlay");
-const avatarFonts = await shadow(gp, (r) => { return [...r.querySelectorAll(".np-avatar, .np-mav, .np-avatar-opt")].map((n) => ({ ff: getComputedStyle(n).fontFamily, fs: getComputedStyle(n).fontSize, img: !!n.querySelector("img"), tf: getComputedStyle(n).transform })); });
-check("avatars are colour-emoji glyphs (vector/hi-res font), whole-pixel sizes, never images or scaled", avatarFonts.length >= 4 && avatarFonts.every((a) => /Color Emoji|Segoe UI Emoji/.test(a.ff) && /^\d+px$/.test(a.fs) && !a.img && a.tf === "none"), JSON.stringify(avatarFonts.slice(0, 3)));
+// emoji pictures (2.2: everything but the HD pictures and photos) are glyphs; HD pictures (128 px files) are never
+// shown larger than their pixels at this screen's density (3x)
+const avatarFonts = await shadow(gp, (r) => { return [...r.querySelectorAll(".np-avatar, .np-mav, .np-avatar-opt:not(.np-avatar-hd)")].filter((n) => !n.querySelector(".np-pic-img") && !n.classList.contains("np-pic-img")).map((n) => ({ ff: getComputedStyle(n).fontFamily, fs: getComputedStyle(n).fontSize, img: !!n.querySelector("img, canvas"), tf: getComputedStyle(n).transform })); });
+check("emoji avatars are colour-emoji glyphs (vector/hi-res font), whole-pixel sizes, never images or scaled", avatarFonts.length >= 4 && avatarFonts.every((a) => /Color Emoji|Segoe UI Emoji/.test(a.ff) && /^\d+px$/.test(a.fs) && !a.img && a.tf === "none"), JSON.stringify(avatarFonts.slice(0, 3)));
+const hdScale = await shadow(gp, (r) => { return [...r.querySelectorAll("img.np-pic")].filter((i) => i.naturalWidth && i.getBoundingClientRect().width).map((i) => (i.getBoundingClientRect().width * devicePixelRatio) / i.naturalWidth); });
+check("HD pictures are never upscaled (≤ 1.1x at 3x density)", hdScale.every((x) => x <= 1.1), JSON.stringify(hdScale.slice(0, 5)));
 const icons = await pop.evaluate(() => [...document.querySelectorAll("header img")].map((i) => i.getAttribute("src")));
 check("popup header logo is the SVG mark", icons.join() === "icons/mark.svg");
 await gp.screenshot({ path: "v18-guest-3x.png" });

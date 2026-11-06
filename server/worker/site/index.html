@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NetParty — Watch together, in sync</title>
+    <title>NetParty: Watch together, in sync</title>
     <meta name="description" content="NetParty is a free browser extension for watch parties: synced play, pause and seek, with text, voice and video chat beside the video. No account needed." />
-    <meta property="og:title" content="NetParty — Watch together, in sync" />
+    <meta property="og:title" content="NetParty: Watch together, in sync" />
     <meta property="og:description" content="Start a party on Netflix, YouTube or almost any video site, send one link, and everyone stays locked in sync, with chat, voice and video right beside the video. Free browser extension." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://netparty.tech/" />
@@ -363,6 +363,7 @@
       .x-plat__ic { width: 32px; height: 32px; flex: none; border-radius: 50%; background: #0d0c12; border: 1px solid #353147; display: grid; place-items: center; }
       .x-plat__ic img { width: 22px; height: 22px; object-fit: contain; display: block; }
       .x-plat__ic img[src="primevideo.svg"] { width: 27px; }
+      .x-plat--txt { padding: 0 16px; }
       @media (max-width: 600px) { .x-works__lab { flex-basis: 100%; text-align: center; margin: 0 0 2px; } }
       @media (max-width: 420px) {
         .x-works { gap: 6px; }
@@ -379,6 +380,10 @@
       .x-stack .x-av { box-shadow: 0 0 0 3px var(--x-s2); margin-left: -10px; }
       .x-stack .x-av:first-child { margin-left: 0; }
       .x-av--more { background: #2a2638; color: var(--x-text); font-size: 12px; }
+      .x-hd .x-av { width: 52px; height: 52px; }
+      .x-hd .x-av img { width: 86%; height: 86%; object-fit: contain; display: block; }
+      .x-av--photo svg { width: 22px; height: 22px; }
+      .x-at { color: #c4b2ff; font-weight: 600; }
 
       /* new feature vignettes */
       .x-e2e { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding: 0 10px; }
@@ -651,6 +656,9 @@
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="jiohotstar-star.webp" width="64" height="64" alt="" /></span>JioHotstar</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" width="22" height="22" alt="" /></span>YouTube</li>
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="primevideo.svg" width="27" height="22" alt="" /></span>Prime Video</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="hbo.svg" width="22" height="22" alt="" /></span>HBO Max</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="crunchyroll.svg" width="22" height="22" alt="" /></span>Crunchyroll</li>
+            <li class="x-chip x-plat x-plat--txt">SonyLIV</li>
             <li class="x-chip x-chip--dash"><a class="x-chip__lnk" href="#faq-other-sites">+ Other video sites</a></li>
           </ul>
           <div class="x-cta x-rv">
@@ -811,6 +819,39 @@
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
+                <div class="x-binge">
+                  <span class="x-chip">Waiting for Emma to load</span>
+                  <p class="x-binge__line"><span class="x-live"></span>Playing together again</p>
+                </div>
+              </div>
+              <h3>Stays in sync when someone buffers</h3>
+              <p>If a friend's video is still loading, the party waits and plays on together. If someone drops out, it pauses until they're back.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-binge">
+                  <span class="x-chip"><b class="x-at">@Emma</b> did you see that</span>
+                  <p class="x-binge__line">😂 2 · Reply</p>
+                </div>
+              </div>
+              <h3>Replies, reactions and mentions</h3>
+              <p>Reply to a message, react to it, or mention a friend. Hide spoilers and pin a message for the party.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <span class="x-stack x-hd">
+                  <span class="x-av x-av--e"><img src="av-fox.webp" width="128" height="128" alt="" /></span>
+                  <span class="x-av x-av--j"><img src="av-panda.webp" width="128" height="128" alt="" /></span>
+                  <span class="x-av x-av--r"><img src="av-robot.webp" width="128" height="128" alt="" /></span>
+                  <span class="x-av x-av--o"><img src="av-unicorn.webp" width="128" height="128" alt="" /></span>
+                  <span class="x-av x-av--more x-av--photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg></span>
+                </span>
+              </div>
+              <h3>HD avatars or your own photo</h3>
+              <p>Pick one of 48 HD avatars, or upload a photo that only people in your party can see.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
                 <div class="x-flyup">
                   <i class="x-fly">😂</i><i class="x-fly">😂</i><i class="x-fly">😂</i>
                   <span class="x-chip">😂</span>
@@ -878,10 +919,11 @@
           <div class="x-faq">
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
             <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
-            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, JioHotstar, YouTube and Prime Video, plus videos on other sites you choose, on a computer. It works in Google Chrome, Brave and other Chromium browsers, or in Firefox and Microsoft Edge from their official add-on stores. Opera is coming soon. Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV and JioHotstar, plus videos on other sites you choose, on a computer. It works in Google Chrome, Brave and other Chromium browsers, or in Firefox and Microsoft Edge from their official add-on stores. Opera is coming soon. Phones and TVs aren't supported.</p></details>
             <details class="x-rv" id="faq-other-sites"><summary>Does it work on other video sites?</summary><p>Yes, on most sites that play video in the browser. Open the video, click the NetParty icon and press Sync this tab. Your friends open the invite link, press Open the video, then click the NetParty icon on that page and press Join party on this tab. NetParty only runs on a site after you click, or on sites you set to Always allow. The page address is shared with your party end-to-end encrypted. Videos drawn without a video player, such as some games, can't be synced.</p></details>
             <details class="x-rv"><summary>How do voice and video chat work?</summary><p>Click Join voice chat in the panel and allow your microphone, then press the camera button if you want video. Audio and video travel directly between the people in the party, and the connection setup is encrypted too.</p></details>
-            <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name and profile picture with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
+            <details class="x-rv"><summary>Does voice chat work on any network?</summary><p>Yes. Voice and video connect directly between friends when your networks allow it. On mobile data, college or office Wi-Fi and other strict networks, they go through an encrypted relay instead, so calls still connect.</p></details>
+            <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name, profile picture and photo with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
             <details class="x-rv"><summary>Why do friends need the full link?</summary><p>The invite link carries your party's encryption key after the # sign, which is never sent to any server. A bare party code can't unlock the chat, so always share the full link.</p></details>
             <details class="x-rv"><summary>Do I need to update?</summary><p>Parties now need NetParty 1.7 or newer. If a friend's version is older, they'll be asked to update, and installing the latest download takes 30 seconds.</p></details>
             <details class="x-rv"><summary>Can someone else control playback?</summary><p>By default anyone can play, pause or seek. The host can switch on 'Only I can play, pause and skip' in the popup.</p></details>
@@ -902,7 +944,7 @@
               <div class="x-pane" role="tabpanel" id="x-pane-chrome" aria-labelledby="x-tab-chrome" tabindex="0">
                 <p class="x-pane__name">Chrome</p>
                 <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Download for Chrome<span class="x-free"> (free)</span></span></a>
-                <p><span class="x-ver">Version 2.1.0</span></p>
+                <p><span class="x-ver">Version 2.2.0</span></p>
                 <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
                 <ol class="x-beta">
                   <li><b>1</b>Unzip</li>
@@ -949,7 +991,7 @@
         <div class="x-foot__top">
           <div>
             <a class="x-logo" href="#top"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
-            <p class="x-foot__tag">Free watch parties for Netflix, JioHotstar, YouTube, Prime Video and most other video sites.</p>
+            <p class="x-foot__tag">Free watch parties for Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and most other video sites.</p>
             <a class="x-bmc" href="https://buymeacoffee.com/chiragrasal" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17" /><path d="M8 2.5c-.6.8-.6 1.7 0 2.5M12 2.5c-.6.8-.6 1.7 0 2.5" /><path d="M5 21h11" /></svg>Buy me a coffee</a>
           </div>
           <nav class="x-foot__links" aria-label="Footer">
@@ -961,7 +1003,7 @@
             <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
           </nav>
         </div>
-        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, JioHotstar, YouTube or Amazon. Netflix, JioHotstar, YouTube and Prime Video are trademarks of their respective owners.</p>
+        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, Amazon, YouTube, HBO Max, Crunchyroll, SonyLIV or JioHotstar. Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV and JioHotstar are trademarks of their respective owners. Avatars from Microsoft Fluent Emoji (MIT License).</p>
       </footer>
     </div>
     <script src="hark.js"></script>
@@ -1109,7 +1151,7 @@
           var okPath = u && /^\/j\/[A-Za-z0-9_-]+\/?$/.test(u.pathname);
           var okKey = u && /^#(?:.*&)?k=[^&]+/.test(u.hash);
           if (okOrigin && okPath && okKey) { err.textContent = ""; window.location.href = v; return; }
-          err.textContent = "Paste the full invite link — the code alone can't unlock the encrypted chat.";
+          err.textContent = "Paste the full invite link. The code alone can't unlock the encrypted chat.";
         });
       })();
     </script>

@@ -39,6 +39,7 @@
       position: p ? p.getCurrentTime() : Math.round((v.currentTime || 0) * 1000),
       playing: p ? !p.isPaused() : !v.paused,
       buffering: v ? v.readyState < 3 && !v.paused : false,
+      ready: v ? v.readyState >= 3 : true, // 2.2: enough data to play on (buffer-aware sync)
       duration: p ? p.getDuration() : Math.round((v?.duration || 0) * 1000),
     };
   }
@@ -53,7 +54,7 @@
         break;
       case "play":
         if (p) p.play();
-        else v?.play();
+        else v?.play()?.catch(() => {}); // a pause right after (a party update) interrupts it: fine
         break;
       case "pause":
         if (p) p.pause();
