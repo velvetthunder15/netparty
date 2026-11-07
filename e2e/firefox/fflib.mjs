@@ -7,7 +7,7 @@ import http from "node:http";
 import net from "node:net";
 import fs from "node:fs";
 export const BUILD = process.env.BUILD || path.join(E2E, "firefox", "build");
-const FAKE_HOSTS = new Set(["www.netflix.com", "www.hotstar.com", "www.jiohotstar.com", "www.youtube.com", "static.klipy.com", "www.primevideo.com", "www.amazon.co.uk"]);
+const FAKE_HOSTS = new Set(["www.netflix.com", "www.hotstar.com", "www.jiohotstar.com", "www.youtube.com", "static.klipy.com", "www.primevideo.com", "www.amazon.co.uk", "play.hbomax.com", "play.max.com", "www.crunchyroll.com", "static.crunchyroll.com", "www.sonyliv.com"]);
 
 // HTTPS proxy: the fake hosts tunnel to the fake site on :8443; anything else is refused
 // (keeps Firefox's own background traffic off the network)
