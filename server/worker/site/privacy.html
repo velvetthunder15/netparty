@@ -30,12 +30,22 @@
   <a class="top" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#B05CFF"/></linearGradient></defs><path d="M4 6a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-7l-5 4v-4.3A4 4 0 0 1 4 14z" fill="url(#g)" opacity=".55"/><path d="M10 14a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8a4 4 0 0 1-2 3.5V30l-5-4h-7a4 4 0 0 1-4-4z" fill="url(#g)"/><path d="M17 14.5v7l6-3.5z" fill="#fff"/></svg>NetParty</a>
 
   <h1>Privacy Policy</h1>
-  <p class="muted">Last updated 6 November 2026 (2.2: HBO Max, Crunchyroll and SonyLIV; mentions, spoilers, edits, pins, typing and loading notices; profile photos)</p>
+  <p class="muted">Last updated 10 November 2026 (anonymous daily usage totals on the sync server)</p>
 
   <p>NetParty is a free browser extension that lets friends watch a video together in sync, with text, voice and video chat, GIFs and emoji reactions. It works on Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll and SonyLIV, and on other video sites you choose. It is run by Chirag Rasane. This policy explains what the extension and its sync server handle, and why.</p>
 
-  <h2>No accounts, no tracking</h2>
-  <p>NetParty has no sign-up and no accounts. It has no analytics, advertising or tracking code, and we never sell or share your data.</p>
+  <h2>No accounts, no ads, no tracking code</h2>
+  <p>NetParty has no sign-up and no accounts. The extension and this website have no analytics, advertising or tracking code and set no cookies, and we never sell or share your data. The only measuring we do is the anonymous daily totals described below, counted on our own sync server.</p>
+
+  <h2>Anonymous usage totals</h2>
+  <p>To know roughly how many people use NetParty, the sync server counts a few totals for each day (midnight to midnight, India time):</p>
+  <ul>
+    <li><strong>People that day.</strong> To count each person once without keeping anything about them, the server mixes your IP address and browser type (the user agent your browser sends) with a random value that is made fresh every day, and turns that into a code that can't be turned back (a salted hash). It only checks whether it has already seen that code today. When the day ends, the random value and all of that day's codes are deleted, so they can't be linked to you or to another day. Only the number of people is kept.</li>
+    <li><strong>Parties.</strong> How many parties were started and how many times someone joined one.</li>
+    <li><strong>Peak sizes.</strong> The most people connected at the same time, and the size of the biggest party.</li>
+    <li><strong>Which service.</strong> How many parties started on each service (such as Netflix, YouTube or a video on another site), worked out from the kind of video ID the server already receives to keep the party in sync. Which title it was is not recorded.</li>
+  </ul>
+  <p>Only these totals are kept, for up to 120 days, and then deleted. They are never linked to a person, a party code, a name, a chat message, a picture or a video. No cookies or identifiers are stored on your device for this, nothing new is sent by the extension, and no third party is involved: the counting runs on our server and only we can see the totals.</p>
 
   <h2>End-to-end encryption</h2>
   <p>Party chat is end-to-end encrypted. When a party starts, the host's browser creates a random 256-bit key. The key is part of the invite link, after the <code>#</code> (browsers never send that part of a link to any server), and is kept only in the browsers of the people in the party, for that tab, until they leave. Chat messages (including mentions, spoilers, edits and deletes), GIFs, reactions, the pinned message, typing indicators, "my video is loading" notices, display names and profile pictures, the setup messages for voice calls, and the page address of a video on another site, are encrypted with this key (AES-256-GCM) before they leave your browser. Our sync server only ever receives, relays and stores the encrypted form, and cannot read it. Anyone who has the full invite link can join the party and read its chat, so share the link only with people you want there.</p>
@@ -58,7 +68,7 @@
   <p>NetParty does not read your streaming account details, passwords, payment information or viewing history. It runs on the supported sites: Netflix, JioHotstar, YouTube, Prime Video (primevideo.com and Amazon's Prime Video pages), HBO Max, Crunchyroll (including its video player frame on static.crunchyroll.com) and SonyLIV. On any other site it runs only on a tab where you click <strong>Sync this tab</strong> or <strong>Join party on this tab</strong>, and only on the sites you choose for <strong>Always allow on this site</strong> (you can turn that off in the popup or your browser's settings). If the video plays inside a player from another site, NetParty asks your browser for access to that player's site first. On those pages it only looks for the video element and reads its play state, position, speed and length.</p>
 
   <h2>How long we keep it</h2>
-  <p>While a party is active, the sync server keeps its encrypted data so people who reload can rejoin: the members' encrypted names and pictures and the party's last 150 chat lines (encrypted messages, including replies, reactions, edits and deletes, and notes of who joined or left) and the encrypted pinned message. It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours (our hosting provider's point-in-time recovery can keep encrypted copies of the storage for up to 30 days; nobody can read them without the party's key). Basic request logs kept by our hosting provider follow its standard retention; they never contain chat content.</p>
+  <p>While a party is active, the sync server keeps its encrypted data so people who reload can rejoin: the members' encrypted names and pictures and the party's last 150 chat lines (encrypted messages, including replies, reactions, edits and deletes, and notes of who joined or left) and the encrypted pinned message. It is deleted when the host ends the party, and any inactive party is removed after at most 6 hours (our hosting provider's point-in-time recovery can keep encrypted copies of the storage for up to 30 days; nobody can read them without the party's key). Basic request logs kept by our hosting provider follow its standard retention; they never contain chat content. The anonymous daily totals are kept for up to 120 days; the daily random value and codes used to count people are deleted when each day ends.</p>
 
   <h2>Where it's processed</h2>
   <p>The sync server runs on Cloudflare Workers. Cloudflare processes connection data, such as IP addresses, to deliver the service under its own privacy policy.</p>

@@ -199,7 +199,14 @@ const announcesE2ee = (data) => data?.e2ee === 1 || data?.e2ee === true;
 // store (optional): { get(id) -> Promise<obj|null>, put(id, obj), del(id), list?() -> Promise<[id, obj][]> }.
 // With one, a party survives a server restart: its playback state, host, seats and (encrypted)
 // chat come back on the next join.
-export function createHub({ iceServers = defaultIceServers(), store = null } = {}) {
+// events (optional): { partyStarted(videoId, size), joined(size) } for the anonymous daily totals
+// (stats.js); they get the party's video id and size, never who.
+export function createHub({ iceServers = defaultIceServers(), store = null, events = null } = {}) {
+const emit = (name, ...args) => {
+  try {
+    events?.[name]?.(...args);
+  } catch {}
+};
 // iceServers: a fixed list, or an async function returning one (see iceProvider)
 const getIce = typeof iceServers === "function" ? iceServers : async () => iceServers;
 const newId = (n = 8) => {
@@ -494,6 +501,7 @@ const handlers = {
     joinRoom(client, room);
     room.state.by = client.pid;
     save(room);
+    emit("partyStarted", room.state.videoId, room.members.size);
     reply(snapshot(room, client));
   },
 
@@ -510,7 +518,10 @@ const handlers = {
       return reply({ ...snapshot(room, client), returning: true });
     if (room.members.size >= MAX_MEMBERS && !room.members.has(room.seats.get(cid))) return reply(null, "Party is full.");
     client.cid = cid;
+    const hadSeat = room.seats.has(cid);
     const returning = joinRoom(client, room);
+    // a join is a new tab taking a seat in the party (reloads and reconnects into the same seat aren't counted)
+    if (!hadSeat) emit("joined", room.members.size);
     reply({ ...snapshot(room, client), returning });
   },
 

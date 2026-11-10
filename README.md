@@ -255,6 +255,14 @@ title; for a video on another site it's a random `av:` id), plus who is in voice
 logs); GIF search terms, which have to go to KLIPY through our `/api/gifs` proxy (not logged; nothing about the
 party or names is sent with them).
 
+Usage totals (server only, since 2026-11-10): the hosted server counts anonymous daily totals per India-time
+day: distinct people (HMAC-SHA256 of IP address + user agent with a random salt made fresh each day; the salt and
+that day's hashes are deleted when the day ends, only the count is kept), parties started, joins, the most people
+online at once, the biggest party, and parties per service (from the unencrypted video id prefix the server
+already gets). Totals are kept 120 days. No IPs, user agents, names, chat, room codes, title ids or URLs are stored,
+no cookies, no third parties, nothing new sent by the extension. Code: `server/stats.js`; the owner reads them at
+`/stats` (secret `STATS_TOKEN`; anything else gets a 404). The self-hosted Node server (`server.js`) counts nothing.
+
 Limits: anyone with the full link can join and read the chat, so share it like a key. The panel is drawn inside
 the streaming site's page, so that site's own scripts could in principle read what's on screen. The link
 (with its key) can end up in your browser history, like any link you open. The server is still trusted to relay

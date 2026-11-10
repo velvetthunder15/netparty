@@ -1,6 +1,7 @@
 // NetParty sync server on Cloudflare Workers. All WebSocket connections go to one
 // Durable Object ("hub"), which runs the same room logic as the Node server.
 import { createHub, iceProvider, joinPage, joinPageHeaders } from "../core.js";
+import { createStats, statsResponse, isStatsPath } from "../stats.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "../gifs.js";
 import extensionZip from "./public/netparty-extension.zip";
 // landing site (copied from the Hark-built page) bundled into the Worker
@@ -105,7 +106,7 @@ const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url><loc>https://netparty.tech/</loc><lastmod>2026-11-06</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-06</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-10</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
 const siteIndexOg = withSeo(withOg(siteIndex));
@@ -198,8 +199,11 @@ export class PartyHub {
     const kv = state.storage;
     this.kv = kv;
     this.ice = iceProvider(env);
+    // anonymous daily totals (see stats.js): no IPs, names, chat, room codes or video ids are kept
+    this.stats = createStats({ storage: kv, onTemp: (at) => this.ensureAlarm(at).catch(() => {}) });
     this.hub = createHub({
       iceServers: this.ice,
+      events: { partyStarted: (v, n) => this.stats.partyStarted(v, n), joined: (n) => this.stats.joined(n) },
       store: {
         get: (id) => kv.get("room:" + id),
         put: async (id, obj) => {
@@ -213,17 +217,26 @@ export class PartyHub {
     this.ensureAlarm().catch(() => {});
   }
 
-  async ensureAlarm() {
-    if (this.alarmSet) return;
-    this.alarmSet = true;
-    if ((await this.kv.getAlarm()) == null) await this.kv.setAlarm(Date.now() + MAINTAIN_MS);
+  // one alarm does both jobs: party upkeep every 15 minutes while parties exist, and closing the
+  // stats day (deleting its salt and hashes) just after midnight IST. It is set to the earlier one.
+  async ensureAlarm(at = null) {
+    const want = at ?? Date.now() + MAINTAIN_MS;
+    if (at == null && this.alarmSet) return;
+    if (at == null) this.alarmSet = true;
+    const cur = await this.kv.getAlarm();
+    if (cur == null || cur > want) await this.kv.setAlarm(want);
   }
 
   async alarm() {
     this.alarmSet = false;
     await this.hub.maintain();
+    let statsDue = null;
+    try {
+      statsDue = await this.stats.maintain();
+    } catch {}
     const left = await this.kv.list({ prefix: "room:", limit: 1 });
     if (left.size || this.hub.rooms.size) await this.ensureAlarm();
+    if (statsDue != null) await this.ensureAlarm(statsDue + 5000);
   }
 
   async fetch(request) {
@@ -241,6 +254,11 @@ export class PartyHub {
       const room = await this.hub.findRoom(live[1]);
       return new Response(null, { status: room ? 204 : 404 });
     }
+    if (isStatsPath(url.pathname) && request.headers.get("Upgrade") !== "websocket") {
+      let partiesActive = 0;
+      for (const r of this.hub.rooms.values()) if (r.members.size) partiesActive++;
+      return statsResponse(request, this.env, this.stats, () => ({ roomsOpen: this.hub.rooms.size, partiesActive }));
+    }
     if (url.pathname === "/health")
       return Response.json({ ok: true, rooms: this.hub.rooms.size, relay: this.ice.status.relay });
     if (request.headers.get("Upgrade") !== "websocket")
@@ -249,8 +267,13 @@ export class PartyHub {
     const [clientSide, serverSide] = Object.values(new WebSocketPair());
     serverSide.accept();
     const conn = this.hub.connect((s) => serverSide.send(s));
+    const seen = this.stats.connect(request.headers.get("CF-Connecting-IP"), request.headers.get("User-Agent"));
     serverSide.addEventListener("message", (e) => conn.message(e.data));
+    let closed = false;
     const done = () => {
+      if (closed) return;
+      closed = true;
+      seen.close();
       conn.close();
       this.hub.sweep();
     };
