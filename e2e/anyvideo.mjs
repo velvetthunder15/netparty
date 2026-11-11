@@ -39,7 +39,7 @@ const watch = (p, n) => {
   if (process.env.DEBUG) p.on("console", (m) => out(n + " console:", m.text().slice(0, 200)));
 };
 const extId = (x) => x.sw.url().split("/")[2];
-const FILES = ["any-mode.js", "early.js", "emoji-data.js", "anyvideo.js", "content.js"];
+const FILES = ["any-mode.js", "early.js", "emoji-data.js", "qr.js", "anyvideo.js", "content.js"];
 
 // ---- helpers
 async function openPopup(x, page) {

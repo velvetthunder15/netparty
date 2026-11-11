@@ -17,7 +17,7 @@ fs.writeFileSync(TEST_EXT + "/manifest.json", JSON.stringify(man, null, 2));
 const stop = startPages();
 const H = await launch("pw-prodany-h", { name: "ProdHost", ext: TEST_EXT, extra: { serverUrl: PROD } });
 const G = await launch("pw-prodany-g", { name: "ProdGuest", ext: TEST_EXT, extra: { serverUrl: PROD } });
-const FILES = ["any-mode.js", "early.js", "emoji-data.js", "anyvideo.js", "content.js"];
+const FILES = ["any-mode.js", "early.js", "emoji-data.js", "qr.js", "anyvideo.js", "content.js"];
 const run = (x, page, msg, inject) =>
   x.sw.evaluate(async ([u, m, files, inj]) => {
     const t = (await chrome.tabs.query({})).find((t) => t.url === u);

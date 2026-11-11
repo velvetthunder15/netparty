@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NetParty",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Watch Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and any video in sync, with encrypted chat and voice.",
   "minimum_chrome_version": "116",
   "action": {
@@ -132,6 +132,7 @@
       ],
       "js": [
         "emoji-data.js",
+        "qr.js",
         "content.js"
       ],
       "run_at": "document_idle"

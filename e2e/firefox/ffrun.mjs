@@ -112,17 +112,21 @@ check("…and rises (CSS animation runs)", fly2 !== null && fly2 < fly - 20, `${
 // copy invite from the panel (real click), paste it into the page: the clipboard works
 await hp.mouse.move(5, 5);
 await sleep(300);
-const copyBtn = await shadow(hp, (r) => { return [...r.querySelectorAll(".np-pill")].findIndex((b) => /Copy invite/.test(b.textContent)); });
-if (copyBtn >= 0) {
-  const c = await shadow(hp, (r, a) => { const b = [...r.querySelectorAll(".np-pill")][a].getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }, copyBtn);
+// (2.3: Invite opens the share block; its Copy link copies)
+const at = (sel) => shadow(hp, (r, a) => { const n = r.querySelector(a); if (!n) return null; const b = n.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }, sel);
+const inv = await at(".np-invite");
+if (inv) await hp.mouse.click(inv.x, inv.y);
+const c = inv && (await until(() => at(".np-share-pop.np-pop-open .np-share-copy"), 2000, 50));
+if (c) {
   await hp.mouse.click(c.x, c.y);
-  const copied = await until(() => shadow(hp, (r) => { return [...r.querySelectorAll(".np-pill")].some((b) => b.textContent === "Copied!"); }), 2000, 50);
+  const copied = await until(() => shadow(hp, (r) => { return r.querySelector(".np-share-copy").textContent === "Copied!"; }), 2000, 50);
   await hp.evaluate(() => { const t = document.createElement("textarea"); t.id = "__paste"; t.style.cssText = "position:fixed;top:0;left:0;width:200px;height:40px;z-index:2147483647"; document.body.append(t); t.focus(); });
   await hp.keyboard.down("Control"); await hp.keyboard.press("v"); await hp.keyboard.up("Control");
   await sleep(300);
   const pasted = await hp.evaluate(() => { const t = document.getElementById("__paste"); const v = t.value; t.remove(); return v; });
-  check("panel 'Copy invite' puts the invite link (with key) on the clipboard", !!copied && pasted === created.invite, `copied=${!!copied} pasted=${pasted.replace(/#k=.*/, "#k=…")}`);
-} else check("panel has a Copy invite button", false);
+  check("panel Invite → Copy link puts the invite link (with key) on the clipboard", !!copied && pasted === created.invite, `copied=${!!copied} pasted=${pasted.replace(/#k=.*/, "#k=…")}`);
+  await hp.keyboard.press("Escape");
+} else check("panel has Invite → Copy link", false);
 
 // popup (popup.html in a tab, with the host's watch tab active): in-party view
 const pop = await H.browser.newPage();

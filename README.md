@@ -46,8 +46,15 @@ Watching together
 - Pauses on drop-outs (2.2): a member whose connection drops mid-video pauses the party until they're back (within
   the server's 15-second grace), then it plays on by itself; if they don't come back, anyone in control gets Resume
 - Next episode keeps the party together; host-only control lock, host hand-off when the host leaves, auto-reconnect
+- Host controls (2.3): make someone else the host, remove someone from the party, lock the party so no one new can
+  join, and pick who takes over (or end it for everyone) when the host leaves
 - Invite links: `https://netparty.tech/j/<code>#k=<key>` opens an invite page that sends friends to the right title
   (auto-joins) and lets them get the extension while the party is live
+- Share block (2.3): Copy link, WhatsApp, Discord, Instagram and a QR code in one place, in the panel and the popup.
+  The app buttons copy the link and open the app's own page; the link is never put in an app's address, so the key
+  after `#` stays off their servers. The QR code is drawn by the extension, in the popup or its own small window
+- Party recap (2.3): a 1080 x 1350 image of the party (title, time watched together, who was there, messages,
+  reactions, the biggest moment), made on your device, to download or copy
 - Split-screen chat: the player shrinks to make room for a docked chat column (nothing covers the player controls)
 
 Chat
@@ -62,7 +69,7 @@ Chat
 - Light and dark themes for the chat panel and popup
 
 Voice and video
-- Voice chat: WebRTC audio between friends, mute, volume, speaking indicator
+- Voice chat: WebRTC audio between friends, mute, volume, speaking indicator, and a volume for each friend (2.3)
 - Video chat (1.8): up to 4 cameras as 16:9 tiles, docked in the chat panel or popped out into a floating window
   (640x360 at up to 24 fps)
 - Works on any network: peer to peer when the two networks allow it, otherwise through a Cloudflare TURN relay
@@ -100,9 +107,9 @@ No server setup needed: the extension uses the hosted server by default.
 | --- | --- |
 | Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar), next to Play on a Prime Video title page, or next to Like under a YouTube video: starts the party. Or, on a playing title, NetParty icon → **Start a party** |
 | Join a party | Open the invite link, or icon → paste the **full** invite link → **Join** (the code alone can't unlock the encrypted chat) |
-| Copy invite again | **Copy invite** in the chat panel, or icon → **Copy invite link** |
+| Invite / share | **Invite** in the chat panel, or the NetParty icon: **Copy link**, **WhatsApp**, **Discord** or **Instagram** (copies the link and opens the app, paste it into a chat), or **QR code** to scan with a phone (from the panel it opens in a small NetParty window) |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
-| Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume |
+| Voice | **Join voice chat** in the panel; mic button mutes, red button leaves, slider sets friends' volume. Click a friend's picture for their own volume (2.3) |
 | Video | In voice, the camera button turns your camera on/off. Tiles sit in the chat panel; the pop-out button floats them over the video (drag by the bar, resize from the corner, arrow folds it away, dock button puts them back). With the chat closed they float until you reopen it |
 | Your name / picture | Click your picture in the panel (or the name on your camera tile) → **Your profile**: type a name and press Enter, pick an HD picture or an emoji, or **Upload photo** (**Remove photo** takes it away). Or icon → **You** |
 | Theme | Icon → **Settings** → **Theme**: System (default, follows your computer), Light or Dark |
@@ -115,7 +122,9 @@ No server setup needed: the extension uses the hosted server by default.
 | Sync another site | Open the video, icon → **Sync this tab**. Friends: invite link → **Open the video** → icon on that page → **Join party on this tab** |
 | Theater (other sites) | **Theater** in the panel: the video fills the window next to the chat (the player's own fullscreen hides the chat) |
 | Lock controls | Host: icon → **Only I can play, pause and skip** |
-| Leave | Exit the title, or **Leave party**. If the host leaves, the party ends for everyone; a guest leaving just leaves. Next episode keeps the party going. |
+| Host controls (2.3) | Host: click a friend's picture → **Make host**, or **Remove from party** (press twice; that tab can't rejoin). **Lock the party** (⚙ in the chat bar → **Party**, or the icon) stops new people joining; people already in can still reload |
+| Recap (2.3) | **Recap** in the panel, or the card that offers it when you leave: **Download** (PNG) or **Copy image** |
+| Leave | Exit the title, or **Leave party**. The host's **Leave party** offers **Make *name* host and leave** for each connected friend, or **End the party for everyone**; exiting the title as the host still ends it. A guest leaving just leaves. Next episode keeps the party going. |
 
 Tips
 - Everyone needs their own account on a plan that streams that title in their region.
@@ -241,7 +250,18 @@ How it works
   dropped. The server still checks shape and size of every ciphertext and rate-limits chat, reactions and profiles.
 - **Join/leave lines** ("Rahul joined") are stored as "member *pid* joined" and named by each browser.
 - **Seats.** Each tab has a private 128-bit reconnect id (`cid`) that only the server sees; everyone else sees
-  a random public member id (`pid`). Knowing someone's pid can't take their seat or the host role.
+  a random public member id (`pid`). Knowing someone's pid can't take their seat or the host role. Removing someone
+  (2.3) refuses their tab's cid for the rest of the party (the server keeps up to 200, with the party); a new tab
+  with the full link gets a new cid, which is what **Lock the party** is for.
+- **Sharing (2.3)** never sends the link anywhere: WhatsApp, Discord and Instagram open on fixed pages
+  (`web.whatsapp.com`, `discord.com/channels/@me`, `instagram.com/direct/inbox/`) after the link is copied, and the
+  QR code is encoded by `extension/qr.js`. Share URLs such as `wa.me/?text=<link>` would hand the key to the app.
+  The QR code is only drawn in extension pages (the popup, or `qr.html` in a small window that the panel's
+  **QR code** opens and that closes when the party ends), never in the panel: the panel is part of the site's page,
+  and the site's scripts could read a canvas there. The panel shows the link as `…#k=••••`.
+- **Recaps (2.3)** are drawn on a `<canvas>` in your browser from what it already decrypted. The running totals
+  are kept in `chrome.storage.session` for that tab (deleted when the party ends or the tab closes), photos in memory
+  only. Nothing about a recap is sent unless you share the image.
 - **Joining needs the full link.** A bare code, or a link without a valid key, is refused with
   "Paste the full invite link — the code alone can't unlock the encrypted chat." A wrong key is caught before
   joining: "Can't decrypt messages — check your invite link".
@@ -251,7 +271,7 @@ How it works
 What the server can still see: the party code; members' random ids and how many there are; when messages,
 reactions and voice-setup messages are sent and roughly how big they are; playback state (playing/paused,
 position, speed, timestamps) and the video id of what's playing (the invite page needs it to send friends to the right
-title; for a video on another site it's a random `av:` id), plus who is in voice and muted/speaking, and whose connection dropped (2.2); when typing / "my video is loading" signals are sent (2.2, encrypted and never stored); IP addresses and connection times (and Cloudflare's own request
+title; for a video on another site it's a random `av:` id), plus who is in voice and muted/speaking, and whose connection dropped (2.2); whether the party is locked and who the host removed (2.3); when typing / "my video is loading" signals are sent (2.2, encrypted and never stored); IP addresses and connection times (and Cloudflare's own request
 logs); GIF search terms, which have to go to KLIPY through our `/api/gifs` proxy (not logged; nothing about the
 party or names is sent with them).
 
@@ -313,6 +333,8 @@ messages honestly (it can't read or forge them, but it could drop or delay them)
   (WebRTC mesh: the caller offers a video slot up front, so the camera is added with `replaceTrack`, no renegotiation),
   overlay (shadow DOM, light/dark), Prime Video's overlay player, HBO Max / SonyLIV / Crunchyroll adapters (2.2), typing,
   mentions, spoilers, edit / delete, pins, buffer-aware sync, pause on drop and auto-duck (2.2)
+- `extension/qr.js` – QR code encoder for the invite link (2.3; byte mode, error correction M, versions 1–10), used by the popup and
+  `qr.html` / `qr-page.js` (the panel's QR code window; the content script only checks that the link fits)
 - `extension/emoji-data.js` – bundled emoji lists (pictures, picker, default reactions) and the list of HD pictures; shared by content script, popup, background
 - `extension/avatars/` – the 48 HD pictures (`av-<slug>.webp`, 128 px, Microsoft Fluent Emoji 3D, MIT; see `LICENSES.md` there).
   The background worker reads them for the content script, so they aren't web-accessible resources
@@ -358,8 +380,10 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 | `chat3.mjs` | 2.2 typing, mentions, spoilers, edit / delete, pins, buffer-aware sync, pause on drop, auto-duck, with 2.1.0 and 2.0.2 builds (also `CSP=strict`) |
 | `platforms.mjs` | 2.2 HBO Max, Crunchyroll and SonyLIV on test pages |
 | `avatars.mjs` | 2.2 HD pictures, photo upload / remove, the 2.1.0 emoji fallback, `blob:` / `data:` / `<canvas>` fallbacks, hostile profiles, leak audit (also `CSP=strict`) |
+| `v23.mjs` | 2.3 lock, remove, make host, the host's leave menu, per-person volume, the share block (no app sees the link), QR codes (in NetParty's own window, none in the page, the key nowhere in the page), recaps (download, copy), leak audit |
+| `qr.test.mjs` | `npm --prefix e2e run test:qr`: QR codes from `extension/qr.js` decode back (jsQR) for every version and length |
 | `relaycreds.mjs` | 2.2 relay credentials: calls use the newest ones, a reconnect after a dropped socket uses the new ones |
-| `firefox/` | the Firefox build: `ffrun.mjs`, `ffcross.mjs` (Firefox ↔ Chromium chat, sync, voice, video), `ffavatars.mjs` |
+| `firefox/` | the Firefox build: `ffrun.mjs`, `ffcross.mjs` (Firefox ↔ Chromium chat, sync, voice, video), `ffavatars.mjs`, `ff23.mjs` (2.3 share block, QR window, host controls, per-person volume, recap) |
 
 ## Known limits
 
@@ -380,6 +404,12 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
   selectors are the least certain parts; SonyLIV's title page counts as the player once a large video shows.
 - Older NetParty versions in the same party (2.1, 2.0) see mentions as plain "@Name" and spoilers as "[spoiler]",
   keep showing edited and deleted messages as they were first sent, and don't show typing, waiting or pins.
+- Host controls (2.3) need the 2.3 server; an older one answers "Your party server doesn't support this yet".
+  Friends on 2.2 or older are still refused by a lock or a removal, but don't see the "was removed" or "is the host
+  now" lines, and a removed 2.2 friend isn't told (their panel stops getting the party). If the host role passes to a
+  friend on 2.2 or older, the party unlocks, since they have no switch to unlock it.
+- Removing someone blocks their tab, not the person: with the full link they can join from a new tab unless the
+  party is locked.
 - Everyone in a party watches on the same service; a Netflix party can't include JioHotstar viewers. On Prime Video,
   guests open the title on the host's store (primevideo.com or that amazon.<tld>).
 
@@ -396,7 +426,8 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 
 ## Version history
 
-Every release is in [CHANGELOG.md](CHANGELOG.md). 2.2.0 added HBO Max, Crunchyroll and SonyLIV, buffer-aware sync,
+Every release is in [CHANGELOG.md](CHANGELOG.md). 2.3.0 added host controls (make host, remove, lock, hand over
+when leaving), per-person voice volume, party recap images and the share block with a QR code. 2.2.0 added HBO Max, Crunchyroll and SonyLIV, buffer-aware sync,
 pause on drop-outs, typing, @mentions, spoilers, edit / delete, pinned messages, lowering the video while friends talk,
 HD profile pictures and your own photo, and fresher relay credentials for voice and video.
 

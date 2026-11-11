@@ -27,7 +27,7 @@ function webPage(url) {
   if (/^(chrome\.google\.com|chromewebstore\.google\.com|microsoftedge\.microsoft\.com|addons\.mozilla\.org|addons\.opera\.com)$/.test(u.hostname)) return false;
   return true;
 }
-const ANY_FILES = ["any-mode.js", "early.js", "emoji-data.js", "anyvideo.js", "content.js"];
+const ANY_FILES = ["any-mode.js", "early.js", "emoji-data.js", "qr.js", "anyvideo.js", "content.js"];
 const E = globalThis.NP_EMOJI;
 let tabId = null;
 let origin = null; // the current tab's site, on a page that isn't a supported service
@@ -95,6 +95,16 @@ function parseInvite(s) {
   return { code: m[1].toLowerCase(), key };
 }
 
+// the host's switches (2.3: Lock the party) and what Leave does
+function showHostRows(st) {
+  $("hostRow").classList.toggle("hidden", !st.isHost);
+  $("hostOnly").checked = st.hostOnly;
+  $("lockRow").classList.toggle("hidden", !st.isHost);
+  $("lockParty").checked = st.locked === true;
+  $("leave").textContent = st.isHost ? "End the party for everyone" : "Leave party";
+  if (!$("qrBox").classList.contains("hidden")) drawQr(st.invite);
+}
+
 async function refresh() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
@@ -116,8 +126,7 @@ async function refresh() {
     $("partyCode").textContent = st.roomId;
     const n = st.members.length;
     $("who").textContent = `${n} watching: ${st.members.join(", ")}${st.voice ? " · you're in voice" : ""}`;
-    $("hostRow").classList.toggle("hidden", !st.isHost);
-    $("hostOnly").checked = st.hostOnly;
+    showHostRows(st);
     $("copy").dataset.link = st.invite || "";
   } else {
     view("vIdle");
@@ -146,8 +155,7 @@ async function refreshAny() {
       view("vParty");
       $("partyCode").textContent = st.roomId;
       $("who").textContent = `${st.members.length} watching: ${st.members.join(", ")}${st.voice ? " · you're in voice" : ""}`;
-      $("hostRow").classList.toggle("hidden", !st.isHost);
-      $("hostOnly").checked = st.hostOnly;
+      showHostRows(st);
       $("copy").dataset.link = st.invite || "";
       // a player in a cross-origin frame the user has already allowed: bring its agent in
       if (!st.video && st.frameHint) await frameReady(st.frameHint, false);
@@ -342,6 +350,47 @@ $("copy").onclick = async () => {
   setTimeout(() => ($("copy").textContent = "Copy invite link"), 1500);
 };
 $("hostOnly").onchange = () => run({ cmd: "hostOnly", value: $("hostOnly").checked });
+$("lockParty").onchange = () => run({ cmd: "lock", value: $("lockParty").checked });
+
+// ---- 2.3 Invite friends: copy the link and open the app's own start page (the link never goes into an address,
+// so its key isn't sent to the app's servers), or show it as a QR code made right here
+const SHARE_APPS = {
+  whatsapp: ["WhatsApp", "https://web.whatsapp.com/"],
+  discord: ["Discord", "https://discord.com/channels/@me"],
+  instagram: ["Instagram", "https://www.instagram.com/direct/inbox/"],
+};
+let shareMsgT = 0;
+const shareSay = (t) => {
+  $("shareMsg").textContent = t;
+  clearTimeout(shareMsgT);
+  shareMsgT = setTimeout(() => ($("shareMsg").textContent = ""), 6000);
+};
+function drawQr(link) {
+  return !!link && !!globalThis.NP_QR?.draw($("qr"), link, 5);
+}
+for (const b of document.querySelectorAll(".share-app[data-app]")) {
+  if (b.dataset.app === "qr") continue;
+  const [label, url] = SHARE_APPS[b.dataset.app];
+  b.onclick = async () => {
+    const link = $("copy").dataset.link || "";
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      return shareSay("Couldn't copy the link. Try again.");
+    }
+    shareSay(`Invite link copied. Paste it into a chat on ${label}.`);
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+    await chrome.tabs.create({ url, ...(tab ? { index: tab.index + 1, openerTabId: tab.id } : {}) }).catch(() => {});
+  };
+}
+$("qrBtn").onclick = () => {
+  const box = $("qrBox");
+  const on = box.classList.contains("hidden");
+  if (on && !drawQr($("copy").dataset.link)) return shareSay("This link is too long for a QR code. Copy it instead.");
+  box.classList.toggle("hidden", !on);
+  $("qrBtn").setAttribute("aria-pressed", String(on));
+};
 $("name").addEventListener("change", saveName);
 for (const b of document.querySelectorAll("[data-open]")) b.onclick = () => chrome.tabs.update(tabId, { url: b.dataset.open });
 

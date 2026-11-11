@@ -4,6 +4,63 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.3.0] - 2026-11-11
+### Added
+- **Host controls**: click a friend's picture in the chat panel. The host can **Make host** (hands the party over;
+  the role moves with that person's tab, so it stays with them when they reload and the old host comes back as a
+  guest) and **Remove from party** (press twice). A removed person's tab can't rejoin; the chat says "Priya was
+  removed from the party" and their panel says the host removed them.
+- **Lock the party**: the host's **Lock the party** switch (⚙ in the chat bar → **Party**, or in the popup) stops new
+  people from joining. People already in the party can still reload and reconnect. The invite page says "This party
+  is locked" and doesn't auto-join, and the panel header shows "· locked".
+- **Hand over before leaving**: the host's **Leave party** opens a menu: **Make Rahul host and leave** for each
+  connected friend, or **End the party for everyone**. With nobody else connected it asks to end the party, as
+  before.
+- **Per-person voice volume**: in voice chat, a friend's menu has a volume slider (0 to 100%) that changes only how
+  loud they are for you. It multiplies the friends' volume slider in the voice bar, and is kept for that tab and
+  party, so it survives a reload.
+- **Party recap**: when you leave a party (or press **Recap** in the panel), NetParty offers a 1080 x 1350 image of
+  it: the title and service, how long you watched together, who was there, and four numbers picked from messages,
+  reactions (with the most used one), the biggest moment, who chatted most, time in voice and the most people at
+  once. **Download** saves a PNG, **Copy image**
+  puts it on the clipboard. It's offered after at least a minute of watching or three messages and reactions, and
+  not when the host removed you.
+- **One share block**: **Invite** in the panel and the popup's party view now have **Copy link**, **WhatsApp**,
+  **Discord**, **Instagram** and **QR code**. The app buttons copy the invite link and open the app's own web page
+  (WhatsApp Web, Discord's direct messages, Instagram's inbox) for you to paste it into a chat. **QR code** shows the
+  link as a QR code to scan with a phone: in the popup, or from the panel in a small NetParty window (`qr.html`),
+  which closes when the party ends.
+
+### Changed
+- Server: new `lock`, `remove` and `promote` messages (host only). The `settings` broadcast and the party
+  snapshot carry `locked`, `peek` returns it, and a new `removed` message tells the removed member. The server
+  keeps the lock and the private reconnect ids of removed members (up to 200) with the party, so they survive a
+  restart, and deletes them with the party. A server older than 2.3 answers the new messages with "Unknown type.",
+  which the extension shows as "Your party server doesn't support this yet".
+- The share buttons never put the invite link in an app's address (such as `wa.me/?text=…`): that would hand the
+  key after the `#` to the app's servers. The QR code is drawn by the extension (`extension/qr.js`), not by a QR
+  service, and never inside the streaming site's page (the panel is part of that page, and the site could read a
+  canvas there): the panel hands the link to the background, which shows it in NetParty's own window.
+- 2.3 clients tell the server they have the host controls (`hc: 1` in `create` and `join`). A lock stays on only
+  while the host has them: if the host role passes to someone on NetParty 2.2 or older (a hand-over, or the role
+  falling to them when the host leaves), the party unlocks, because they couldn't unlock it.
+- **Make host** from a stand-in (someone who took over when the host left without ending the party) passes the
+  role on, but the party's own host still gets it back on returning, as from any stand-in. Only the party's own
+  host hands it over for good.
+- Removing someone doesn't change the party's key: they still have the invite link, and could join again from a new
+  tab while the party is unlocked. Lock the party to keep them out.
+- The recap is made on your device only. Its running totals stay in this tab's session storage (deleted when the
+  party ends or the tab closes) and photos only in memory; nothing about it is sent anywhere unless you share the
+  image yourself.
+- With friends on NetParty 2.2 or older: the server still refuses new joins to a locked party and removed tabs,
+  and a friend made host gets the host controls they already know. Their chat doesn't show the "was removed" or "is
+  the host now" lines (the removed person just drops off the list). A removed person on 2.2 isn't told: their panel
+  stays open, but they no longer get the party and the server refuses what they send.
+
+### Fixed
+- After a reconnect that the server refuses (the party ended, or you were removed while your connection was down),
+  voice chat now stops too: the microphone and camera were left on with the panel gone.
+
 ## [2.2.0] - 2026-11-06
 ### Added
 - **HBO Max, Crunchyroll and SonyLIV**: start and join parties on `play.hbomax.com` (and `play.max.com`, which now

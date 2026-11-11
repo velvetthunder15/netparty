@@ -36,14 +36,17 @@
   } catch {}
 
   const inPanel = (e) => e.composedPath().some((n) => n && n.id === "netparty-root");
+  // 2.3: the party recap viewer is its own overlay (it can open after the panel is gone)
+  const inRecap = (e) => e.composedPath().some((n) => n && n.id === "netparty-recap");
   for (const type of ["keydown", "keyup", "keypress"]) {
     window.addEventListener(
       type,
       (e) => {
-        if (!inPanel(e)) return;
+        const recap = inRecap(e);
+        if (!recap && !inPanel(e)) return;
         // hand the key to the panel, then hide it from the page (typing still works:
         // stopping propagation doesn't cancel the browser's default text input)
-        if (type === "keydown") window.__netpartyKey?.(e);
+        if (type === "keydown") (recap ? window.__netpartyRecapKey : window.__netpartyKey)?.(e);
         e.stopImmediatePropagation();
       },
       true,
