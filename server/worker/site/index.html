@@ -416,6 +416,56 @@
       .x-gif__by { font: 12px var(--x-mono); color: var(--x-mute); justify-self: end; }
       @media (max-width: 420px) { .x-stack .x-av:nth-child(n+5):not(.x-av--more) { display: none; } .x-fifty__num { font-size: 64px; } }
 
+      /* 2.3 vignettes: party recap, share block, host menu, per-person volume */
+      .x-recap { display: flex; align-items: center; justify-content: center; gap: 22px; width: 100%; padding: 0 16px; }
+      .x-rc { width: 136px; flex: none; position: relative; overflow: hidden; border-radius: 12px; padding: 10px 10px 10px; display: flex; flex-direction: column; gap: 2px; text-align: left;
+        background: radial-gradient(circle at 12% 0%, rgba(124,92,255,.55), transparent 60%), radial-gradient(circle at 100% 100%, rgba(176,92,255,.45), transparent 62%), #0d0c12;
+        border: 1px solid #3a3450; box-shadow: 0 18px 40px -16px rgba(0,0,0,.8); transform: rotate(-3deg); animation: x-rc-in 6s ease-in-out infinite; }
+      @keyframes x-rc-in { 0%,100% { transform: rotate(-3deg) translateY(0); } 50% { transform: rotate(-1.5deg) translateY(-4px); } }
+      .x-rc__top { display: flex; justify-content: space-between; align-items: center; font: 700 6.5px var(--x-inter); letter-spacing: .14em; color: #c4b5ff; }
+      .x-rc__top b { font: 800 9px var(--x-inter); letter-spacing: -0.01em; color: #fff; }
+      .x-rc__lab { margin-top: 5px; font: 700 6px var(--x-inter); letter-spacing: .14em; color: #a3a3ad; }
+      .x-rc__title { font: 800 13px/1.1 var(--x-inter); letter-spacing: -0.02em; color: #fff; }
+      .x-rc__big { margin-top: 3px; font: 800 26px/1 var(--x-inter); letter-spacing: -0.04em; background: linear-gradient(90deg, #fff, #c9b8ff); -webkit-background-clip: text; background-clip: text; color: #fff; -webkit-text-fill-color: transparent; }
+      .x-rc__sub { font: 600 7.5px var(--x-inter); color: #c9c4dc; }
+      .x-rc .x-stack { margin-top: 5px; }
+      .x-rc .x-stack .x-av { width: 20px; height: 20px; font-size: 11px; margin-left: -6px; box-shadow: 0 0 0 2px #0d0c12; }
+      .x-rc .x-stack .x-av:first-child { margin-left: 0; }
+      .x-rc__tiles { margin-top: 6px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+      .x-rc__tiles span { display: grid; gap: 1px; padding: 4px 5px; border-radius: 5px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.1); font: 700 4.8px var(--x-inter); letter-spacing: .1em; color: #a3a3ad; }
+      .x-rc__tiles b { font: 800 11px var(--x-inter); letter-spacing: -0.02em; color: #fff; }
+      .x-rc-acts { display: grid; gap: 8px; justify-items: start; }
+      .x-rc-acts .x-chip { font-size: 12.5px; padding: 7px 13px; }
+      .x-rc-acts .x-chip--go { background: var(--x-btn); border-color: transparent; color: #fff; font-weight: 600; }
+      .x-rc-acts small { font: 12px var(--x-mono); color: var(--x-mute); }
+      .x-share { width: 86%; display: grid; gap: 10px; }
+      .x-share__apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+      .x-share__app { display: grid; justify-items: center; gap: 5px; padding: 8px 2px 7px; border-radius: 10px; background: #201e2b; border: 1px solid #353147; font-size: 10.5px; font-weight: 600; color: var(--x-text); }
+      .x-share__app svg { width: 18px; height: 18px; }
+      .x-share__app--wa svg { color: #25d366; } .x-share__app--dc svg { color: #8c96ff; } .x-share__app--ig svg { color: #f56aa0; } .x-share__app--qr svg { color: #c3a6ff; }
+      .x-share__app--qr { border-color: #7c5cff; animation: x-glow 2.6s ease-in-out infinite; }
+      .x-share__link { justify-self: center; font: 11.5px var(--x-mono); color: var(--x-mute); }
+      .x-share__link b { color: var(--x-o); font-weight: 500; }
+      .x-mm { width: 82%; display: grid; gap: 4px; padding: 9px; border-radius: 12px; background: #201e2b; border: 1px solid #353147; font-size: 12px; text-align: left; }
+      .x-mm__head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 12.5px; padding: 0 2px 4px; }
+      .x-mm__head .x-av { width: 24px; height: 24px; font-size: 13px; box-shadow: none; }
+      .x-mm__lock { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 999px; background: rgba(124,92,255,.18); color: #c3a6ff; font: 600 10.5px var(--x-inter); }
+      .x-mm__lock svg { width: 10px; height: 10px; }
+      .x-mm__row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 7px; font-weight: 600; }
+      .x-mm__row svg { width: 14px; height: 14px; flex: none; }
+      .x-mm__row--vol { color: var(--x-mute); font-weight: 500; }
+      .x-mm__row--rm { color: #ff7d93; }
+      .x-mm__row--host { animation: x-mm-hi 4s ease-in-out infinite; }
+      @keyframes x-mm-hi { 0%,35% { background: transparent; } 45%,80% { background: rgba(124,92,255,.16); } 100% { background: transparent; } }
+      .x-vol { flex: 1; position: relative; height: 4px; border-radius: 4px; background: #353147; }
+      .x-vol i { position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 4px; background: var(--x-grad); animation: x-vol 5s ease-in-out infinite; }
+      .x-vol i::after { content: ""; position: absolute; right: -6px; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+      @keyframes x-vol { 0%,20% { width: 80%; } 50%,85% { width: 40%; } 100% { width: 80%; } }
+      .x-mm__pct { font: 11px var(--x-mono); color: var(--x-mute); width: 30px; text-align: right; }
+      @media (max-width: 600px) { .x-recap { gap: 14px; transform: scale(.86); } }
+      @media (max-width: 380px) { .x-rc-acts small { display: none; } }
+      @media (prefers-reduced-motion: reduce) { .x-rc, .x-share__app--qr, .x-mm__row, .x-vol i { animation: none; } }
+
       /* faq */
       .x-faq { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
       .x-faq details { background: var(--x-s1); border: 1px solid var(--x-line); border-radius: 16px; transition: border-color .2s, background .2s, scale .16s ease; }
@@ -795,7 +845,7 @@
                 </div>
               </div>
               <h3>Voice and video chat</h3>
-              <p>Talk over the movie, and turn your camera on to see everyone's reactions. Voice and video go peer-to-peer between friends, and the setup is encrypted too.</p>
+              <p>Talk over the movie, turn your camera on, and set each friend's volume. Voice and video go peer-to-peer between friends, and the setup is encrypted too.</p>
             </article>
             <article class="x-card x-feat x-feat--wide x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -818,6 +868,43 @@
               </div>
               <h3>Chat beside the video</h3>
               <p>Split-screen panel that shrinks the player instead of covering it. Hide it anytime for full screen.</p>
+            </article>
+            <article class="x-card x-feat x-feat--wide x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-recap">
+                  <div class="x-rc">
+                    <div class="x-rc__top"><b>NetParty</b>PARTY RECAP</div>
+                    <span class="x-rc__lab">WE WATCHED</span>
+                    <span class="x-rc__title">Stranger Things</span>
+                    <span class="x-rc__big">2h 14m</span>
+                    <span class="x-rc__sub">watched together</span>
+                    <span class="x-stack"><span class="x-av x-av--j">🐼</span><span class="x-av x-av--e">🦊</span><span class="x-av x-av--t">🍕</span><span class="x-av x-av--o">🐰</span></span>
+                    <div class="x-rc__tiles"><span>MESSAGES<b>128</b></span><span>REACTIONS<b>46 😂</b></span></div>
+                  </div>
+                  <div class="x-rc-acts">
+                    <span class="x-chip x-chip--go">Download</span>
+                    <span class="x-chip">Copy image</span>
+                    <small>made on your device</small>
+                  </div>
+                </div>
+              </div>
+              <h3>Party recap</h3>
+              <p>When the party ends, get a picture of it: what you watched, how long, who was there, and the biggest moments. Download it or copy it straight into a story.</p>
+            </article>
+            <article class="x-card x-feat x-rv">
+              <div class="x-vig" aria-hidden="true">
+                <div class="x-share">
+                  <div class="x-share__apps">
+                    <span class="x-share__app x-share__app--wa"><svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" d="M12 3.2a8.8 8.8 0 0 0-7.6 13.2L3.2 20.8l4.5-1.2A8.8 8.8 0 1 0 12 3.2z"/><path fill="currentColor" d="M8.7 7.7c.2-.4.5-.5.8-.5h.6c.2 0 .4.1.5.4l.8 1.9c.1.3 0 .5-.1.7l-.6.7c-.1.2-.1.4 0 .6.6 1.1 1.5 2 2.6 2.6.2.1.4.1.6 0l.7-.6c.2-.2.5-.2.7-.1l1.9.8c.3.1.4.3.4.5v.6c0 .3-.2.6-.5.8-.6.4-1.4.6-2.2.4-2.6-.6-5-3-5.6-5.6-.2-.8 0-1.6.4-2.2z"/></svg>WhatsApp</span>
+                    <span class="x-share__app x-share__app--dc"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M19.3 5.4A16.6 16.6 0 0 0 15.2 4l-.5 1a15 15 0 0 0-5.4 0l-.5-1a16.6 16.6 0 0 0-4.1 1.4C2.1 9.3 1.4 13.1 1.7 16.9a16.8 16.8 0 0 0 5.1 2.6l1.1-1.8c-.6-.2-1.2-.5-1.8-.9l.4-.3a11.9 11.9 0 0 0 10.2 0l.4.3c-.6.4-1.2.7-1.8.9l1.1 1.8a16.8 16.8 0 0 0 5.1-2.6c.4-4.4-.7-8.2-2.4-11.5zM8.5 14.6c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>Discord</span>
+                    <span class="x-share__app x-share__app--ig"><svg viewBox="0 0 24 24"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.25" fill="currentColor"/></svg>Instagram</span>
+                    <span class="x-share__app x-share__app--qr"><svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path fill="currentColor" d="M6.5 6.5h1v1h-1zM16.5 6.5h1v1h-1zM6.5 16.5h1v1h-1zM14 14h3v3h-3zM17 17h3v3h-3zM14 19h2v1h-2zM19 14h1v2h-1z"/></svg>QR code</span>
+                  </div>
+                  <span class="x-share__link">/j/gqxnzbom<b>#k=••••</b></span>
+                </div>
+              </div>
+              <h3>Share in one tap</h3>
+              <p>Send the invite to WhatsApp, Discord or Instagram, or show a QR code for a phone. The key in the link never goes to those apps.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -875,10 +962,15 @@
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
-                <span class="x-chip x-host"><span class="x-switch x-switch--host"></span>Only I can play, pause and skip</span>
+                <div class="x-mm">
+                  <div class="x-mm__head"><span class="x-av x-av--e">🦊</span>Emma<span class="x-mm__lock"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/></svg>Locked</span></div>
+                  <div class="x-mm__row x-mm__row--vol"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 9h4l5-4v14l-5-4H4zm12.4-2.6a7 7 0 0 1 0 11.2l-1.2-1.6a5 5 0 0 0 0-8z"/></svg><span class="x-vol"><i></i></span><span class="x-mm__pct">40%</span></div>
+                  <div class="x-mm__row x-mm__row--host"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/></svg>Make host</div>
+                  <div class="x-mm__row x-mm__row--rm"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M10 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-7 1.7-7 4v2h11.3a6 6 0 0 1-.3-1.8c0-1.6.6-3 1.6-4.1A12 12 0 0 0 10 14zm9.1-.5L17.5 15l-1.6-1.5-1.4 1.4 1.6 1.6-1.6 1.6 1.4 1.4 1.6-1.6 1.6 1.6 1.4-1.4-1.6-1.6 1.6-1.6z"/></svg>Remove from party</div>
+                </div>
               </div>
               <h3>Host controls</h3>
-              <p>Lock playback so only the host can play, pause and skip.</p>
+              <p>Hand the party to a friend, remove someone, or lock it so no one new can join. You can still make playback host-only.</p>
             </article>
             <article class="x-card x-feat x-rv">
               <div class="x-vig" aria-hidden="true">
@@ -928,7 +1020,10 @@
             <details class="x-rv"><summary>What happens to our chat?</summary><p>Chat is end-to-end encrypted. Your browser encrypts every message, GIF, reaction, name, profile picture and photo with a key that lives only in the invite link, so our server only ever relays and stores scrambled data. Parties and their encrypted messages are deleted when the party ends, or within 6 hours.</p></details>
             <details class="x-rv"><summary>Why do friends need the full link?</summary><p>The invite link carries your party's encryption key after the # sign, which is never sent to any server. A bare party code can't unlock the chat, so always share the full link.</p></details>
             <details class="x-rv"><summary>Do I need to update?</summary><p>Parties now need NetParty 1.7 or newer. If a friend's version is older, they'll be asked to update, and installing the latest download takes 30 seconds.</p></details>
-            <details class="x-rv"><summary>Can someone else control playback?</summary><p>By default anyone can play, pause or seek. The host can switch on 'Only I can play, pause and skip' in the popup.</p></details>
+            <details class="x-rv"><summary>Can someone else control playback?</summary><p>By default anyone can play, pause or seek. The host can switch on 'Only I can play, pause and skip' in the popup or in the chat panel's settings.</p></details>
+            <details class="x-rv"><summary>Can the host remove someone or lock the party?</summary><p>Yes. Click a friend's picture in the chat panel to make them the host or remove them from the party. A removed tab can't rejoin. Lock the party in the chat panel's settings or the popup so no one new can join; people already in can still reload. When the host leaves, they can hand the party to a friend so it keeps going, or end it for everyone.</p></details>
+            <details class="x-rv"><summary>What's in the party recap?</summary><p>A picture of your party: what you watched, how long you watched together, who was there, and numbers like messages, reactions and the biggest moment. NetParty makes it on your device and never uploads it. It's only shared if you download or copy it and post it yourself.</p></details>
+            <details class="x-rv"><summary>Is it safe to share the invite on WhatsApp, Discord or Instagram?</summary><p>The share buttons copy the link and open the app for you to paste it into a chat. NetParty never puts the link into the app's address, so the key in it isn't sent to those apps' servers. The QR code is also made on your device. Anyone who gets the full link can join, so send it only to friends.</p></details>
           </div>
         </section>
 
@@ -946,7 +1041,7 @@
               <div class="x-pane" role="tabpanel" id="x-pane-chrome" aria-labelledby="x-tab-chrome" tabindex="0">
                 <p class="x-pane__name">Chrome</p>
                 <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Download for Chrome<span class="x-free"> (free)</span></span></a>
-                <p><span class="x-ver">Version 2.2.0</span></p>
+                <p><span class="x-ver">Version 2.3.0</span></p>
                 <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
                 <ol class="x-beta">
                   <li><b>1</b>Unzip</li>

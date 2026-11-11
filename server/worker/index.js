@@ -105,8 +105,8 @@ const withPrivacySeo = (html) => html.replace(/<link rel="icon"[^>]*>\s*/gi, "")
 const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n\nSitemap: https://netparty.tech/sitemap.xml\n";
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://netparty.tech/</loc><lastmod>2026-11-06</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-10</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+<url><loc>https://netparty.tech/</loc><lastmod>2026-11-11</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-11</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
 const siteIndexOg = withSeo(withOg(siteIndex));
