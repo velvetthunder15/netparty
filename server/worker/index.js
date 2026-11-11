@@ -159,16 +159,18 @@ const BASE_SECURITY = {
 const siteCsp = new Map();
 async function cspFor(html) {
   if (siteCsp.has(html)) return siteCsp.get(html);
-  const hashes = [];
+  const hashes = new Set();
   for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
-    const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(m[1])));
-    let bin = "";
-    for (const b of d) bin += String.fromCharCode(b);
-    hashes.push(`'sha256-${btoa(bin)}'`);
+    for (const text of [m[1], m[1].replace(/\r\n/g, "\n")]) {
+      const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+      let bin = "";
+      for (const b of d) bin += String.fromCharCode(b);
+      hashes.add(`'sha256-${btoa(bin)}'`);
+    }
   }
   const csp = [
     "default-src 'none'",
-    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    `script-src 'self' ${Array.from(hashes).join(" ")}`.trim(),
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data:",
