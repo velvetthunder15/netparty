@@ -87,3 +87,27 @@ button:active:not(:disabled) { transform: scale(.97); }
 .avatar-opt.hd img { width: 84%; height: auto; aspect-ratio: 1; object-fit: contain; display: block; pointer-events: none; }
 .avatar-grid { max-height: 260px; overflow-y: auto; scrollbar-width: thin; align-content: start; grid-auto-rows: max-content; }
 .avatar-sub { grid-column: 1 / -1; font-size: 11px; color: var(--dim); padding: 6px 2px 0; }
+
+/* 2.3: invite friends (copy link, WhatsApp, Discord, Instagram, QR code) */
+.share-apps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+.share-app {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px 7px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); font-size: 11px; font-weight: 600;
+}
+.share-app svg { width: 22px; height: 22px; display: block; }
+.share-app[data-app="whatsapp"] svg { color: #25d366; }
+.share-app[data-app="discord"] svg { color: #5865f2; }
+.share-app[data-app="instagram"] svg { color: #e1306c; }
+.share-app[data-app="qr"] svg { color: var(--text); }
+.share-app:hover, .share-app[aria-pressed="true"] { border-color: var(--accent); }
+.qrbox { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 8px; padding: 10px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); text-align: center; }
+.qrbox canvas { width: 190px; height: 190px; border-radius: 8px; image-rendering: pixelated; }
+.qrbox small { color: var(--dim); font-size: 11.5px; }
+:root[data-theme=light] .share-app[data-app="whatsapp"] svg { color: #0f8a43; }
+:root[data-theme=light] .share-app[data-app="discord"] svg { color: #4752c4; }
+:root[data-theme=light] .share-app[data-app="instagram"] svg { color: #c1356b; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme=dark]) .share-app[data-app="whatsapp"] svg { color: #0f8a43; }
+  :root:not([data-theme=dark]) .share-app[data-app="discord"] svg { color: #4752c4; }
+  :root:not([data-theme=dark]) .share-app[data-app="instagram"] svg { color: #c1356b; }
+}

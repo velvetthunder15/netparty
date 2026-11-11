@@ -339,7 +339,8 @@ check("deleting the pinned line hides the pinned bar", !!(await until(async () =
 
 // ================================================================ settings (panel + popup)
 await hp.locator(".np-tool-set").click();
-check("Settings popover in the panel with 3 switches (all on by default)", (await hp.locator(".np-set-pop.np-pop-open").isVisible()) && JSON.stringify(await sh(hp, (r) => [...r.querySelectorAll(".np-switch")].map((b) => b.getAttribute("aria-checked")))) === '["true","true","true"]');
+// (2.3: the host also gets a "Party" section with its own switches, [data-host-set], covered by v23.mjs)
+check("Settings popover in the panel with 3 switches (all on by default)", (await hp.locator(".np-set-pop.np-pop-open").isVisible()) && JSON.stringify(await sh(hp, (r) => [...r.querySelectorAll(".np-switch[data-pref]")].map((b) => b.getAttribute("aria-checked")))) === '["true","true","true"]');
 await hp.screenshot({ path: "c3-settings-dark.png" });
 await hp.locator('.np-switch[data-pref="autoDuck"]').click();
 check("switching one off saves it (storage.sync autoDuck: false)", (await H.sw.evaluate(() => chrome.storage.sync.get("autoDuck"))).autoDuck === false);

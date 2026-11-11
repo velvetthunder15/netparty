@@ -55,7 +55,7 @@ async function openPopup(x, page) {
   return pop;
 }
 const visible = (pop, id) => pop.evaluate((i) => !document.getElementById(i).classList.contains("hidden"), id);
-const FILES = ["any-mode.js", "early.js", "emoji-data.js", "anyvideo.js", "content.js"];
+const FILES = ["any-mode.js", "early.js", "emoji-data.js", "qr.js", "anyvideo.js", "content.js"];
 // the popup's own steps (inject after the click, then a command), run from an extension page
 async function api(x, page, msg, { inject = false } = {}) {
   const e = await extPage(x);

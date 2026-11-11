@@ -19,6 +19,7 @@ const GRACE_MS = 15_000;
 const RESTORE_MAX_AGE_MS = 6 * 60 * 60 * 1000; // a saved party older than this is not brought back
 export const PURGE_AGE_MS = RESTORE_MAX_AGE_MS - 15 * 60 * 1000; // saved parties idle this long are deleted (sweeps run every 15 min)
 const MAX_SEATS = 200;
+const MAX_BANNED = 200; // 2.3: private reconnect ids (cids) of members the host removed, kept so they can't come back
 const limits = {
   react: [12, 3000], // reactions per connection per window (tapping 🎉 repeatedly sends several)
   chat: [20, 10_000],
@@ -57,6 +58,9 @@ export const NEED_UPDATE =
   "Update NetParty to version 1.7 or newer: party chat is now end-to-end encrypted, and this version can't start or join parties. Get it at netparty.tech.";
 export const LEGACY_ROOM =
   "This party was started with an older NetParty that doesn't encrypt chat. Ask the host to update NetParty and start a new party.";
+// 2.3 host controls
+export const REMOVED = "The host removed you from this party.";
+export const LOCKED = "This party is locked: the host isn't letting new people join right now.";
 // 2.2: "buffer" (paused while a member's video loads), "drop" (paused when a member dropped), "resume" (both over)
 const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode", "rate", "buffer", "drop", "resume"]);
 
@@ -194,6 +198,7 @@ export function iceProvider(env = {}, fetchFn = globalThis.fetch) {
 // private per-tab reconnect secret: 128 random bits as hex (the extension makes 32 hex chars)
 const cleanPin = (p) => (p && isCt(p.ct, MAX_PIN_CT) && typeof p.by === "string" && /^[a-z0-9]{1,16}$/.test(p.by) ? { ct: p.ct, by: p.by } : null);
 const cleanCid = (s) => (typeof s === "string" && /^[0-9a-f]{32,64}$/.test(s) ? s : null);
+const cleanBanned = (list) => new Set((Array.isArray(list) ? list : []).map(cleanCid).filter(Boolean).slice(-MAX_BANNED));
 const announcesE2ee = (data) => data?.e2ee === 1 || data?.e2ee === true;
 
 // store (optional): { get(id) -> Promise<obj|null>, put(id, obj), del(id), list?() -> Promise<[id, obj][]> }.
@@ -224,9 +229,12 @@ const rooms = new Map();
 /**
  * @typedef {{ id: string, e2ee: true, members: Map<string, Client>, state: PlayState, hostId: string|null,
  *   hostCid: string|null, hostOnly: boolean, history: object[], profiles: Map<string,string>,
- *   seats: Map<string,string>, kc: string, emptySince: number|null, ended?: boolean }} Room
+ *   seats: Map<string,string>, kc: string, emptySince: number|null, ended?: boolean,
+ *   locked: boolean, banned: Set<string> }} Room
+ *   (2.3: locked = no new seats; banned = cids of removed members, refused on join)
  * @typedef {{ playing: boolean, position: number, at: number, videoId: string|null, by: string|null }} PlayState
- * @typedef {{ pid: string|null, cid: string|null, send: (s: string) => void, roomId: string|null, inVoice?: boolean }} Client
+ * @typedef {{ pid: string|null, cid: string|null, send: (s: string) => void, roomId: string|null, inVoice?: boolean, hc?: boolean }} Client
+ *   (2.3: hc = the client has the host controls, so a lock can stay on while it's the host)
  */
 
 function send(client, msg) {
@@ -268,6 +276,7 @@ function snapshot(room, client) {
     you: client.pid,
     hostId: room.hostId,
     hostOnly: room.hostOnly,
+    locked: !!room.locked,
     state: room.state,
     kc: room.kc,
     page: room.page || null,
@@ -285,8 +294,9 @@ function remember(room, entry) {
 }
 
 // ---- persistence (debounced; failures only cost restart-survival, never the live party).
-// What is stored: room code, playback state, settings, the encrypted key check, seats
-// (cid -> pid, server-side only), encrypted profiles and the encrypted history.
+// What is stored: room code, playback state, settings (2.3: incl. locked), the encrypted key check, seats
+// (cid -> pid, server-side only), 2.3: the cids of removed members (server-side only), encrypted profiles
+// and the encrypted history.
 function prune(room) {
   // profiles nobody can need any more (not a member, not in the history)
   const keep = new Set(room.members.keys());
@@ -307,7 +317,10 @@ function save(room) {
     if (room.ended) return;
     prune(room);
     const { id, state, hostOnly, hostCid, history, kc } = room;
-    const rec = { id, e2ee: true, state, hostOnly, hostCid, kc, history, page: room.page || null, pin: room.pin || null, profiles: [...room.profiles], seats: [...room.seats], savedAt: Date.now() };
+    const rec = {
+      id, e2ee: true, state, hostOnly, hostCid, kc, history, page: room.page || null, pin: room.pin || null, profiles: [...room.profiles], seats: [...room.seats],
+      locked: !!room.locked, banned: [...(room.banned || [])], savedAt: Date.now(),
+    };
     Promise.resolve(store.put(id, rec)).catch(() => {});
   }, 300);
 }
@@ -350,6 +363,8 @@ async function lookup(code) {
             history: Array.isArray(saved.history) ? saved.history.slice(-HISTORY) : [],
             profiles: new Map(Array.isArray(saved.profiles) ? saved.profiles : []),
             seats: new Map(Array.isArray(saved.seats) ? saved.seats : []),
+            locked: !!saved.locked,
+            banned: cleanBanned(saved.banned),
             emptySince: Date.now(),
             state: saved.state,
           };
@@ -419,7 +434,20 @@ function leaveRoom(client, { silent = false } = {}) {
   }
   if (room.hostId === client.pid) room.hostId = [...room.members.values()].find((m) => !m.away)?.pid || room.members.keys().next().value;
   broadcast(room, membersMsg(room));
+  lockNeedsHost(room);
   if (!silent) systemLine(room, "leave", client.pid);
+}
+
+// 2.3: a lock only stays on while the host can take it off again. NetParty 2.2 and older have no unlock control, so
+// when the host role passes to one of them (a stand-in, or a hand-over), the party unlocks. 2.3 clients say they
+// have the controls with { hc: 1 } in create and join.
+function lockNeedsHost(room) {
+  if (!room.locked) return;
+  const host = room.members.get(room.hostId);
+  if (!host || host.hc) return;
+  room.locked = false;
+  save(room);
+  broadcast(room, { type: "settings", data: { hostOnly: room.hostOnly, locked: false } });
 }
 
 // A tab's seat is found by its private cid: the same tab coming back (page reload, episode
@@ -451,6 +479,7 @@ function joinRoom(client, room) {
   if (!room.members.has(room.hostId)) room.hostId = pid;
   if (room.hostCid && room.hostCid === client.cid) room.hostId = pid; // host came back after a long drop
   broadcast(room, membersMsg(room), pid);
+  lockNeedsHost(room);
   if (!returning) systemLine(room, "join", pid, pid);
   else save(room);
   return returning;
@@ -473,6 +502,7 @@ const handlers = {
     do id = newId(8);
     while (rooms.has(id));
     client.cid = cid;
+    client.hc = data?.hc === 1; // 2.3: has the host controls (lock, remove, make host)
     const now = Date.now();
     /** @type {Room} */
     const room = {
@@ -487,6 +517,8 @@ const handlers = {
       history: [],
       profiles: new Map(),
       seats: new Map(),
+      locked: false,
+      banned: new Set(),
       emptySince: null,
       state: {
         playing: !!data?.playing,
@@ -513,11 +545,16 @@ const handlers = {
     const room = await lookup(data?.roomId);
     if (room?.legacy) return reply(null, LEGACY_ROOM);
     if (!room || room.ended) return reply(null, "Party not found. It may have ended.");
+    // 2.3: a tab the host removed doesn't get back in
+    if (room.banned?.has(cid)) return reply(null, REMOVED);
     // asked again on the same connection (e.g. to refresh the history): nothing changes
     if (client.roomId === room.id && client.cid === cid && room.members.get(client.pid) === client)
       return reply({ ...snapshot(room, client), returning: true });
+    // 2.3: a locked party takes no new seats; people who already have one (reloads, reconnects) come back as usual
+    if (room.locked && !room.seats.has(cid)) return reply(null, LOCKED);
     if (room.members.size >= MAX_MEMBERS && !room.members.has(room.seats.get(cid))) return reply(null, "Party is full.");
     client.cid = cid;
+    client.hc = data?.hc === 1; // 2.3: has the host controls (lock, remove, make host)
     const hadSeat = room.seats.has(cid);
     const returning = joinRoom(client, room);
     // a join is a new tab taking a seat in the party (reloads and reconnects into the same seat aren't counted)
@@ -532,7 +569,7 @@ const handlers = {
     const room = await lookup(data?.roomId);
     if (room?.legacy) return reply(null, LEGACY_ROOM);
     if (!room || room.ended) return reply(null, "Party not found. It may have ended.");
-    reply({ e2ee: true, roomId: room.id, videoId: room.state.videoId, members: room.members.size, kc: room.kc, page: room.page || null });
+    reply({ e2ee: true, roomId: room.id, videoId: room.state.videoId, members: room.members.size, kc: room.kc, page: room.page || null, locked: !!room.locked });
   },
 
   leave(client, _data, reply) {
@@ -661,7 +698,60 @@ const handlers = {
     if (client.pid !== room.hostId) return reply(null, "Only the host can change settings.");
     room.hostOnly = !!data?.hostOnly;
     save(room);
-    broadcast(room, { type: "settings", data: { hostOnly: room.hostOnly } });
+    broadcast(room, { type: "settings", data: { hostOnly: room.hostOnly, locked: !!room.locked } });
+    reply({ ok: true });
+  },
+
+  // ---- 2.3 host controls. Each is its own message type, so a client never changes one setting by
+  // leaving out another, and a server from before 2.3 answers "Unknown type." instead of doing something else.
+
+  // { locked }: while locked, nobody new can take a seat (people who already have one can come back)
+  lock(client, data, reply) {
+    const room = inRoom(client);
+    if (!room) return reply(null, "Not in a party.");
+    if (client.pid !== room.hostId) return reply(null, "Only the host can lock the party.");
+    room.locked = !!data?.locked;
+    save(room);
+    broadcast(room, { type: "settings", data: { hostOnly: room.hostOnly, locked: room.locked } });
+    reply({ ok: true });
+  },
+
+  // { id: pid }: take a member out of the party. Their tab's private cid is refused from then on (a fresh tab
+  // with the invite link could still join, which is what locking the party is for).
+  remove(client, data, reply) {
+    const room = inRoom(client);
+    if (!room) return reply(null, "Not in a party.");
+    if (client.pid !== room.hostId) return reply(null, "Only the host can remove people.");
+    const target = room.members.get(String(data?.id || ""));
+    if (!target || target === client) return reply(null, "Member not found.");
+    if (target.cid) {
+      room.banned.add(target.cid);
+      if (room.banned.size > MAX_BANNED) room.banned.delete(room.banned.values().next().value);
+    }
+    send(target, { type: "removed", data: { by: client.pid } });
+    clearTimeout(target.graceTimer);
+    leaveRoom(target, { silent: true });
+    systemLine(room, "removed", target.pid);
+    reply({ ok: true });
+  },
+
+  // { id: pid }: hand the host role to someone who's connected. From the party's own host it goes with their
+  // seat (cid), so it stays with them across reloads and the old host doesn't take it back by coming back.
+  // From a stand-in (the host dropped out and someone took over), the creator still gets it back on returning,
+  // as with any stand-in.
+  promote(client, data, reply) {
+    const room = inRoom(client);
+    if (!room) return reply(null, "Not in a party.");
+    if (client.pid !== room.hostId) return reply(null, "Only the host can hand over the party.");
+    const target = room.members.get(String(data?.id || ""));
+    if (!target || target === client) return reply(null, "Member not found.");
+    if (target.away || !target.cid) return reply(null, "They aren't connected right now.");
+    room.hostId = target.pid;
+    if (!room.hostCid || room.hostCid === client.cid) room.hostCid = target.cid;
+    save(room);
+    broadcast(room, membersMsg(room));
+    lockNeedsHost(room);
+    systemLine(room, "host", target.pid);
     reply({ ok: true });
   },
 
@@ -940,6 +1030,8 @@ ${hasDownload ? `<li><a href="/j/${esc(room.id)}/netparty.zip">Download NetParty
     `${need} the NetParty extension (${ver} or newer) in Chrome or Brave, in Firefox from <a href="${FIREFOX_STORE}" target="_blank" rel="noopener">Firefox Add-ons</a>, or in Edge from the <a href="${EDGE_STORE}" target="_blank" rel="noopener">Edge Add-ons store</a>. Opera is coming soon.`;
   const body = !live
     ? `<h1>This party has ended</h1><p>Ask your friend for a fresh invite link.</p>`
+    : room.locked
+      ? `<h1>This party is locked</h1><p>The host isn't letting new people join right now. Ask them to unlock it, then open this link again.</p>`
     : any && !isCt(room.page, MAX_PAGE_CT)
       ? `<h1>You're invited to a watch party</h1><p>The host hasn't shared the video's page yet. Try this link again in a moment.</p>`
       : any
@@ -980,5 +1072,5 @@ h1{font-size:24px;line-height:1.25;margin:0 0 8px}.sub{color:#9d9da8;margin:0 0 
 details{margin-top:18px;padding:14px 16px;border:1px solid #33333c;border-radius:12px;background:#1b1b22}
 summary{cursor:pointer;font-weight:600}ol{padding-left:20px;margin:10px 0 0}li{margin:6px 0}.steps{margin:16px 0 4px}
 a{color:#a48bff}code{background:#26262e;padding:1px 6px;border-radius:6px;font-size:14px}
-</style></head><body><main><div class="logo">NetParty</div>${body}</main>${live && (watch || (any && isCt(room.page, MAX_PAGE_CT))) ? `<script>${JOIN_SCRIPT}</script>` : ""}</body></html>`;
+</style></head><body><main><div class="logo">NetParty</div>${body}</main>${live && !room.locked && (watch || (any && isCt(room.page, MAX_PAGE_CT))) ? `<script>${JOIN_SCRIPT}</script>` : ""}</body></html>`;
 }

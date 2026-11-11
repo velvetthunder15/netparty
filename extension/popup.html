@@ -78,12 +78,43 @@
         <div class="code" id="partyCode"></div>
         <div class="who" id="who"></div>
       </div>
-      <button id="copy" class="primary">Copy invite link</button>
+      <!-- 2.3: invite friends, all in one block. The apps open on their own start page and you paste the link
+           there: a share address would hand the key after # to the app's servers. -->
+      <div class="share" id="shareBox">
+        <button id="copy" class="primary">Copy invite link</button>
+        <div class="share-apps">
+          <button type="button" class="share-app" data-app="whatsapp" title="Copy the link and open WhatsApp">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" d="M12 3.2a8.8 8.8 0 0 0-7.6 13.2L3.2 20.8l4.5-1.2A8.8 8.8 0 1 0 12 3.2z"/><path fill="currentColor" d="M8.7 7.7c.2-.4.5-.5.8-.5h.6c.2 0 .4.1.5.4l.8 1.9c.1.3 0 .5-.1.7l-.6.7c-.1.2-.1.4 0 .6.6 1.1 1.5 2 2.6 2.6.2.1.4.1.6 0l.7-.6c.2-.2.5-.2.7-.1l1.9.8c.3.1.4.3.4.5v.6c0 .3-.2.6-.5.8-.6.4-1.4.6-2.2.4-2.6-.6-5-3-5.6-5.6-.2-.8 0-1.6.4-2.2z"/></svg>
+            <span>WhatsApp</span>
+          </button>
+          <button type="button" class="share-app" data-app="discord" title="Copy the link and open Discord">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.3 5.4A16.6 16.6 0 0 0 15.2 4l-.5 1a15 15 0 0 0-5.4 0l-.5-1a16.6 16.6 0 0 0-4.1 1.4C2.1 9.3 1.4 13.1 1.7 16.9a16.8 16.8 0 0 0 5.1 2.6l1.1-1.8c-.6-.2-1.2-.5-1.8-.9l.4-.3a11.9 11.9 0 0 0 10.2 0l.4.3c-.6.4-1.2.7-1.8.9l1.1 1.8a16.8 16.8 0 0 0 5.1-2.6c.4-4.4-.7-8.2-2.4-11.5zM8.5 14.6c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>
+            <span>Discord</span>
+          </button>
+          <button type="button" class="share-app" data-app="instagram" title="Copy the link and open Instagram">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.25" fill="currentColor"/></svg>
+            <span>Instagram</span>
+          </button>
+          <button type="button" class="share-app" id="qrBtn" data-app="qr" aria-pressed="false" title="Show the link as a QR code">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path fill="currentColor" d="M6.5 6.5h1v1h-1zM16.5 6.5h1v1h-1zM6.5 16.5h1v1h-1zM14 14h3v3h-3zM17 17h3v3h-3zM14 19h2v1h-2zM19 14h1v2h-1z"/></svg>
+            <span>QR code</span>
+          </button>
+        </div>
+        <div id="qrBox" class="qrbox hidden">
+          <canvas id="qr" role="img" aria-label="QR code of your invite link"></canvas>
+          <small>Scan it with your phone's camera to send the link from there.</small>
+        </div>
+        <p class="msg" id="shareMsg" role="status"></p>
+      </div>
       <p class="hint">Friends open the link, install NetParty if they haven't, and land in sync. 🔒 Chat is end-to-end encrypted: the key is in the link, so share it only with friends.</p>
       <button id="chat" class="ghost">Open chat &amp; voice</button>
       <label class="toggle hidden" id="hostRow">
         <input type="checkbox" id="hostOnly" />
         <span>Only I can play, pause and skip</span>
+      </label>
+      <label class="toggle hidden" id="lockRow" title="No one new can join. People already in the party can come back after a reload.">
+        <input type="checkbox" id="lockParty" />
+        <span>Lock the party (no one new can join)</span>
       </label>
       <button id="leave" class="text danger">Leave party</button>
     </section>
@@ -146,6 +177,7 @@
     </details>
 
     <script src="emoji-data.js"></script>
+    <script src="qr.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

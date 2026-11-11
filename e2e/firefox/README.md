@@ -13,6 +13,7 @@ only speaks wss://, just like with netparty.tech.
 | `ffpopup.mjs` | popup Start a party (link really on the clipboard) and Join by pasting the invite link |
 | `ffcross.mjs` | Firefox host + Chromium guest: join, chat both ways, sync both ways, voice, camera tiles both ways (1.8) |
 | `ffavatars.mjs` | 2.2 profile pictures: Firefox host (fake Netflix with a strict image CSP, `NPIMG=none` for `img-src 'self'`, `NPIMG=data` to add `data:`) and a Chromium guest: HD pictures and uploaded photos both ways (createImageBitmap + WebP encoding in Firefox), shown from blob: URLs despite the page CSP, leak audit |
+| `ff23.mjs` | 2.3 with a Firefox host and two Chromium guests: share block (Copy link on the real clipboard, WhatsApp opens its fixed page, QR code in a moz-extension:// window that decodes to the link, none in the page, forgotten when closed), lock / remove / make host from Firefox, per-person voice volume, the recap (drawn, Download link, Copy image), leak audit |
 | `ffplatforms.mjs` | 2.2 HBO Max, Crunchyroll, and SonyLIV on simulated pages from `../fakesite.mjs`: Firefox service and watch-page recognition, party creation, invite and guest join, pause and seek/play sync both ways. Crunchyroll's player is in a cross-origin iframe. This does not test authenticated playback on the real services |
 | `ffgif.mjs` | background GIF API fetch (CORS for moz-extension://) and KLIPY media, GIF picker renders |
 | `ffprod.mjs` | against the live wss://netparty.tech: create, prod invite page, join, chat both ways, sync, end |
@@ -31,6 +32,7 @@ SCRIPT=firefox/ffcross.mjs ./e2e/go.sh
 SCRIPT=firefox/ffgif.mjs ./e2e/go.sh
 SCRIPT=firefox/ffavatars.mjs ./e2e/go.sh; NPIMG=data SCRIPT=firefox/ffavatars.mjs ./e2e/go.sh
 SCRIPT=firefox/ffplatforms.mjs TMO=400 ./e2e/go.sh
+SCRIPT=firefox/ff23.mjs ./e2e/go.sh
 cd e2e && npx web-ext lint -s firefox/build
 ```
 

@@ -92,13 +92,15 @@ const ok = (name) => console.log("✔", name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // a 1.7 member: knows the room key, its cid (private) and its pid (public, from the server)
-async function member(label, { key, room, cid = newCid(), create = null } = {}) {
+// (2.3: hc = has the host controls, as 2.3 clients say; hc: false is a 2.2 client)
+async function member(label, { key, room, cid = newCid(), create = null, hc = true } = {}) {
   const c = client(label);
   await c.ready;
   await c.next("welcome");
   let snap;
-  if (create) snap = await c.req("create", { e2ee: 1, cid, kc: await check(key), ...create });
-  else snap = await c.req("join", { e2ee: 1, roomId: room, cid });
+  const caps = hc ? { hc: 1 } : {};
+  if (create) snap = await c.req("create", { e2ee: 1, cid, kc: await check(key), ...caps, ...create });
+  else snap = await c.req("join", { e2ee: 1, roomId: room, cid, ...caps });
   return Object.assign(c, { cid, key, room: snap.roomId, pid: snap.you, snap });
 }
 const sealAs = (m, kind, obj) => seal(m.key, m.room, kind, m.pid, obj);
@@ -153,7 +155,8 @@ ok("create e2ee party " + snap.roomId + " (pid " + a.pid + ")");
   await assert.rejects(x.req("join", { roomId: snap.roomId, name: "Old", cid: "abcdefgh12345678" }), /Update NetParty/);
   await assert.rejects(x.req("peek", { roomId: snap.roomId }), /Update NetParty/);
   const pk = await x.req("peek", { e2ee: 1, roomId: snap.roomId });
-  assert.deepEqual(Object.keys(pk).sort(), ["e2ee", "kc", "members", "page", "roomId", "videoId"]);
+  assert.deepEqual(Object.keys(pk).sort(), ["e2ee", "kc", "locked", "members", "page", "roomId", "videoId"]); // 2.3: locked
+  assert.equal(pk.locked, false);
   assert.equal(pk.page, null, "no page for a Netflix party");
   assert.equal(pk.e2ee, true);
   assert.equal(pk.kc, snap.kc);
@@ -856,11 +859,27 @@ if (!process.env.TARGET) {
   assert.equal((await open(key, room, "chat", line.from, line.ct)).text, "survive this " + MARK);
   assert.equal((await open(key, room, "profile", hp, gs.profiles[hp])).name, "Hostname-" + MARK);
   const h2 = fake(hub2);
-  const hs = await h2.req("join", { e2ee: 1, roomId: room, cid: hostCid });
+  const hs = await h2.req("join", { e2ee: 1, roomId: room, cid: hostCid, hc: 1 });
   assert.equal(hs.you, hp, "same pid after a restart");
   assert.equal(hs.hostId, hp); // creator gets host back
   assert.ok(await hub2.findRoom(room));
-  await h2.req("end", {});
+  // 2.3: a lock and a removal survive a restart too (the removed member's cid is kept, server-side only)
+  await h2.req("lock", { locked: true });
+  await h2.req("remove", { id: gs.you });
+  await sleep(450);
+  const saved23 = disk.get(room);
+  assert.equal(saved23.locked, true);
+  assert.deepEqual(saved23.banned, [guestCid]);
+  const hub2b = createHub({ store }); // restart again
+  await assert.rejects(fake(hub2b).req("join", { e2ee: 1, roomId: room, cid: guestCid }), /removed you/);
+  await assert.rejects(fake(hub2b).req("join", { e2ee: 1, roomId: room, cid: newCid() }), /locked/);
+  const h3 = fake(hub2b);
+  const hs3 = await h3.req("join", { e2ee: 1, roomId: room, cid: hostCid, hc: 1 });
+  assert.equal(hs3.locked, true);
+  assert.equal(hs3.hostId, hp);
+  await h3.req("lock", { locked: false });
+  await h2.req("end", {}).catch(() => {}); // hub2's copy of the party (gone from the store below)
+  await h3.req("end", {});
   await sleep(50);
   assert.equal(disk.size, 0);
   ok("party survives a server restart (store: same pids, host, encrypted history) and is deleted when ended");
@@ -880,6 +899,157 @@ if (!process.env.TARGET) {
   assert.deepEqual([...disk.keys()].sort(), ["fresh123"]);
   assert.ok(PURGE_AGE_MS <= 6 * 3600_000 - 15 * 60_000, "purged before 6 hours, with a sweep every 15 minutes");
   ok("pre-1.7 saved parties refused + deleted; idle parties purged (≤ 6 h)");
+}
+
+// ---- 2.3 host controls: lock the party, remove a member, hand the host role over
+{
+  const K = genKey();
+  const h = await member("h23", { key: K, create: { videoId: "81234567", playing: false, position: 0, at: Date.now() } });
+  const room = h.room;
+  const g1 = await member("g23a", { key: K, room });
+  const g2 = await member("g23b", { key: K, room });
+  assert.equal(h.snap.locked, false, "a new party isn't locked");
+
+  // lock: host only; everyone hears it (with hostOnly, so a 2.2 client keeps its value)
+  await assert.rejects(g1.req("lock", { locked: true }), /Only the host can lock/);
+  g1.drain("settings");
+  await h.req("lock", { locked: true });
+  const st = await g1.next("settings");
+  assert.deepEqual(st.data, { hostOnly: false, locked: true });
+  const pk = await g1.req("peek", { e2ee: 1, roomId: room });
+  assert.equal(pk.locked, true, "peek says the party is locked");
+  // nobody new gets in; a seat that exists does (reload / reconnect with the same cid)
+  const nc = client("g23new");
+  await nc.ready;
+  await nc.next("welcome");
+  const freshCid = newCid();
+  await assert.rejects(nc.req("join", { e2ee: 1, roomId: room, cid: freshCid }), /locked/);
+  const again = await member("g23a2", { key: K, room, cid: g1.cid });
+  assert.equal(again.pid, g1.pid, "a member with a seat comes back while locked");
+  assert.equal(again.snap.locked, true, "the snapshot says locked");
+  g1.close();
+  // the invite page says so and runs no script
+  const lockedPage = await fetch(HTTP + "/j/" + room).then((r) => r.text());
+  assert.match(lockedPage, /This party is locked/);
+  assert.ok(!lockedPage.includes("<script>"), "no join script on a locked party's page");
+  // settings (hostOnly) carries the lock too
+  again.drain("settings");
+  await h.req("settings", { hostOnly: true });
+  assert.deepEqual((await again.next("settings")).data, { hostOnly: true, locked: true });
+  await h.req("settings", { hostOnly: false });
+  await h.req("lock", { locked: false });
+  assert.deepEqual((await again.next("settings", (m) => m.data.locked === false)).data, { hostOnly: false, locked: false });
+  const late = await nc.req("join", { e2ee: 1, roomId: room, cid: freshCid });
+  assert.equal(late.locked, false);
+  ok("2.3 lock: host only, broadcast with hostOnly, no new seats while locked (existing seats come back), peek + invite page say so");
+
+  // remove: host only, never yourself; the member is told, leaves silently, and their tab can't come back
+  await assert.rejects(again.req("remove", { id: g2.pid }), /Only the host can remove/);
+  await assert.rejects(h.req("remove", { id: h.pid }), /Member not found/);
+  await assert.rejects(h.req("remove", { id: "nobody123456" }), /Member not found/);
+  again.drain("members");
+  again.drain("system");
+  await h.req("remove", { id: g2.pid });
+  const told = await g2.next("removed");
+  assert.equal(told.data.by, h.pid);
+  const mem = await again.next("members", (m) => !m.data.members.some((x) => x.id === g2.pid));
+  assert.ok(mem.data.members.some((x) => x.id === h.pid));
+  const sys = await again.next("system", (m) => m.data.event === "removed");
+  assert.equal(sys.data.id, g2.pid);
+  await assert.rejects(g2.req("chat", { ct: await sealAs(g2, "chat", { t: "text", text: "still here?" }) }), /Not in a party/);
+  g2.close();
+  const back = client("g23b2");
+  await back.ready;
+  await back.next("welcome");
+  await assert.rejects(back.req("join", { e2ee: 1, roomId: room, cid: g2.cid }), /removed you/);
+  back.close();
+  const snapNow = await again.req("join", { e2ee: 1, roomId: room, cid: again.cid });
+  assert.ok(snapNow.history.some((x) => x.kind === "system" && x.event === "removed" && x.id === g2.pid), "the removal is in the history");
+  assert.ok(!snapNow.history.some((x) => x.kind === "system" && x.event === "leave" && x.id === g2.pid), "no 'left' line as well");
+  ok("2.3 remove: host only, not yourself, member told + out (no leave line), their tab refused afterwards, kept in history");
+
+  // promote: host only, to someone connected; the role moves with their seat
+  await assert.rejects(again.req("promote", { id: h.pid }), /Only the host can hand over/);
+  await assert.rejects(h.req("promote", { id: h.pid }), /Member not found/);
+  again.drain("members");
+  await h.req("promote", { id: again.pid });
+  const ms = await again.next("members", (m) => m.data.hostId === again.pid);
+  assert.ok(ms.data.members.find((x) => x.id === again.pid).host);
+  assert.ok(!ms.data.members.find((x) => x.id === h.pid).host);
+  await again.next("system", (m) => m.data.event === "host" && m.data.id === again.pid);
+  await assert.rejects(h.req("settings", { hostOnly: true }), /Only the host/);
+  await assert.rejects(h.req("lock", { locked: true }), /Only the host/);
+  // the old host coming back (same cid) doesn't take it back
+  h.close();
+  const h2 = await member("h23b", { key: K, room, cid: h.cid });
+  assert.equal(h2.snap.hostId, again.pid, "the old host reconnecting stays a guest");
+  // the new host can't hand it to someone who dropped out (grace period)
+  again.drain("members");
+  h2.close();
+  await again.next("members", (m) => m.data.members.some((x) => x.id === h.pid && x.away), 5000);
+  await assert.rejects(again.req("promote", { id: h.pid }), /aren't connected/);
+  // and it survives the new host reconnecting
+  again.close();
+  nc.close();
+  const g1b = await member("g23a3", { key: K, room, cid: g1.cid });
+  assert.equal(g1b.snap.hostId, g1b.pid, "the promoted host keeps the role across a reconnect");
+  g1b.close();
+  ok("2.3 promote: host only, to a connected member, moves with their seat (old host returning stays a guest)");
+}
+{
+  // a stand-in host (the host left without ending) can hand the role on, but the party's own host still gets it
+  // back on returning, as from any stand-in
+  const K = genKey();
+  const h = await member("h23s", { key: K, create: { videoId: "81234567", playing: false, position: 0, at: Date.now() } });
+  const s = await member("s23s", { key: K, room: h.room });
+  const t = await member("t23s", { key: K, room: h.room });
+  s.drain("members");
+  await h.req("leave", {});
+  await s.next("members", (m) => m.data.hostId === s.pid);
+  await s.req("promote", { id: t.pid });
+  await t.next("members", (m) => m.data.hostId === t.pid);
+  h.close();
+  const hb = await member("h23s2", { key: K, room: h.room, cid: h.cid });
+  assert.equal(hb.pid, h.pid, "the host's seat is kept");
+  assert.equal(hb.snap.hostId, h.pid, "the party's own host gets the role back from a stand-in's pick");
+  for (const c of [hb, s, t]) c.close();
+  ok("2.3 promote by a stand-in host: the party's own host still takes the role back");
+}
+{
+  // a lock only stays on while the host can take it off: a 2.2 host (no hc) has no unlock control
+  const K = genKey();
+  const h = await member("h23l", { key: K, create: { videoId: "81234567", playing: false, position: 0, at: Date.now() } });
+  const old = await member("o23l", { key: K, room: h.room, hc: false });
+  const n = await member("n23l", { key: K, room: h.room });
+  await h.req("lock", { locked: true });
+  await old.next("settings", (m) => m.data.locked === true);
+  // handing it to a 2.2 member unlocks it
+  old.drain("settings");
+  await h.req("promote", { id: old.pid });
+  assert.deepEqual((await old.next("settings")).data, { hostOnly: false, locked: false }, "a 2.2 host gets an unlocked party");
+  assert.equal((await n.req("peek", { e2ee: 1, roomId: h.room })).locked, false);
+  // so does the role passing to a 2.2 stand-in on its own (the host leaves); a 2.3 stand-in keeps the lock
+  await old.req("promote", { id: n.pid });
+  await n.next("members", (m) => m.data.hostId === n.pid);
+  await n.req("lock", { locked: true });
+  await old.next("settings", (m) => m.data.locked === true);
+  h.close();
+  const third = await member("x23l", { key: K, room: h.room, cid: h.cid }); // the original host, back (2.3)
+  assert.equal(third.snap.hostId, n.pid, "the hand-over from the host stuck");
+  assert.equal(third.snap.locked, true, "a 2.3 host keeps the lock");
+  old.drain("settings");
+  third.close();
+  await n.req("promote", { id: old.pid });
+  assert.equal((await old.next("settings")).data.locked, false);
+  await old.req("promote", { id: n.pid });
+  await n.next("members", (m) => m.data.hostId === n.pid);
+  await n.req("lock", { locked: true });
+  await old.next("settings", (m) => m.data.locked === true);
+  old.drain("settings");
+  await n.req("leave", {});
+  assert.deepEqual((await old.next("settings")).data, { hostOnly: false, locked: false }, "a 2.2 stand-in gets an unlocked party");
+  for (const c of [n, old]) c.close();
+  ok("2.3 lock + 2.2 host: handing over to (or the role falling to) a client without host controls unlocks the party");
 }
 
 // host leaves -> host passes to B

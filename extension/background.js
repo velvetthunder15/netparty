@@ -143,19 +143,93 @@ async function roomKey(msg, tabId) {
   }
   return { error: "bad op" };
 }
+// 2.3 Invite friends: the apps' own start pages (the popup and the panel copy the link first)
+const SHARE_APPS = Object.freeze({
+  whatsapp: "https://web.whatsapp.com/",
+  discord: "https://discord.com/channels/@me",
+  instagram: "https://www.instagram.com/direct/inbox/",
+});
+// 2.3: the party recap's running totals for a tab (counts, names and pictures of who was there, the title),
+// kept the same way as the keys: chrome.storage.session, out of the site's reach, deleted with the tab. The
+// recap image itself is only ever drawn in the tab.
+const RECAP_MAX = 64 * 1024; // characters of JSON
+async function recapStore(msg, tabId) {
+  const code = String(msg.code || "");
+  if (!CODE_RE.test(code)) return { error: "bad code" };
+  const k = `rc:${tabId}:${code}`;
+  if (msg.op === "set") {
+    const d = msg.data;
+    if (!d || typeof d !== "object" || Array.isArray(d) || JSON.stringify(d).length > RECAP_MAX) return { error: "bad recap" };
+    await chrome.storage.session.set({ [k]: d });
+    return { ok: true };
+  }
+  if (msg.op === "get") return { data: (await chrome.storage.session.get(k))[k] || null };
+  if (msg.op === "del") {
+    await chrome.storage.session.remove(k);
+    return { ok: true };
+  }
+  return { error: "bad op" };
+}
+// 2.3: the chat panel's QR code. The panel sits inside the site's page, where the site could read a canvas, and
+// the invite link carries the party's key, so the panel hands the link to us and we show it in our own page
+// (qr.html, in a small window). Kept as "qr:<tab>:" { link, win } until the party ends there or the tab closes.
+function cleanInvite(s) {
+  if (typeof s !== "string" || s.length > 300) return null;
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return null;
+  }
+  return /^https?:$/.test(u.protocol) && !u.search && !u.username && !u.password && /\/j\/[a-z0-9]{4,16}$/.test(u.pathname) && /^#k=[A-Za-z0-9_-]{43}$/.test(u.hash) ? u.href : null;
+}
+const qrKey = (tabId) => `qr:${tabId}:`;
+async function qrClose(tabId) {
+  const k = qrKey(tabId);
+  const cur = (await chrome.storage.session.get(k))[k];
+  await chrome.storage.session.remove(k);
+  if (Number.isInteger(cur?.win)) await chrome.windows.remove(cur.win).catch(() => {});
+}
+async function qrOpen(tabId, link) {
+  const k = qrKey(tabId);
+  const cur = (await chrome.storage.session.get(k))[k];
+  // already showing: the same window, with this link
+  if (Number.isInteger(cur?.win)) {
+    const w = await chrome.windows.get(cur.win, { populate: true }).catch(() => null);
+    const t = w?.tabs?.[0];
+    if (t && String(t.url || "").startsWith(chrome.runtime.getURL("qr.html"))) {
+      await chrome.storage.session.set({ [k]: { link, win: cur.win } });
+      await chrome.tabs.reload(t.id).catch(() => {});
+      await chrome.windows.update(cur.win, { focused: true }).catch(() => {});
+      return;
+    }
+  }
+  await chrome.storage.session.set({ [k]: { link, win: null } });
+  const w = await chrome.windows.create({ url: chrome.runtime.getURL(`qr.html?tab=${tabId}`), type: "popup", width: 380, height: 500, focused: true });
+  await chrome.storage.session.set({ [k]: { link, win: w?.id ?? null } });
+}
+chrome.windows.onRemoved.addListener(async (winId) => {
+  const all = await chrome.storage.session.get(null);
+  const ks = Object.keys(all).filter((k) => k.startsWith("qr:") && all[k]?.win === winId);
+  if (ks.length) await chrome.storage.session.remove(ks);
+});
+
 async function tabKeys(tabId) {
   const all = await chrome.storage.session.get(null);
-  return Object.keys(all).filter((k) => k.startsWith(`rk:${tabId}:`)).map((k) => [k, all[k]]);
+  return Object.keys(all).filter((k) => k.startsWith(`rk:${tabId}:`) || k.startsWith(`rc:${tabId}:`) || k === qrKey(tabId)).map((k) => [k, all[k]]);
 }
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const ks = await tabKeys(tabId);
+  if (ks.some(([k]) => k === qrKey(tabId))) await qrClose(tabId);
   if (ks.length) await chrome.storage.session.remove(ks.map(([k]) => k));
 });
-// a tab swapped for a prerendered one gets a new id: its keys move with it
+// a tab swapped for a prerendered one gets a new id: its keys (and recap) move with it (an open QR code window
+// belongs to the old one and is closed)
 chrome.tabs.onReplaced.addListener(async (added, removed) => {
+  if ((await tabKeys(removed)).some(([k]) => k === qrKey(removed))) await qrClose(removed);
   const ks = await tabKeys(removed);
   if (!ks.length) return;
-  await chrome.storage.session.set(Object.fromEntries(ks.map(([k, v]) => [k.replace(`rk:${removed}:`, `rk:${added}:`), v])));
+  await chrome.storage.session.set(Object.fromEntries(ks.map(([k, v]) => [k.replace(/^(r[kc]):\d+:/, `$1:${added}:`), v])));
   await chrome.storage.session.remove(ks.map(([k]) => k));
 });
 
@@ -166,7 +240,7 @@ chrome.tabs.onReplaced.addListener(async (added, removed) => {
 // reloads keep the party. Removing the site's access (in the popup or the browser's own settings)
 // unregisters them.
 const ANY_FILES_START = ["any-mode.js", "early.js"];
-const ANY_FILES_IDLE = ["any-mode.js", "emoji-data.js", "anyvideo.js", "content.js"];
+const ANY_FILES_IDLE = ["any-mode.js", "emoji-data.js", "qr.js", "anyvideo.js", "content.js"];
 const anyId = (origin, part) => "npany-" + part + "-" + origin.replace(/[^A-Za-z0-9]/g, "_");
 const ORIGIN_RE = /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/;
 // the permission / match pattern for a site: scheme + host, any port (Firefox's match patterns can't name a port)
@@ -287,6 +361,40 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // content scripts only: the key belongs to the tab it came from
     if (!sender.tab || !Number.isInteger(sender.tab.id)) return sendResponse({ error: "no tab" });
     roomKey(msg, sender.tab.id).then(sendResponse, () => sendResponse({ error: "storage" }));
+    return true;
+  }
+  if (msg?.cmd === "shareOpen") {
+    // 2.3 Invite: open an app's own start page next to the tab (fixed addresses only; the invite link is on the
+    // clipboard, never in the address, so its key isn't sent to the app's servers)
+    const url = typeof msg.app === "string" && Object.hasOwn(SHARE_APPS, msg.app) ? SHARE_APPS[msg.app] : null;
+    if (!url || !sender.tab) return sendResponse({ error: "unknown app" });
+    chrome.tabs.create({ url, index: sender.tab.index + 1, openerTabId: sender.tab.id }).then(() => sendResponse({ ok: true }), () => sendResponse({ error: "tab" }));
+    return true;
+  }
+  if (msg?.cmd === "shareQr") {
+    // 2.3, from the tab's content script: show its invite link as a QR code in our own window (op "show"), or
+    // close it and forget the link (op "close", when the party ends there)
+    if (!sender.tab || !Number.isInteger(sender.tab.id) || sender.frameId !== 0) return sendResponse({ error: "no tab" });
+    if (msg.op === "close") {
+      qrClose(sender.tab.id).then(() => sendResponse({ ok: true }), () => sendResponse({ error: "storage" }));
+      return true;
+    }
+    const link = cleanInvite(msg.link);
+    if (!link) return sendResponse({ error: "bad link" });
+    qrOpen(sender.tab.id, link).then(() => sendResponse({ ok: true }), () => sendResponse({ error: "window" }));
+    return true;
+  }
+  if (msg?.cmd === "qrLink") {
+    // qr.html only (our own page, never a content script): the link it should draw
+    if (!String(sender.url || "").startsWith(chrome.runtime.getURL("qr.html")) || !Number.isInteger(msg.tab)) return sendResponse({ error: "not allowed" });
+    const k = qrKey(msg.tab);
+    chrome.storage.session.get(k).then((r) => sendResponse({ link: r[k]?.link || null }), () => sendResponse({ error: "storage" }));
+    return true;
+  }
+  if (msg?.cmd === "recap") {
+    // content scripts only: a tab's recap belongs to that tab
+    if (!sender.tab || !Number.isInteger(sender.tab.id)) return sendResponse({ error: "no tab" });
+    recapStore(msg, sender.tab.id).then(sendResponse, () => sendResponse({ error: "storage" }));
     return true;
   }
   if (msg?.cmd === "gifs") {
