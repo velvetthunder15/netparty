@@ -1,0 +1,6 @@
+NetParty 2.4.0
+
+- Now on Hulu, Disney+, Paramount+, STARZ and Tubi.
+- A Start a NetParty button right on the player, on every service.
+- Parties start faster, and Start a NetParty next to Play connects reliably.
+- NetParty tells you when an update is out, with a short What's new.

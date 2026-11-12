@@ -109,6 +109,11 @@ export function isKlipyMediaUrl(s) {
 //   HBO Max      "hm:<uuid>" or "hm:<uuid>/<uuid>" (2.2)    -> https://play.hbomax.com/video/watch/<uuid>[/<uuid>]
 //   Crunchyroll  "cr:<episode id>" (2.2)                 -> https://www.crunchyroll.com/watch/<id>
 //   SonyLIV      "sl:/<shows|movies|…>/…/<slug>-<id>" (2.2) -> https://www.sonyliv.com/<path>?watch=true
+//   Hulu         "hu:<uuid>" (2.4)                       -> https://www.hulu.com/watch/<uuid>
+//   Disney+      "dp:<uuid>" (2.4)                       -> https://www.disneyplus.com/play/<uuid>
+//   Paramount+   "pp:<shows|movies>/<id>" (2.4)          -> https://www.paramountplus.com/<shows|movies>/video/<id>/
+//   STARZ        "sz:<country>/<language>/<id>" (2.4)    -> https://www.starz.com/<country>/<language>/play/<id>
+//   Tubi         "tb:<movies|tv-shows>/<id>[/<slug>]" (2.4) -> https://tubitv.com/<movies|tv-shows>/<id>[/<slug>]?start=true
 //   Any video    "av:<16 random base64url chars>" (2.0, a video on a page the host chose). It names no
 //                site and never becomes a link here: the page's address travels end-to-end encrypted
 //                (room.page) and only the guests' browsers can read it.
@@ -119,6 +124,11 @@ export const PRIME_HOSTS = [
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const HM_RE = new RegExp(`^hm:${UUID}(\\/${UUID})?$`);
 const SL_RE = /^sl:\/(shows|sports|movies|clip|trailer|music-videos)(\/[a-z0-9-]{1,120}-\d{4,})?\/[a-z0-9-]{0,120}-?\d{5,}$/;
+const HU_RE = new RegExp(`^hu:${UUID}$`);
+const DP_RE = new RegExp(`^dp:${UUID}$`);
+const PP_RE = /^pp:(shows|movies)\/[A-Za-z0-9_-]{8,64}$/;
+const SZ_RE = /^sz:[a-z]{2}\/[a-z]{2}(-[a-z]{2})?\/\d{3,12}$/;
+const TB_RE = /^tb:(movies|tv-shows)\/\d{3,12}(\/[a-z0-9-]{1,120})?$/;
 const PV_RE = /^pv:([a-z0-9.-]+)(\/(?:detail|dp|gp\/video\/detail)\/[A-Za-z0-9._-]{6,100})$/;
 export function validVideoId(v) {
   if (typeof v !== "string" || !v || v.length > 512) return false;
@@ -129,6 +139,11 @@ export function validVideoId(v) {
   if (v.startsWith("hm:")) return HM_RE.test(v);
   if (v.startsWith("cr:")) return /^cr:[A-Z0-9]{6,16}$/.test(v);
   if (v.startsWith("sl:")) return SL_RE.test(v);
+  if (v.startsWith("hu:")) return HU_RE.test(v);
+  if (v.startsWith("dp:")) return DP_RE.test(v);
+  if (v.startsWith("pp:")) return PP_RE.test(v);
+  if (v.startsWith("sz:")) return SZ_RE.test(v);
+  if (v.startsWith("tb:")) return TB_RE.test(v);
   const pv = PV_RE.exec(v);
   if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
   return false;
@@ -915,14 +930,38 @@ export function watchUrlFor(videoId, roomId) {
   if (videoId.startsWith("hm:")) return `https://play.hbomax.com/video/watch/${videoId.slice(3)}?npParty=${code}`;
   if (videoId.startsWith("cr:")) return `https://www.crunchyroll.com/watch/${videoId.slice(3)}?npParty=${code}`;
   if (videoId.startsWith("sl:")) return `https://www.sonyliv.com${videoId.slice(3)}?watch=true&npParty=${code}`;
+  if (videoId.startsWith("hu:")) return `https://www.hulu.com/watch/${videoId.slice(3)}?npParty=${code}`;
+  if (videoId.startsWith("dp:")) return `https://www.disneyplus.com/play/${videoId.slice(3)}?npParty=${code}`;
+  if (videoId.startsWith("pp:")) {
+    const [kind, id] = videoId.slice(3).split("/");
+    return `https://www.paramountplus.com/${kind}/video/${id}/?npParty=${code}`;
+  }
+  if (videoId.startsWith("sz:")) {
+    const [cc, lang, id] = videoId.slice(3).split("/");
+    return `https://www.starz.com/${cc}/${lang}/play/${id}?npParty=${code}`;
+  }
+  if (videoId.startsWith("tb:")) return `https://tubitv.com/${videoId.slice(3)}?start=true&npParty=${code}`;
   const base = videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : "https://www.netflix.com/watch/" + videoId;
   return `${base}?npParty=${code}`;
 }
+// 2.4: GET /api/version -> { version, notes }: the extension version this server hands out (its zip) and up to
+// three short lines on what's new in it. Installed copies compare it with their own version and remind the
+// user to update. Public and the same for everyone; the request carries nothing about the caller.
+export function versionInfo(manifest, whatsNew, method = "GET") {
+  const headers = { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", "cache-control": "public, max-age=300", "x-robots-tag": "noindex" };
+  if (method === "OPTIONS") return [204, { ...headers, "access-control-allow-methods": "GET, OPTIONS" }, null];
+  if (method !== "GET" && method !== "HEAD") return [405, headers, JSON.stringify({ error: "method_not_allowed" })];
+  const version = String(manifest?.version || "");
+  if (!/^\d{1,4}(\.\d{1,4}){0,3}$/.test(version)) return [503, { ...headers, "cache-control": "no-store" }, JSON.stringify({ error: "unknown" })];
+  const notes = whatsNew?.version === version && Array.isArray(whatsNew.items) ? whatsNew.items.filter((s) => typeof s === "string").slice(0, 3).map((s) => s.slice(0, 80)) : [];
+  return [200, headers, method === "HEAD" ? null : JSON.stringify({ version, notes })];
+}
+
 export const isAnyVideo = (videoId) => typeof videoId === "string" && videoId.startsWith("av:") && validVideoId(videoId);
 export const siteFor = (videoId) => {
   const v = String(videoId || "");
   if (isAnyVideo(v)) return "the host's site";
-  const sites = { "hs:": "JioHotstar", "yt:": "YouTube", "pv:": "Prime Video", "hm:": "HBO Max", "cr:": "Crunchyroll", "sl:": "SonyLIV" };
+  const sites = { "hs:": "JioHotstar", "yt:": "YouTube", "pv:": "Prime Video", "hm:": "HBO Max", "cr:": "Crunchyroll", "sl:": "SonyLIV", "hu:": "Hulu", "dp:": "Disney+", "pp:": "Paramount+", "sz:": "STARZ", "tb:": "Tubi" };
   return sites[v.slice(0, 3)] || "Netflix";
 };
 
@@ -1056,7 +1095,7 @@ ${install("Open the video")}`
 <a class="btn" id="go" hidden href="${esc(watch)}" data-watch="${esc(watch)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Join on ${site}</a>
 <noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party's encrypted chat with the key in your invite link.</p></noscript>
 <p class="note">🔒 Chat is end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
-<p class="note">${browsers(site === "YouTube" ? "You need" : `You need your own ${site} account and`, ["HBO Max", "Crunchyroll", "SonyLIV"].includes(site) ? "2.2" : site === "Prime Video" ? "1.8" : "1.7")}</p>
+<p class="note">${browsers(site === "YouTube" ? "You need" : `You need your own ${site} account and`, ["Hulu", "Disney+", "Paramount+", "STARZ", "Tubi"].includes(site) ? "2.4" : ["HBO Max", "Crunchyroll", "SonyLIV"].includes(site) ? "2.2" : site === "Prime Video" ? "1.8" : "1.7")}</p>
 ${install("Join on " + site)}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NetParty invite</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">

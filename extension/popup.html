@@ -13,6 +13,22 @@
       </div>
     </header>
 
+    <!-- 2.4: a newer version is out -->
+    <section id="vUpdate" class="news hidden" role="status">
+      <b id="updTitle"></b>
+      <p id="updNotes"></p>
+      <button id="updGo" class="primary">Update now</button>
+      <button id="updReload" class="ghost hidden">Reload NetParty</button>
+      <p class="hint" id="updHint"></p>
+    </section>
+
+    <!-- 2.4: what's new in the version that was just installed (once) -->
+    <section id="vNews" class="news hidden" role="status">
+      <b id="newsTitle"></b>
+      <ul id="newsList"></ul>
+      <button id="newsOk" class="ghost small">Got it</button>
+    </section>
+
     <!-- another website (2.0): sync a video on this page, only after a click -->
     <section id="vAny" class="hidden">
       <div id="anyJoinBox" class="hidden">
@@ -125,15 +141,12 @@
     <!-- not on a website NetParty can run on -->
     <section id="vOff" class="hidden">
       <div class="divider off-div"><span>or open</span></div>
-      <p class="lead" id="offLead">Open Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll or SonyLIV to start or join a party, or open any page with a video and click NetParty there.</p>
-      <div class="three">
-        <button class="ghost" data-open="https://www.netflix.com/browse">Netflix</button>
-        <button class="ghost" data-open="https://www.hotstar.com/in/home">JioHotstar</button>
-        <button class="ghost" data-open="https://www.youtube.com/">YouTube</button>
-        <button class="ghost" data-open="https://www.primevideo.com/">Prime Video</button>
-        <button class="ghost" data-open="https://play.hbomax.com/">HBO Max</button>
-        <button class="ghost" data-open="https://www.crunchyroll.com/">Crunchyroll</button>
-        <button class="ghost" data-open="https://www.sonyliv.com/">SonyLIV</button>
+      <p class="lead" id="offLead">Open a streaming site to start or join a party, or open any page with a video and click NetParty there.</p>
+      <div class="sites">
+        <button class="ghost site" data-open="https://www.netflix.com/browse"><span class="site-ic"><img src="icons/sites/netflix.svg" width="20" height="20" alt="" /></span>Netflix</button>
+        <button class="ghost site" data-open="https://www.hotstar.com/in/home"><span class="site-ic"><img src="icons/sites/jiohotstar-star.webp" width="20" height="20" alt="" /></span>JioHotstar</button>
+        <button class="ghost site" data-open="https://www.primevideo.com/"><span class="site-ic"><img class="wide" src="icons/sites/primevideo.svg" width="24" height="20" alt="" /></span>Prime Video</button>
+        <button class="ghost site" data-open="https://www.youtube.com/"><span class="site-ic"><img src="icons/sites/youtube.svg" width="20" height="20" alt="" /></span>YouTube</button>
       </div>
     </section>
 

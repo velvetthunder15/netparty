@@ -1,9 +1,12 @@
 // NetParty sync server on Cloudflare Workers. All WebSocket connections go to one
 // Durable Object ("hub"), which runs the same room logic as the Node server.
-import { createHub, iceProvider, joinPage, joinPageHeaders } from "../core.js";
+import { createHub, iceProvider, joinPage, joinPageHeaders, versionInfo } from "../core.js";
 import { createStats, statsResponse, isStatsPath } from "../stats.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "../gifs.js";
 import extensionZip from "./public/netparty-extension.zip";
+// 2.4: the version of the extension this deploy serves (and its "What's new"), for the update reminder
+import extManifest from "../../extension/manifest.json";
+import extWhatsNew from "../../extension/whats-new.json";
 // landing site (copied from the Hark-built page) bundled into the Worker
 import siteIndex from "./site/index.html";
 import sitePrivacy from "./site/privacy.html";
@@ -19,6 +22,11 @@ import svgPrime from "./site/primevideo.svg";
 import svgHbo from "./site/hbo.svg";
 import svgCrunchyroll from "./site/crunchyroll.svg";
 import imgSonyliv from "./site/sonyliv.webp";
+import svgDisneyplus from "./site/disneyplus.svg";
+import svgHulu from "./site/hulu.svg";
+import svgParamountplus from "./site/paramountplus.svg";
+import svgStarz from "./site/starz.svg";
+import svgTubi from "./site/tubi.svg";
 import avFox from "./site/av-fox.webp";
 import avPanda from "./site/av-panda.webp";
 import avRobot from "./site/av-robot.webp";
@@ -39,15 +47,15 @@ const HTML = "text/html; charset=utf-8";
 // link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
 const OG_TAGS = `<meta property="og:image" content="https://netparty.tech/og.jpg" />
 <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and other video sites" />
+<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar and other video sites" />
 <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://netparty.tech/og.jpg" />
 `;
 const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/i, OG_TAGS + "</head>"));
 
 // SEO layer, applied at load so a recopy of the Hark build keeps it: keyword title and
 // description, canonical, robots, icons, alt text, and JSON-LD built from the visible FAQ.
-const SEO_TITLE = "NetParty: Free Watch Party for Netflix, Prime Video, YouTube, HBO Max, Crunchyroll & SonyLIV";
-const SEO_DESC = "Watch Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV, JioHotstar and videos on most other sites together in sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
+const SEO_TITLE = "NetParty: Free Watch Party for Netflix, Prime Video, YouTube, Disney+, Hulu & HBO Max";
+const SEO_DESC = "Watch Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi and videos on most other sites together in sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
 const stripTags = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 function withSeo(html) {
   const faq = [...html.matchAll(/<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/gi)]
@@ -62,7 +70,7 @@ function withSeo(html) {
       applicationCategory: "BrowserApplication", operatingSystem: "Windows, macOS, Linux, ChromeOS",
       image: ["https://netparty.tech/og.jpg", "https://netparty.tech/og-square.jpg"], publisher: { "@id": "https://netparty.tech/#org" },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      featureList: "Synced play, pause and seek on Netflix, Prime Video, YouTube, HBO Max, Crunchyroll, SonyLIV and JioHotstar; sync videos on most other sites; waits when someone buffers; end-to-end encrypted chat; replies, reactions and mentions; voice and video chat with relay; HD avatars or your own photo; GIFs; host controls",
+      featureList: "Synced play, pause and seek on Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ and Tubi; sync videos on most other sites; waits when someone buffers; end-to-end encrypted chat; replies, reactions and mentions; voice and video chat with relay; HD avatars or your own photo; GIFs; host controls",
       license: "https://opensource.org/licenses/MIT" },
   ];
   if (faq.length) graph.push({ "@type": "FAQPage", mainEntity: faq });
@@ -91,6 +99,11 @@ function withSeo(html) {
     .replace('<img src="hbo.svg" width="22" height="22" alt=""', '<img src="hbo.svg" width="22" height="22" alt="HBO Max"')
     .replace('<img src="crunchyroll.svg" width="22" height="22" alt=""', '<img src="crunchyroll.svg" width="22" height="22" alt="Crunchyroll"')
     .replace('<img src="sonyliv.webp" width="22" height="22" alt=""', '<img src="sonyliv.webp" width="22" height="22" alt="SonyLIV"')
+    .replace('<img src="disneyplus.svg" width="22" height="22" alt=""', '<img src="disneyplus.svg" width="22" height="22" alt="Disney+"')
+    .replace('<img src="hulu.svg" width="22" height="22" alt=""', '<img src="hulu.svg" width="22" height="22" alt="Hulu"')
+    .replace('<img src="paramountplus.svg" width="22" height="22" alt=""', '<img src="paramountplus.svg" width="22" height="22" alt="Paramount+"')
+    .replace('<img src="starz.svg" width="22" height="22" alt=""', '<img src="starz.svg" width="22" height="22" alt="STARZ"')
+    .replace('<img src="tubi.svg" width="22" height="22" alt=""', '<img src="tubi.svg" width="22" height="22" alt="Tubi"')
     .replace('<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt=""', '<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
@@ -105,8 +118,8 @@ const withPrivacySeo = (html) => html.replace(/<link rel="icon"[^>]*>\s*/gi, "")
 const ROBOTS = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /download/\n\nSitemap: https://netparty.tech/sitemap.xml\n";
 const SITEMAP = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://netparty.tech/</loc><lastmod>2026-11-11</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
-<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-11</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
+<url><loc>https://netparty.tech/</loc><lastmod>2026-11-12</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://netparty.tech/privacy</loc><lastmod>2026-11-12</lastmod><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>
 `;
 const siteIndexOg = withSeo(withOg(siteIndex));
@@ -136,6 +149,11 @@ const SITE = {
   "/hbo.svg": [svgHbo, "image/svg+xml"],
   "/sonyliv.webp": [imgSonyliv, "image/webp"],
   "/crunchyroll.svg": [svgCrunchyroll, "image/svg+xml"],
+  "/disneyplus.svg": [svgDisneyplus, "image/svg+xml"],
+  "/hulu.svg": [svgHulu, "image/svg+xml"],
+  "/paramountplus.svg": [svgParamountplus, "image/svg+xml"],
+  "/starz.svg": [svgStarz, "image/svg+xml"],
+  "/tubi.svg": [svgTubi, "image/svg+xml"],
   "/av-fox.webp": [avFox, "image/webp"],
   "/av-panda.webp": [avPanda, "image/webp"],
   "/av-robot.webp": [avRobot, "image/webp"],
@@ -325,6 +343,10 @@ export default {
     const OLD_IMG = { "/still-space.jpg": "/still-space.webp", "/still-neon.jpg": "/still-neon.webp", "/jiohotstar-star.png": "/jiohotstar-star.webp" };
     if (!isWs && OLD_IMG[url.pathname]) return Response.redirect("https://netparty.tech" + OLD_IMG[url.pathname], 301);
     if (!isWs && url.pathname.startsWith("/api/gifs/")) return gifs(request, env, ctx, url);
+    if (!isWs && url.pathname === "/api/version") {
+      const [status, headers, body] = versionInfo(extManifest, extWhatsNew, request.method);
+      return new Response(body, { status, headers });
+    }
     if (!isWs && (url.pathname === "/index.html" || url.pathname === "/privacy.html" || url.pathname === "/privacy/"))
       return Response.redirect("https://netparty.tech" + (url.pathname === "/index.html" ? "/" : "/privacy") + url.search, 301);
     if (!isWs && (request.method === "GET" || request.method === "HEAD")) {

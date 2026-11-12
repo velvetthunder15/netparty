@@ -30,33 +30,65 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "netparty-socket") return;
   let ws = null;
   let keepAlive = null;
+  let openTimer = null;
+  let gone = false;
+  // the port may be gone by the time a socket event fires (the tab closed or navigated)
+  const post = (m) => {
+    if (gone) return;
+    try {
+      port.postMessage(m);
+    } catch {
+      gone = true;
+    }
+  };
 
+  // 2.4: a replaced socket is detached before it's closed, so its late "close" can't be taken for the new one's
   const close = () => {
     clearInterval(keepAlive);
-    keepAlive = null;
-    if (ws && ws.readyState <= 1) ws.close(1000);
+    clearTimeout(openTimer);
+    keepAlive = openTimer = null;
+    const old = ws;
     ws = null;
+    if (!old) return;
+    old.onopen = old.onmessage = old.onerror = old.onclose = null;
+    if (old.readyState <= 1) old.close(1000);
   };
 
   port.onMessage.addListener((msg) => {
     if (msg.cmd === "open") {
+      // each open is numbered by the tab (2.4); every event of this socket carries that number
+      const gen = Number.isInteger(msg.gen) ? msg.gen : undefined;
       close();
+      let sock;
       try {
-        ws = new WebSocket(msg.url);
+        sock = ws = new WebSocket(msg.url);
       } catch (e) {
-        port.postMessage({ evt: "error", error: String(e) });
+        ws = null;
+        post({ evt: "error", error: String(e), gen });
+        post({ evt: "close", code: 1006, gen });
         return;
       }
-      ws.onopen = () => {
-        port.postMessage({ evt: "open" });
+      // a handshake that hangs (a network switch, a captive portal) is given up on, so the tab tries again
+      openTimer = setTimeout(() => {
+        if (ws !== sock || sock.readyState !== 0) return;
+        close();
+        post({ evt: "close", code: 4008, gen });
+      }, 12_000);
+      sock.onopen = () => {
+        clearTimeout(openTimer);
+        post({ evt: "open", gen });
         // traffic every 20s keeps the service worker from idling out
-        keepAlive = setInterval(() => ws?.readyState === 1 && ws.send('{"type":"ping"}'), 20_000);
+        keepAlive = setInterval(() => sock.readyState === 1 && sock.send('{"type":"ping"}'), 20_000);
       };
-      ws.onmessage = (e) => port.postMessage({ evt: "message", data: e.data });
-      ws.onerror = () => port.postMessage({ evt: "error", error: "socket error" });
-      ws.onclose = (e) => {
-        clearInterval(keepAlive);
-        port.postMessage({ evt: "close", code: e.code });
+      sock.onmessage = (e) => post({ evt: "message", data: e.data, gen });
+      sock.onerror = () => post({ evt: "error", error: "socket error", gen });
+      sock.onclose = (e) => {
+        if (ws === sock) {
+          clearInterval(keepAlive);
+          clearTimeout(openTimer);
+          ws = null;
+        }
+        post({ evt: "close", code: e.code, gen });
       };
     } else if (msg.cmd === "send") {
       if (ws?.readyState === 1) ws.send(msg.data);
@@ -65,7 +97,10 @@ chrome.runtime.onConnect.addListener((port) => {
     }
   });
 
-  port.onDisconnect.addListener(close);
+  port.onDisconnect.addListener(() => {
+    gone = true;
+    close();
+  });
 });
 
 // ---- GIFs
@@ -321,6 +356,145 @@ chrome.permissions.onAdded.addListener(async ({ origins = [] }) => {
 chrome.runtime.onStartup?.addListener(() => syncAny().catch(() => {}));
 chrome.runtime.onInstalled.addListener(() => syncAny().catch(() => {}));
 
+// ---- 2.4 updates and "What's new"
+// The party server says which version is current (GET /api/version: the version of the extension it serves,
+// and a few words on what's in it). When ours is older, the toolbar icon gets a badge, the popup shows an Update
+// card and the supported sites show a small reminder (once a day) until this browser runs the new version.
+// "Update now" does what this kind of install allows: the store builds (Edge, Firefox) ask their store for the
+// update and restart into it; the zip build opens the download page, and its Reload button picks up the new
+// files once they're unzipped over the old ones. After an update, the popup and the next supported page show
+// the new version's "What's new" once. Nothing is sent but the request itself (no id, no version of ours).
+const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+const SITE_BASE = "https://netparty.tech";
+const STORES = {
+  firefox: "https://addons.mozilla.org/en-US/firefox/addon/netparty/",
+  edge: "https://microsoftedge.microsoft.com/addons/detail/netparty/cbbgchcialmecjommdohdfmolliinjki",
+};
+const VERSION_RE = /^\d{1,4}(\.\d{1,4}){0,3}$/;
+const myVersion = () => chrome.runtime.getManifest().version;
+// -1, 0, 1 for dotted versions ("2.10.0" > "2.9.1")
+function cmpVersion(a, b) {
+  const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+const cleanNotes = (a) => (Array.isArray(a) ? a.filter((s) => typeof s === "string" && s.trim()).slice(0, 3).map((s) => s.trim().slice(0, 80)) : []);
+// how this copy was installed: "store" (it can update itself) or "zip" (unpacked / sideloaded)
+async function installKind() {
+  try {
+    const self = await chrome.management.getSelf();
+    return self.installType === "normal" || self.installType === "admin" ? "store" : "zip";
+  } catch {
+    // (Chrome and Edge add update_url to the manifest of store installs)
+    return chrome.runtime.getManifest().update_url ? "store" : "zip";
+  }
+}
+const browserKind = () => (/Firefox\//.test(navigator.userAgent) ? "firefox" : /Edg\//.test(navigator.userAgent) ? "edge" : "chrome");
+async function showBadge() {
+  const { update, whatsNew } = await chrome.storage.local.get(["update", "whatsNew"]);
+  const behind = !!update?.version && cmpVersion(update.version, myVersion()) > 0;
+  await chrome.action.setBadgeText({ text: behind ? "↑" : whatsNew && !whatsNew.seen ? "NEW" : "" }).catch(() => {});
+  await chrome.action.setBadgeBackgroundColor({ color: behind ? "#e8590c" : "#7c5cff" }).catch(() => {});
+  chrome.action.setBadgeTextColor?.({ color: "#ffffff" })?.catch?.(() => {});
+  await chrome.action.setTitle({ title: behind ? `NetParty: version ${update.version} is out. Click to update.` : "NetParty" }).catch(() => {});
+}
+async function checkUpdate(force = false) {
+  const { update, updateCheckedAt, serverUrl } = { ...(await chrome.storage.local.get(["update", "updateCheckedAt"])), ...(await chrome.storage.sync.get("serverUrl")) };
+  if (!force && Date.now() - (updateCheckedAt || 0) < CHECK_EVERY_MS) return update || null;
+  await chrome.storage.local.set({ updateCheckedAt: Date.now() });
+  let info = null;
+  try {
+    const res = await fetch(httpBase(serverUrl) + "/api/version", { credentials: "omit", cache: "no-store" });
+    if (res.ok) info = await res.json();
+  } catch {}
+  if (!info || !VERSION_RE.test(String(info.version || ""))) return update || null;
+  if (cmpVersion(info.version, myVersion()) <= 0) {
+    await chrome.storage.local.remove("update");
+    await showBadge();
+    return null;
+  }
+  const next = { version: info.version, notes: cleanNotes(info.notes), ready: update?.version === info.version && update.ready === true, since: update?.version === info.version ? update.since : Date.now() };
+  await chrome.storage.local.set({ update: next });
+  await showBadge();
+  // a store build: ask the store now, so the update is often ready by the time someone clicks
+  if ((await installKind()) === "store") chrome.runtime.requestUpdateCheck?.()?.catch?.(() => {});
+  return next;
+}
+// the store has the new version downloaded and waiting for a restart
+chrome.runtime.onUpdateAvailable?.addListener(async (details) => {
+  const { update } = await chrome.storage.local.get("update");
+  const version = VERSION_RE.test(String(details?.version || "")) ? details.version : update?.version;
+  if (!version) return;
+  await chrome.storage.local.set({ update: { ...(update || {}), version, notes: update?.notes || [], ready: true, since: update?.since || Date.now() } });
+  await showBadge();
+});
+async function updateNow() {
+  const { update } = await chrome.storage.local.get("update");
+  if (update?.ready) {
+    chrome.runtime.reload();
+    return { ok: true, reloading: true };
+  }
+  const kind = await installKind();
+  if (kind === "store" && chrome.runtime.requestUpdateCheck) {
+    let status = null;
+    try {
+      const r = await chrome.runtime.requestUpdateCheck();
+      status = r?.status ?? (Array.isArray(r) ? r[0] : r);
+    } catch {}
+    if (status === "update_available") {
+      // downloading; onUpdateAvailable marks it ready. Restart once it's in.
+      for (let t = 0; t < 15000; t += 500) {
+        await new Promise((r) => setTimeout(r, 500));
+        if ((await chrome.storage.local.get("update")).update?.ready) {
+          chrome.runtime.reload();
+          return { ok: true, reloading: true };
+        }
+      }
+      return { ok: true, pending: true };
+    }
+    const store = STORES[browserKind()];
+    if (store) await chrome.tabs.create({ url: store }).catch(() => {});
+    return { ok: true, opened: "store" };
+  }
+  await chrome.tabs.create({ url: SITE_BASE + "/#install" }).catch(() => {});
+  return { ok: true, opened: "download", zip: true };
+}
+async function updateInfo() {
+  const update = await checkUpdate().catch(() => null);
+  const { whatsNew, updateNagAt } = await chrome.storage.local.get(["whatsNew", "updateNagAt"]);
+  return {
+    version: myVersion(),
+    update: update && cmpVersion(update.version, myVersion()) > 0 ? update : null,
+    kind: await installKind(),
+    nagAt: updateNagAt || 0,
+    whatsNew: whatsNew && !whatsNew.seen && whatsNew.version === myVersion() ? whatsNew : null,
+  };
+}
+async function loadWhatsNew() {
+  try {
+    const w = await (await fetch(chrome.runtime.getURL("whats-new.json"))).json();
+    return { version: myVersion(), items: w.version === myVersion() ? cleanNotes(w.items) : [] };
+  } catch {
+    return { version: myVersion(), items: [] };
+  }
+}
+chrome.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
+  const { update } = await chrome.storage.local.get("update");
+  // running the new version now: the reminder is done
+  if (update?.version && cmpVersion(update.version, myVersion()) <= 0) await chrome.storage.local.remove("update");
+  if (reason === "update" && previousVersion && cmpVersion(myVersion(), previousVersion) > 0) {
+    const w = await loadWhatsNew();
+    if (w.items.length) await chrome.storage.local.set({ whatsNew: { ...w, from: previousVersion, seen: false, pageShown: false } });
+  }
+  await showBadge();
+  checkUpdate(true).catch(() => {});
+});
+chrome.runtime.onStartup?.addListener(() => checkUpdate().catch(() => {}));
+checkUpdate().catch(() => {});
+
 // A video inside a cross-origin iframe: anyvideo.js runs there as an agent (only after the user allowed
 // that frame's site). The tab's main script (top frame) and the agent talk through here, by tab and frame.
 async function relayToFrame(tabId, frameId, msg) {
@@ -395,6 +569,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // content scripts only: a tab's recap belongs to that tab
     if (!sender.tab || !Number.isInteger(sender.tab.id)) return sendResponse({ error: "no tab" });
     recapStore(msg, sender.tab.id).then(sendResponse, () => sendResponse({ error: "storage" }));
+    return true;
+  }
+  if (msg?.cmd === "updateInfo") {
+    // 2.4: is there a newer version, and the What's new of the one just installed (popup and content scripts)
+    updateInfo().then(sendResponse, () => sendResponse({ version: myVersion(), update: null, whatsNew: null }));
+    return true;
+  }
+  if (msg?.cmd === "updateNow") {
+    updateNow().then(sendResponse, (e) => sendResponse({ error: String(e?.message || e) }));
+    return true;
+  }
+  if (msg?.cmd === "updateLater") {
+    // the page's reminder was closed: the next one waits a day
+    chrome.storage.local.set({ updateNagAt: Date.now() }).then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg?.cmd === "whatsNewSeen") {
+    // the popup showed it (done), or a page showed its short version (the popup still shows it once)
+    (async () => {
+      const { whatsNew } = await chrome.storage.local.get("whatsNew");
+      if (!whatsNew) return;
+      if (msg.where === "page") whatsNew.pageShown = true;
+      else whatsNew.seen = true;
+      await chrome.storage.local.set({ whatsNew });
+      await showBadge();
+    })().then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
     return true;
   }
   if (msg?.cmd === "gifs") {

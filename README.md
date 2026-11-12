@@ -1,4 +1,4 @@
-# NetParty: watch Netflix, Prime Video, YouTube, JioHotstar, HBO Max, Crunchyroll, SonyLIV and other video sites together
+# NetParty: watch Netflix, Prime Video, YouTube, JioHotstar, Disney+, Hulu, HBO Max, Paramount+ and other video sites together
 
 NetParty is a free, open-source browser extension and a small sync server for watch parties. Start a party on a video,
 send one link, and everyone's play, pause and seek stay in sync, with end-to-end encrypted chat, voice and video chat
@@ -31,6 +31,12 @@ The Firefox package is built from the same source by `node scripts/build-firefox
   plays in Crunchyroll's player frame (`static.crunchyroll.com/vilos-v2/…`); NetParty's frame agent drives it there
 - **SonyLIV** (2.2): the player (`?watch=true`) on `sonyliv.com/shows/<show>-<id>/<episode>-<id>`, `/movies/<slug>-<id>`
   and the other title paths (`/sports/…`, `/clip/…`, `/trailer/…`, `/music-videos/…`)
+- **Hulu** (2.4): `hulu.com/watch/<id>`
+- **Disney+** (2.4): `disneyplus.com/play/<id>` (also `/video/<id>` and under a language prefix, `/en-gb/play/…`). The
+  `<video>` can be inside the player's shadow root; NetParty looks there too
+- **Paramount+** (2.4): `paramountplus.com/shows/video/<id>/` and `/movies/video/<id>/` (trailers aren't parties)
+- **STARZ** (2.4): `starz.com/<country>/<language>/play/<id>`
+- **Tubi** (2.4): a title's page, `tubitv.com/movies/<id>/<slug>` or `/tv-shows/<id>/<slug>`, once its player is up
 - **Videos on sites you choose** (2.0): on any other http(s) page, the popup's **Sync this tab** starts a
   party for the page's video. NetParty runs there only after that click (`activeTab` + `scripting`), or on sites
   you set to **Always allow on this site** (an optional host permission for that one site). See
@@ -90,11 +96,11 @@ Profile
 2. **Install** in Chrome: open `chrome://extensions`, turn on **Developer mode**,
    click **Load unpacked**, and pick the unzipped folder (the repo's `extension` folder).
 3. **Pin** NetParty from the puzzle-piece menu.
-4. **Host**: open any title on Netflix, JioHotstar, Prime Video, HBO Max, Crunchyroll or SonyLIV (or a YouTube video), press play, click NetParty → **Start a party**
-   (or the **Start a NetParty** button on the page).
+4. **Host**: open any title on Netflix, JioHotstar, Prime Video, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, STARZ or Tubi (or a YouTube video), press play, click NetParty → **Start a party**
+   (or a **Start a NetParty** button on the page or the player).
    The invite link is copied to your clipboard.
 5. **Invite**: send the link. It opens an invite page: friends without NetParty get a
-   download + 3-step install there, then press **Join on Netflix** (or JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll, SonyLIV) and land on the same title, in sync.
+   download + 3-step install there, then press **Join on Netflix** (or the service the host is on) and land on the same title, in sync.
 6. **Talk**: the chat panel opens on the right; the round purple button reopens it.
    Type and press Enter (or the send arrow). **Join voice chat** and allow the mic to talk; the camera
    button in the voice bar turns on video.
@@ -105,7 +111,8 @@ No server setup needed: the extension uses the hosted server by default.
 
 | Action | How |
 | --- | --- |
-| Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar), next to Play on a Prime Video title page, or next to Like under a YouTube video: starts the party. Or, on a playing title, NetParty icon → **Start a party** |
+| Start a party | **Start a NetParty** button next to Play / More Info (Netflix), under Watch (JioHotstar), next to Play on a Prime Video title page, or next to Like under a YouTube video: starts the party. On a playing title on any service, the **Start a NetParty** button at the top right of the player (2.4; it shows while you move the mouse, **×** hides it for that title), or the NetParty icon → **Start a party** |
+| Update | When a new version is out (2.4 and later), the icon shows **↑** and the popup shows **Update now**: the store builds update and restart; the zip build opens the download page, then unzip it over your NetParty folder and press **Reload NetParty** |
 | Join a party | Open the invite link, or icon → paste the **full** invite link → **Join** (the code alone can't unlock the encrypted chat) |
 | Invite / share | **Invite** in the chat panel, or the NetParty icon: **Copy link**, **WhatsApp**, **Discord** or **Instagram** (copies the link and opens the app, paste it into a chat), or **QR code** to scan with a phone (from the panel it opens in a small NetParty window) |
 | Chat | Purple chat button on the right of the player; Enter or the arrow sends; Esc closes |
@@ -133,8 +140,9 @@ Tips
   (the host closing it ends it). While Prime shows you an ad, sync pauses for you and you catch up afterwards.
   Episodes that play inside the same player without changing the address aren't followed automatically:
   everyone picks the next episode.
-- HBO Max, Crunchyroll, SonyLIV (2.2): start the party from the NetParty icon on a playing episode (no "Start a
-  NetParty" button on their pages yet). Ads play separately for each person; sync pauses for you while yours shows.
+- HBO Max, Crunchyroll, SonyLIV (2.2), Hulu, Disney+, Paramount+, STARZ and Tubi (2.4): start the party with
+  **Start a NetParty** on the player or the NetParty icon on a playing episode. Ads play separately for each person;
+  sync pauses for you while yours shows.
 - YouTube: ads play separately for each person. While yours plays, the panel shows "Waiting for ad to finish"
   and nothing is synced; when it ends you jump to where the party is. Switching video moves the whole party.
 - Use headphones on voice to avoid echo.
@@ -173,6 +181,22 @@ npm install
 npm start            # ws://localhost:8787
 npm test             # end-to-end protocol tests
 ```
+
+### Releasing an update (2.4)
+
+Installed copies (2.4 and later) ask the server's `GET /api/version` a few times a day. It answers with the version
+in `extension/manifest.json` and up to three lines from `extension/whats-new.json`, both bundled at deploy. To ship:
+
+1. Bump `version` in `extension/manifest.json` and write the new `extension/whats-new.json` (same version, at most
+   three short lines; they show in the update reminder and, after the update, in the What's new card).
+2. Deploy the server (`npm --prefix server run deploy` builds the zip and deploys the Worker). From then on, older
+   copies show the reminder: **↑** on the icon, an Update card in the popup, a small card on the supported sites once a
+   day (a chat line during a party).
+3. Publish to the Edge and Firefox stores. Store copies' **Update now** asks the store and restarts into the update;
+   until the store has it, it opens the store page. Copies from the zip get the download page and **Reload NetParty**.
+
+Copies older than 2.4 don't have the reminder; the stores update theirs on their own, and zip users need one manual
+update to 2.4.
 
 ### GIFs (KLIPY)
 
@@ -378,7 +402,7 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 | `scroll.mjs` | chat scroll position |
 | `chat2.mjs` | 2.1 replies, message reactions, emoji search, with a 2.0.2 build from git (also `CSP=strict`) |
 | `chat3.mjs` | 2.2 typing, mentions, spoilers, edit / delete, pins, buffer-aware sync, pause on drop, auto-duck, with 2.1.0 and 2.0.2 builds (also `CSP=strict`) |
-| `platforms.mjs` | 2.2 HBO Max, Crunchyroll and SonyLIV on test pages |
+| `platforms.mjs` | 2.2 HBO Max, Crunchyroll and SonyLIV, 2.4 Hulu, Disney+ (shadow-root player), Paramount+, STARZ and Tubi on test pages (`ONLY=Hulu` runs one) |
 | `avatars.mjs` | 2.2 HD pictures, photo upload / remove, the 2.1.0 emoji fallback, `blob:` / `data:` / `<canvas>` fallbacks, hostile profiles, leak audit (also `CSP=strict`) |
 | `v23.mjs` | 2.3 lock, remove, make host, the host's leave menu, per-person volume, the share block (no app sees the link), QR codes (in NetParty's own window, none in the page, the key nowhere in the page), recaps (download, copy), leak audit |
 | `qr.test.mjs` | `npm --prefix e2e run test:qr`: QR codes from `extension/qr.js` decode back (jsQR) for every version and length |
@@ -402,6 +426,9 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 - HBO Max, Crunchyroll and SonyLIV support (2.2) is built from their public URL formats and page structure and tested
   on test pages that copy it, not on the real services (we can't sign in to them). Their ad markers and title
   selectors are the least certain parts; SonyLIV's title page counts as the player once a large video shows.
+- Hulu, Disney+, Paramount+, STARZ and Tubi (2.4) are built and tested the same way. Their ad markers (badges,
+  countdowns and the short "Ad 1 of 3 · 0:15" label) are the least certain part; Tubi's title page counts as the player
+  once a large video shows.
 - Older NetParty versions in the same party (2.1, 2.0) see mentions as plain "@Name" and spoilers as "[spoiler]",
   keep showing edited and deleted messages as they were first sent, and don't show typing, waiting or pins.
 - Host controls (2.3) need the 2.3 server; an older one answers "Your party server doesn't support this yet".
@@ -426,11 +453,12 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 
 ## Version history
 
-Every release is in [CHANGELOG.md](CHANGELOG.md). 2.3.0 added host controls (make host, remove, lock, hand over
+Every release is in [CHANGELOG.md](CHANGELOG.md). 2.4.0 added Hulu, Disney+, Paramount+, STARZ and Tubi, **Start a
+NetParty** on every service's player, update reminders with What's new, and faster, more reliable party starts. 2.3.0 added host controls (make host, remove, lock, hand over
 when leaving), per-person voice volume, party recap images and the share block with a QR code. 2.2.0 added HBO Max, Crunchyroll and SonyLIV, buffer-aware sync,
 pause on drop-outs, typing, @mentions, spoilers, edit / delete, pinned messages, lowering the video while friends talk,
 HD profile pictures and your own photo, and fresher relay credentials for voice and video.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube, Prime Video, HBO Max, Crunchyroll and SonyLIV are trademarks of their owners; NetParty is not affiliated with them.
+MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube, Prime Video, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, STARZ and Tubi are trademarks of their owners; NetParty is not affiliated with them.

@@ -4,6 +4,7 @@
 // Node's WebCrypto, so the server only ever sees what a real 1.7 browser would send.
 import { WebSocket } from "ws";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { MAX_PROFILE_CT, MAX_PROFILE_IMG } from "./core.js";
 
 // TARGET=wss://host runs the suite against a deployed server instead of a local one.
@@ -511,6 +512,46 @@ ok("host-only control lock");
     m.close();
   }
   ok(`2.2 platforms: HBO Max / Crunchyroll / SonyLIV invite links; ${bad.length} malformed ids dropped`);
+}
+
+{
+  // 2.4: Hulu, Disney+, Paramount+, STARZ and Tubi parties
+  const cases = [
+    ["hu:5f1e6a2c-3b4d-4e5f-8a9b-0c1d2e3f4a5b", "Hulu", "https://www.hulu.com/watch/5f1e6a2c-3b4d-4e5f-8a9b-0c1d2e3f4a5b?npParty="],
+    ["dp:e9fe54b5-9eb8-4298-8d72-f125d5b1aad1", "Disney+", "https://www.disneyplus.com/play/e9fe54b5-9eb8-4298-8d72-f125d5b1aad1?npParty="],
+    ["pp:shows/ALVE01M5AWA8K9EZZB3A56AC0VQQK1", "Paramount+", "https://www.paramountplus.com/shows/video/ALVE01M5AWA8K9EZZB3A56AC0VQQK1/?npParty="],
+    ["pp:movies/KlbUHIBbuH3VkVietDU1aCY8QXS3iJUc", "Paramount+", "https://www.paramountplus.com/movies/video/KlbUHIBbuH3VkVietDU1aCY8QXS3iJUc/?npParty="],
+    ["sz:us/en/62917", "STARZ", "https://www.starz.com/us/en/play/62917?npParty="],
+    ["tb:movies/605225/jack-and-jill", "Tubi", "https://tubitv.com/movies/605225/jack-and-jill?start=true&amp;npParty="],
+    ["tb:tv-shows/200227029", "Tubi", "https://tubitv.com/tv-shows/200227029?start=true&amp;npParty="],
+  ];
+  for (const [videoId, site, link] of cases) {
+    const m = await member("p24", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, videoId);
+    const html = await (await fetch(`${HTTP}/j/${m.room}`)).text();
+    assert.ok(html.includes(`Join on ${site}`), site);
+    assert.ok(html.includes(link + m.room), "link for " + videoId);
+    assert.match(html, /NetParty extension \(2\.4 or newer\)/);
+    await m.req("end", {});
+    m.close();
+  }
+  const bad = ["hu:not-a-uuid", "hu:5F1E6A2C-3B4D-4E5F-8A9B-0C1D2E3F4A5B", "dp:e9fe54b5-9eb8-4298-8d72-f125d5b1aad1/../x", "pp:trailer/ALVE01M5AWA8K9EZZB3A56AC0VQQK1",
+    "pp:shows/../../x", "pp:shows/short", "sz:us/en/abc", "sz://evil.com/1234", "sz:usa/en/1234", "tb:movies/605225/Jack", "tb:series/605225", "tb:movies/605225?x=1", "tb:movies/605225/../../x"];
+  for (const videoId of bad) {
+    const m = await member("p24bad", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, null, videoId);
+    await m.req("end", {});
+    m.close();
+  }
+  // the update reminder's version info
+  const v = await fetch(`${HTTP}/api/version`);
+  assert.equal(v.status, 200);
+  assert.equal(v.headers.get("access-control-allow-origin"), "*");
+  const vi = await v.json();
+  const man = JSON.parse(fs.readFileSync(new URL("../extension/manifest.json", import.meta.url), "utf8"));
+  assert.equal(vi.version, man.version);
+  assert.ok(Array.isArray(vi.notes) && vi.notes.length <= 3);
+  ok(`2.4 platforms: Hulu / Disney+ / Paramount+ / STARZ / Tubi invite links; ${bad.length} malformed ids dropped; /api/version`);
 }
 
 {

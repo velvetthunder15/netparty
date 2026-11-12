@@ -4,6 +4,51 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.4.0] - 2026-11-12
+### Added
+- **Hulu, Disney+, Paramount+, STARZ and Tubi**: parties on `www.hulu.com/watch/<id>`, `www.disneyplus.com/play/<id>`
+  (also `/video/<id>` and under a language prefix such as `/en-gb/`), `www.paramountplus.com/shows/video/<id>/` and
+  `/movies/video/<id>/`, `www.starz.com/<country>/<language>/play/<id>`, and Tubi's title pages
+  (`tubitv.com/movies/<id>/<slug>`, `/tv-shows/<id>/<slug>`) once the player is up. Invite links, the next episode,
+  ads (Hulu, Disney+, Paramount+ and Tubi: no sync while one plays) and the docked chat work as on the other
+  services. Disney+ keeps its `<video>` inside its player's shadow root; NetParty looks there too. Built from the
+  services' public page structure and checked against test pages only, like the 2.2 services.
+- **Start a NetParty on the player**: every service's watch page (not just the title pages on Netflix, JioHotstar,
+  Prime Video and YouTube) gets a small **Start a NetParty** button at the top right of the player. It shows while
+  you move the mouse, like the player's own controls, and **×** hides it for that title.
+- **Update reminders**: when a newer NetParty is out, the toolbar icon shows **↑**, the popup shows **NetParty x.y.z
+  is out** with a one-line What's new and **Update now**, and the supported sites show a small reminder (once a day,
+  or one chat line during a party). **Update now** asks the store for the update and restarts into it (Edge,
+  Firefox), or opens the download page (the zip build, where **Reload NetParty** in the popup picks up the new
+  files). The server's new `GET /api/version` says which version it hands out (read from `extension/manifest.json`
+  and `extension/whats-new.json` at deploy).
+- **What's new**: after an update, the popup (once) and the next supported page (a short notice) list up to three
+  lines from `extension/whats-new.json`; the icon shows **NEW** until the popup has shown it.
+
+### Changed
+- The popup's **or open** list is Netflix, JioHotstar, Prime Video and YouTube, with the services' icons from
+  netparty.tech.
+- Parties start faster: the socket opens while the player loads (and when the popup opens on a title, or the pointer
+  is on **Start a NetParty**), and the clock sync sends its samples together (one round trip instead of five; the
+  fastest answer wins).
+- A play or pause made while a party update was being applied is no longer swallowed and then undone by the drift
+  check: it's looked at again once the update is done.
+- Server: `hu:`, `dp:`, `pp:`, `sz:` and `tb:` video ids (strict shapes; anything else is dropped), invite pages for
+  the new services (they ask for 2.4), and their counts in the daily totals.
+
+### Fixed
+- **Start a NetParty** next to Play could fail with "Could not reach the party server": a replaced socket's late
+  `close` (from a reconnect, a tab coming back into view, or two starts at once) was taken for the new socket's, which
+  set off a loop of reconnects that each closed the socket before. Every socket's events are now tagged and old ones
+  ignored, an `open` that's already under way is never sent again, a hanging handshake is given up after 12 seconds,
+  and a start that fails no longer leaves the tab reconnecting in the background. Starting from the popup and from
+  the page at once makes one party, not two. When the extension was updated under an open page, the page now says to
+  reload it.
+- **Start a NetParty** sometimes didn't show: an old button the site had hidden (single-page sites keep old pages
+  around) blocked a new one on JioHotstar, Prime Video and YouTube, buttons below the fold were skipped, and
+  YouTube's newer layouts had no row it knew. Hidden buttons are replaced, a lower Play button is used when there's
+  none on screen, and YouTube falls back to the actions row.
+
 ## [2.3.0] - 2026-11-11
 ### Added
 - **Host controls**: click a friend's picture in the chat panel. The host can **Make host** (hands the party over;
