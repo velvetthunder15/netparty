@@ -4,6 +4,31 @@ All notable changes to NetParty (the browser extension and its sync server) are 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Dates are commit dates (IST).
 
+## [2.5.0] - 2026-11-12
+### Added
+- **Live streams on YouTube, Twitch, Kick and Rumble.** A live party syncs how far behind the live edge everyone
+  watches (there's no shared timeline in a live stream). Viewers ahead of the one furthest behind wait for them (a jump
+  back where the player still has that part of the stream, else a pause of up to a minute, shown in the panel), play
+  and pause follow the party, a rewind on YouTube moves everyone, and **Go live** in the panel takes everyone to now.
+  The panel shows "● Live · 0:12 behind live". See [Live streams](README.md#live-streams).
+- YouTube live streams at their own addresses: `/live/<id>` and `/@channel/live` (the watch page says which video).
+- **Twitch** (`twitch.tv/<channel>`), **Kick** (`kick.com/<channel>`) and **Rumble** (`rumble.com/<id>-<slug>.html`,
+  live or not), with ads (no sync while one plays), titles, another stream moving the party, and **Start a NetParty**
+  on the player.
+- Website: a separate **Live streams** row (YouTube Live, Twitch, Kick, Rumble) and an FAQ entry.
+
+### Changed
+- New video ids `yl:`, `tw:`, `kk:`, `rl:` (live) and `rb:`, and a `golive` playback reason (server). Invite pages for
+  them ask for 2.5 and, like YouTube's and Tubi's, no account.
+- A party started on a YouTube or Rumble video before the page showed it was live moves to the live id; starting a
+  party there waits up to 9 s for the page to tell.
+- Members of a live party send their delay every 3 s as an end-to-end encrypted signal (older versions ignore it).
+- A party update from NetParty 2.4 or older for a live party's video only counts for play and pause.
+- After waiting for a loading or dropped member, a live party plays on from the delay it grew to while paused.
+
+### Fixed
+- Tubi's invite page no longer asks for "your own Tubi account" (it's free).
+
 ## [2.4.0] - 2026-11-12
 ### Added
 - **Hulu, Disney+, Paramount+, STARZ and Tubi**: parties on `www.hulu.com/watch/<id>`, `www.disneyplus.com/play/<id>`

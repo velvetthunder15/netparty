@@ -102,11 +102,13 @@ ytd-app[fullscreen] ytd-page-manager { margin-top: 0; }
 </ytd-app>
 <script nonce="ytfake">
 const tt = trustedTypes.createPolicy("fake", { createHTML: (s) => s });
-const VIDS = { aaaaaaaaaaa: "Fake Trailer One", bbbbbbbbbbb: "Fake Video Two" };
+/*LIVEPLAYER*/
+const VIDS = { aaaaaaaaaaa: "Fake Trailer One", bbbbbbbbbbb: "Fake Video Two", LIVEstream1: "Fake Live Stream" };
+const LIVE = { LIVEstream1: true };
 let mp = null, savedPos = 0;
 function watch(id) {
   const pm = document.getElementById("page-manager");
-  pm.innerHTML = tt.createHTML('<ytd-watch-flexy><div id="full-bleed-container"></div><div id="columns"><div id="primary"><div id="player"></div>' +
+  pm.innerHTML = tt.createHTML('<ytd-watch-flexy video-id="' + id + '"><div id="full-bleed-container"></div><div id="columns"><div id="primary"><div id="player"></div>' +
     '<ytd-watch-metadata><div id="title"><h1>' + VIDS[id] + '</h1></div><div id="actions"><div id="actions-inner"><ytd-menu-renderer><div id="top-level-buttons-computed">' +
     '<button id="likebtn">Like</button><button>Share</button></div></ytd-menu-renderer></div></div></ytd-watch-metadata>' +
     '<p><a id="next" href="/watch?v=' + (id === "aaaaaaaaaaa" ? "bbbbbbbbbbb" : "aaaaaaaaaaa") + '">Next video</a></p></div>' +
@@ -116,7 +118,8 @@ function watch(id) {
     mp.id = "movie_player";
     mp.className = "html5-video-player";
     mp.innerHTML = tt.createHTML('<div class="html5-video-container"><video class="video-stream html5-main-video" src="/test.webm" muted autoplay style="position:absolute"></video></div>' +
-      '<div class="video-ads ytp-ad-module"></div><div class="ytp-chrome-bottom"><button id="theaterbtn">theater</button><button id="fsbtn">full</button></div>');
+      '<div class="video-ads ytp-ad-module"></div><div class="ytp-progress-bar" role="slider" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" style="position:absolute;left:0;right:0;bottom:48px;height:4px;background:#f00"></div>' +
+      '<div class="ytp-chrome-bottom"><button id="theaterbtn">theater</button><button id="fsbtn">full</button><button class="ytp-live-badge ytp-button" style="display:none">Live</button><div class="ytp-time-display"></div></div>');
     // like YouTube's player: the <video> is sized in px to fit #movie_player (16:9, letterboxed)
     const v = mp.querySelector("video");
     new ResizeObserver(() => {
@@ -128,6 +131,17 @@ function watch(id) {
     mp.querySelector("#fsbtn").onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.querySelector("ytd-app").requestFullscreen();
   }
   place();
+  // a live stream plays through Media Source Extensions with a rewind window (see livePlayer); its LIVE badge shows
+  const v = mp.querySelector("video");
+  mp.querySelector(".ytp-live-badge").style.display = LIVE[id] ? "" : "none";
+  mp.querySelector(".ytp-time-display").classList.toggle("ytp-live", !!LIVE[id]);
+  if (LIVE[id]) { if (mp.dataset.live !== id) { mp.dataset.live = id; window.__livePlayer(v, { dvr: true, bar: mp.querySelector(".ytp-progress-bar") }); } }
+  else if (mp.dataset.live) { delete mp.dataset.live; v.src = "/test.webm"; v.play().catch(() => {}); }
+  else {
+    // an ordinary video: the bar runs over the video's length
+    clearInterval(window.__barT);
+    window.__barT = setInterval(() => { const b = mp.querySelector(".ytp-progress-bar"); if (mp.dataset.live) return; b.setAttribute("aria-valuemax", String(Math.floor(v.duration || 0))); b.setAttribute("aria-valuenow", String(Math.floor(v.currentTime))); }, 250);
+  }
   document.getElementById("next").onclick = (e) => { e.preventDefault(); window.__go("/watch?v=" + e.target.href.split("v=")[1]); };
 }
 function place() {
@@ -150,7 +164,10 @@ window.__ad = (on) => {
 };
 function render() {
   const v = new URLSearchParams(location.search).get("v");
-  if (location.pathname === "/watch" && VIDS[v]) { watch(v); document.title = VIDS[v] + " - YouTube"; }
+  // live streams' own addresses: /live/<id>, and a channel's /@name/live
+  const lv = (location.pathname.match(/^\\/live\\/([\\w-]{11})$/) || [])[1] || (location.pathname === "/@fakechannel/live" ? "LIVEstream1" : null);
+  if (lv && VIDS[lv]) { watch(lv); document.title = VIDS[lv] + " - YouTube"; }
+  else if (location.pathname === "/watch" && VIDS[v]) { watch(v); document.title = VIDS[v] + " - YouTube"; }
   else { document.getElementById("page-manager").innerHTML = tt.createHTML('<div style="padding:40px"><h1>Home</h1><a id="open1" href="/watch?v=aaaaaaaaaaa">Fake Trailer One</a></div>'); document.title = "YouTube"; mp?.querySelector("video").pause(); }
   document.dispatchEvent(new CustomEvent("yt-navigate-finish"));
 }
@@ -385,6 +402,132 @@ window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Ente
 </script></body></html>`;
 };
 
+// ---- 2.5 live streams. One fake broadcast for every page: livesim/seg-<n>.webm (2 s WebM segments, made with
+// ffmpeg, see e2e/README.md) where segment n becomes available n * 2 s after this server started, like a live
+// playlist. A page plays it through Media Source Extensions starting near the newest segment, so each viewer's
+// player has its own buffer and delay behind live, exactly what NetParty has to line up. The stream's own time is
+// the same for everyone, so the tests can check true sync by comparing currentTime.
+// Per browser (cookies): npl_behind=<s> how far behind the newest segment the player starts (default 3),
+// npl_dvr=1 keeps 90 s of the stream behind (a rewind window; otherwise the player drops what's over 8 s behind),
+// npl_snap=1 jumps back to near the live edge whenever it resumes (some players do that), npl_keep=<s> how much of
+// the stream a player without a rewind window keeps behind where it plays (default 8).
+const LIVE_T0 = Date.now();
+const LIVE_DIR = path.join(MEDIA_DIR, "livesim");
+const livePlayer = `window.__livePlayer = async function (v, o) {
+  o = o || {};
+  const ck = (k) => (document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)")) || [])[1];
+  const behind = ck("npl_behind") != null ? +ck("npl_behind") : (o.behind ?? 3), dvr = ck("npl_dvr") === "1" || !!o.dvr, snap = ck("npl_snap") === "1";
+  const keep = ck("npl_keep") != null ? +ck("npl_keep") : 8;
+  const ms = new MediaSource();
+  v.removeAttribute("src");
+  v.src = URL.createObjectURL(ms);
+  await new Promise((r) => ms.addEventListener("sourceopen", r, { once: true }));
+  ms.duration = Infinity;
+  const sb = ms.addSourceBuffer('video/webm; codecs="vp8"');
+  const op = (f) => new Promise((res, rej) => { sb.addEventListener("updateend", res, { once: true }); sb.addEventListener("error", rej, { once: true }); f(); });
+  const clk = await (await fetch("/livesim/clock")).json();
+  const off = clk.now - Date.now();
+  const latest = () => Math.floor((Date.now() + off - clk.t0) / 2000);
+  await op(async () => sb.appendBuffer(await (await fetch("/livesim/init.webm")).arrayBuffer()));
+  let next = Math.max(1, latest() - (dvr ? 45 : 4) + 1), started = false, busy = false;
+  window.__liveInfo = () => ({ t: v.currentTime, edge: v.buffered.length ? v.buffered.end(v.buffered.length - 1) : null, start: v.buffered.length ? v.buffered.start(0) : null, paused: v.paused });
+  async function pump() {
+    if (busy || v.src.indexOf("blob:") !== 0) return;
+    busy = true;
+    try {
+      while (next <= latest()) {
+        const r = await fetch("/livesim/seg-" + next + ".webm");
+        if (!r.ok) break;
+        const buf = await r.arrayBuffer();
+        await op(() => sb.appendBuffer(buf));
+        next++;
+      }
+      if (!started && v.buffered.length) {
+        started = true;
+        v.currentTime = Math.max(v.buffered.start(0), v.buffered.end(v.buffered.length - 1) - behind);
+        v.play().catch(() => {});
+      }
+      if (!dvr && v.buffered.length && v.currentTime - v.buffered.start(0) > keep + 4) await op(() => sb.remove(0, v.currentTime - keep));
+    } catch (e) { console.log("livesim: " + e.message); } finally { busy = false; }
+  }
+  setInterval(pump, 400);
+  pump();
+  if (snap) v.addEventListener("play", () => { const e = v.buffered.length && v.buffered.end(v.buffered.length - 1); if (e && e - v.currentTime > 3) v.currentTime = e - 1.5; });
+  if (o.bar) setInterval(() => {
+    if (!v.buffered.length) return;
+    o.bar.setAttribute("aria-valuemin", String(Math.floor(v.buffered.start(0))));
+    o.bar.setAttribute("aria-valuemax", String(Math.floor(v.buffered.end(v.buffered.length - 1))));
+    o.bar.setAttribute("aria-valuenow", String(Math.floor(v.currentTime)));
+  }, 250);
+};`;
+// Twitch (www.twitch.tv/<channel>: the player in [data-a-target=video-player], side nav, chat column), Kick
+// (kick.com/<channel>: <video-player>), Rumble (rumble.com/<id>-<slug>.html: a live show with a rewind window, and an
+// ordinary video). Each has __ad(on) (an ad label over the player) and a link to another stream.
+const LIVE_SITES = {
+  "www.twitch.tv": { name: "Twitch", chans: { fakestreamer: "Fake Twitch Stream", otherchan: "Another Fake Stream" }, path: (c) => "/" + c,
+    player: (inner) => '<div style="display:flex"><nav style="width:240px;flex:none">side nav<div class="side-nav-card"><video src="/test.webm" muted autoplay loop style="width:60px;height:34px"></video></div></nav><main style="flex:1"><div data-a-target="video-player" class="video-player" style="position:relative;width:100%;aspect-ratio:16/9;background:#000">' + inner + '</div><h2 data-a-target="stream-title">TITLE</h2></main><aside style="width:340px;flex:none">chat</aside></div>',
+    ad: '<span data-a-target="video-ad-label">Ad</span>' },
+  "kick.com": { name: "Kick", chans: { fakekicker: "Fake Kick Stream", "other-kicker": "Another Kick Stream" }, path: (c) => "/" + c,
+    player: (inner) => '<div style="position:relative;width:900px;max-width:100%;aspect-ratio:16/9;background:#000"><video-player style="display:block;width:100%;height:100%">' + inner + '</video-player></div><h1 data-testid="livestream-title">TITLE</h1>',
+    ad: "<span>Ad 0:15</span>" },
+  "rumble.com": { name: "Rumble", chans: { "v6abc12-fake-live-show": "Fake Rumble Live Show", "v6abc13-second-live-show": "Second Rumble Live Show" }, vod: { "v4xyz9-old-video": "Old Rumble Video" }, path: (c) => "/" + c + ".html", dvr: true,
+    player: (inner) => '<div id="videoPlayer" style="position:relative;width:960px;max-width:100%;aspect-ratio:16/9;background:#000">' + inner + '</div><h1 class="h1">TITLE</h1>',
+    ad: "<span>Ad 1 of 2 · 0:10</span>" },
+};
+const liveSite = (host) => {
+  const S = LIVE_SITES[host];
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${S.name}</title><style>body{margin:0;background:#0e0e10;color:#fff;font-family:sans-serif}video{width:100%;height:100%;display:block}
+.adl{position:absolute;top:10px;left:10px;background:#ff0;color:#000;padding:2px 8px}</style></head><body><div id="app"></div><script>
+${livePlayer}
+const S = ${JSON.stringify({ name: S.name, chans: S.chans, vod: S.vod || {}, dvr: !!S.dvr, ad: S.ad })};
+const PATH = ${S.path.toString()}, PLAYER = ${S.player.toString()};
+function render() {
+  const p = location.pathname.replace(/\\.html$/, "").replace(/\\/$/, "").slice(1), app = document.getElementById("app");
+  const t = S.chans[p] || S.vod[p];
+  if (!t) { document.title = S.name; app.innerHTML = '<div style="padding:40px"><h1>' + S.name + ' home</h1></div>'; return; }
+  document.title = t + " - " + S.name;
+  const other = Object.keys(S.chans).find((k) => k !== p);
+  app.innerHTML = PLAYER('<video id="lv" muted autoplay></video>').replace("TITLE", t) + '<a id="other" href="' + PATH(other) + '">Another stream</a>';
+  document.getElementById("other").onclick = (e) => { e.preventDefault(); window.__go(PATH(other)); };
+  const v = document.getElementById("lv");
+  if (S.chans[p]) window.__livePlayer(v, { dvr: S.dvr });
+  else { v.src = "/test.webm"; v.play().catch(() => {}); }
+}
+window.__go = (p) => { history.pushState(null, "", p); render(); };
+window.__ad = (on) => {
+  const box = document.getElementById("lv").parentElement;
+  let n = box.querySelector("#adl");
+  if (on && !n) { const d = document.createElement("div"); d.id = "adl"; d.innerHTML = S.ad; d.firstChild.classList.add("adl"); box.append(d); }
+  if (!on && n) n.remove();
+};
+addEventListener("popstate", render);
+render();
+setTimeout(() => history.replaceState(null, "", location.pathname), 50);
+window.__hotkeys = 0;
+window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; } }, true);
+</script></body></html>`;
+};
+function serveLive(req, res) {
+  const u = req.url.split("?")[0];
+  if (u === "/livesim/clock") {
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    return res.end(JSON.stringify({ t0: LIVE_T0, now: Date.now() }));
+  }
+  const m = u.match(/^\/livesim\/(init|seg-(\d+))\.webm$/);
+  // a segment exists only once the "broadcast" has reached its end
+  if (!m || (m[2] && +m[2] * 2000 > Date.now() - LIVE_T0)) {
+    res.writeHead(404, { "cache-control": "no-store" });
+    return res.end();
+  }
+  const f = path.join(LIVE_DIR, m[0].split("/").pop());
+  if (!fs.existsSync(f)) {
+    res.writeHead(404);
+    return res.end();
+  }
+  res.writeHead(200, { "content-type": "video/webm", "cache-control": "no-store" });
+  res.end(fs.readFileSync(f));
+}
+
 // ---- a video whose loading the test controls (buffer-aware sync): /gate.webm?g=<name>. While gate <name> is
 // closed, a response sends at most the first GATE_HEAD bytes and holds the rest (a seek further in waits too);
 // http://localhost:8444/__gate?g=<name>&open=0|1 closes / opens it.
@@ -440,6 +583,11 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
     res.writeHead(200, { "content-type": "text/html" });
     return res.end(host === "play.hbomax.com" ? hbo : host === "www.crunchyroll.com" ? cr : host === "www.sonyliv.com" ? sl : vilos);
   }
+  if (req.url.startsWith("/livesim/")) return serveLive(req, res);
+  if (LIVE_SITES[host]) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(liveSite(host));
+  }
   if (S24[host]) {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end(site24(host));
@@ -450,7 +598,7 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
   }
   if (host === "www.youtube.com") {
     res.writeHead(200, { "content-type": "text/html", "content-security-policy": "require-trusted-types-for 'script'; trusted-types fake; script-src 'nonce-ytfake' 'strict-dynamic'" });
-    return res.end(yt);
+    return res.end(yt.replace("/*LIVEPLAYER*/", livePlayer));
   }
   const headers = { "content-type": "text/html" };
   if (CSP === "strict" && host === "www.netflix.com") headers["content-security-policy"] = "img-src 'self' blob:";

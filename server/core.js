@@ -62,7 +62,7 @@ export const LEGACY_ROOM =
 export const REMOVED = "The host removed you from this party.";
 export const LOCKED = "This party is locked: the host isn't letting new people join right now.";
 // 2.2: "buffer" (paused while a member's video loads), "drop" (paused when a member dropped), "resume" (both over)
-const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode", "rate", "buffer", "drop", "resume"]);
+const PLAYBACK_REASONS = new Set(["play", "pause", "seeked", "episode", "rate", "buffer", "drop", "resume", "golive"]);
 
 // ---- shared validators (also used by the GIF proxy in gifs.js; the extension has copies
 // and applies them to decrypted content)
@@ -114,6 +114,11 @@ export function isKlipyMediaUrl(s) {
 //   Paramount+   "pp:<shows|movies>/<id>" (2.4)          -> https://www.paramountplus.com/<shows|movies>/video/<id>/
 //   STARZ        "sz:<country>/<language>/<id>" (2.4)    -> https://www.starz.com/<country>/<language>/play/<id>
 //   Tubi         "tb:<movies|tv-shows>/<id>[/<slug>]" (2.4) -> https://tubitv.com/<movies|tv-shows>/<id>[/<slug>]?start=true
+//   Live streams (2.5; the position is the delay behind live in ms, see extension/content.js):
+//   YouTube live "yl:<11-char id>"                       -> https://www.youtube.com/watch?v=<id>
+//   Twitch       "tw:<channel>"                          -> https://www.twitch.tv/<channel>
+//   Kick         "kk:<channel>"                          -> https://kick.com/<channel>
+//   Rumble       "rl:<id>-<slug>" live, "rb:<id>-<slug>"  -> https://rumble.com/<id>-<slug>.html
 //   Any video    "av:<16 random base64url chars>" (2.0, a video on a page the host chose). It names no
 //                site and never becomes a link here: the page's address travels end-to-end encrypted
 //                (room.page) and only the guests' browsers can read it.
@@ -129,6 +134,15 @@ const DP_RE = new RegExp(`^dp:${UUID}$`);
 const PP_RE = /^pp:(shows|movies)\/[A-Za-z0-9_-]{8,64}$/;
 const SZ_RE = /^sz:[a-z]{2}\/[a-z]{2}(-[a-z]{2})?\/\d{3,12}$/;
 const TB_RE = /^tb:(movies|tv-shows)\/\d{3,12}(\/[a-z0-9-]{1,120})?$/;
+const TW_RE = /^tw:[a-z0-9_]{2,25}$/;
+// Twitch's and Kick's own pages, never channels (the same lists as TW_PAGES / KK_PAGES in extension/content.js)
+const TW_PAGES = new Set(("directory videos settings search downloads jobs turbo prime p subscriptions inventory wallet friends drops login signup " +
+    "moderator popout embed broadcast u legal store messages notifications privacy team teams event events collections clips following " +
+    "bits payments partner creatorcamp security safety user products help").split(" "));
+const KK_PAGES = new Set(("browse categories category following search dashboard settings terms-of-service privacy-policy community-guidelines " +
+    "dmca-policy about careers help video videos clips signup login subscriptions popout embed verify cookies-policy").split(" "));
+const KK_RE = /^kk:[a-z0-9_-]{2,25}$/;
+const RB_RE = /^r[bl]:v[a-z0-9]{4,10}-[a-z0-9-]{1,200}$/;
 const PV_RE = /^pv:([a-z0-9.-]+)(\/(?:detail|dp|gp\/video\/detail)\/[A-Za-z0-9._-]{6,100})$/;
 export function validVideoId(v) {
   if (typeof v !== "string" || !v || v.length > 512) return false;
@@ -144,6 +158,10 @@ export function validVideoId(v) {
   if (v.startsWith("pp:")) return PP_RE.test(v);
   if (v.startsWith("sz:")) return SZ_RE.test(v);
   if (v.startsWith("tb:")) return TB_RE.test(v);
+  if (v.startsWith("yl:")) return /^yl:[A-Za-z0-9_-]{11}$/.test(v);
+  if (v.startsWith("tw:")) return TW_RE.test(v) && !TW_PAGES.has(v.slice(3));
+  if (v.startsWith("kk:")) return KK_RE.test(v) && !KK_PAGES.has(v.slice(3));
+  if (v.startsWith("rb:") || v.startsWith("rl:")) return RB_RE.test(v);
   const pv = PV_RE.exec(v);
   if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
   return false;
@@ -941,6 +959,10 @@ export function watchUrlFor(videoId, roomId) {
     return `https://www.starz.com/${cc}/${lang}/play/${id}?npParty=${code}`;
   }
   if (videoId.startsWith("tb:")) return `https://tubitv.com/${videoId.slice(3)}?start=true&npParty=${code}`;
+  if (videoId.startsWith("yl:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${code}`;
+  if (videoId.startsWith("tw:")) return `https://www.twitch.tv/${videoId.slice(3)}?npParty=${code}`;
+  if (videoId.startsWith("kk:")) return `https://kick.com/${videoId.slice(3)}?npParty=${code}`;
+  if (videoId.startsWith("rb:") || videoId.startsWith("rl:")) return `https://rumble.com/${videoId.slice(3)}.html?npParty=${code}`;
   const base = videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : "https://www.netflix.com/watch/" + videoId;
   return `${base}?npParty=${code}`;
 }
@@ -961,7 +983,7 @@ export const isAnyVideo = (videoId) => typeof videoId === "string" && videoId.st
 export const siteFor = (videoId) => {
   const v = String(videoId || "");
   if (isAnyVideo(v)) return "the host's site";
-  const sites = { "hs:": "JioHotstar", "yt:": "YouTube", "pv:": "Prime Video", "hm:": "HBO Max", "cr:": "Crunchyroll", "sl:": "SonyLIV", "hu:": "Hulu", "dp:": "Disney+", "pp:": "Paramount+", "sz:": "STARZ", "tb:": "Tubi" };
+  const sites = { "hs:": "JioHotstar", "yt:": "YouTube", "pv:": "Prime Video", "hm:": "HBO Max", "cr:": "Crunchyroll", "sl:": "SonyLIV", "hu:": "Hulu", "dp:": "Disney+", "pp:": "Paramount+", "sz:": "STARZ", "tb:": "Tubi", "yl:": "YouTube", "tw:": "Twitch", "kk:": "Kick", "rb:": "Rumble", "rl:": "Rumble" };
   return sites[v.slice(0, 3)] || "Netflix";
 };
 
@@ -1095,7 +1117,7 @@ ${install("Open the video")}`
 <a class="btn" id="go" hidden href="${esc(watch)}" data-watch="${esc(watch)}" data-room="${esc(room.id)}" data-kc="${esc(room.kc || "")}" data-host="${esc(hostProfile)}" data-hpid="${esc(room.hostId || "")}">Join on ${site}</a>
 <noscript><p class="warn">Turn on JavaScript for this page: it unlocks the party's encrypted chat with the key in your invite link.</p></noscript>
 <p class="note">🔒 Chat is end-to-end encrypted. The key is in your invite link and never reaches our server.</p>
-<p class="note">${browsers(site === "YouTube" ? "You need" : `You need your own ${site} account and`, ["Hulu", "Disney+", "Paramount+", "STARZ", "Tubi"].includes(site) ? "2.4" : ["HBO Max", "Crunchyroll", "SonyLIV"].includes(site) ? "2.2" : site === "Prime Video" ? "1.8" : "1.7")}</p>
+<p class="note">${browsers(["YouTube", "Tubi", "Twitch", "Kick", "Rumble"].includes(site) ? "You need" : `You need your own ${site} account and`, /^(yl|tw|kk|rl|rb):/.test(room.state?.videoId || "") ? "2.5" : ["Hulu", "Disney+", "Paramount+", "STARZ", "Tubi"].includes(site) ? "2.4" : ["HBO Max", "Crunchyroll", "SonyLIV"].includes(site) ? "2.2" : site === "Prime Video" ? "1.8" : "1.7")}</p>
 ${install("Join on " + site)}`;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NetParty invite</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">

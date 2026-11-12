@@ -126,6 +126,7 @@ const SERVICES = [
   {
     name: "Tubi",
     ver: "2.4",
+    free: true, // 2.5: free with ads, so the invite page asks for no account
     start: "https://tubitv.com/movies/605225/jack-and-jill",
     landed: /^https:\/\/tubitv\.com\/movies\/605225\/jack-and-jill$/,
     off: "https://tubitv.com/",
@@ -187,7 +188,7 @@ for (const S of SERVICES) {
   // invite page
   await gp.goto(made.invite);
   const text = await gp.textContent("body");
-  check(`${S.name}: invite page names the service and asks for ${S.ver || "2.2"}`, text.includes(`Join on ${S.name}`) && text.includes(`own ${S.name} account`) && text.includes(`${S.ver || "2.2"} or newer`), text.slice(0, 160));
+  check(`${S.name}: invite page names the service and asks for ${S.ver || "2.2"}`, text.includes(`Join on ${S.name}`) && text.includes(`own ${S.name} account`) !== !!S.free && text.includes(`${S.ver || "2.2"} or newer`), text.slice(0, 160));
   const href = await until(() => gp.getAttribute("a.btn", "href").then((h) => (h && h !== "#" ? h : null)), 5000);
   check(`${S.name}: invite links to the episode`, S.invite.test(href || ""), href);
   await Promise.all([gp.waitForNavigation(), gp.click("a.btn")]);

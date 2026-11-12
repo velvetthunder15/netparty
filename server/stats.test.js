@@ -58,6 +58,14 @@ test("service from video id", () => {
   assert.equal(serviceOf("hm:x"), "max");
   assert.equal(serviceOf("cr:GABCDEF"), "crunchyroll");
   assert.equal(serviceOf("sl:/shows/x-12345"), "sonyliv");
+  // 2.4 and 2.5
+  assert.equal(serviceOf("hu:5f1e6a2c-3b4d-4e5f-8a9b-0c1d2e3f4a5b"), "hulu");
+  assert.equal(serviceOf("tb:movies/605225"), "tubi");
+  assert.equal(serviceOf("yl:jfKfPfyJRdk"), "youtube");
+  assert.equal(serviceOf("tw:caseoh_"), "twitch");
+  assert.equal(serviceOf("kk:westcol"), "kick");
+  assert.equal(serviceOf("rl:v6abc12-show"), "rumble");
+  assert.equal(serviceOf("rb:v6abc12-show"), "rumble");
   assert.equal(serviceOf("av:AAAAAAAAAAAAAAAA"), "any-video");
   assert.equal(serviceOf(null), "unknown");
 });

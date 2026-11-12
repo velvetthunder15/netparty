@@ -14,6 +14,8 @@ function supportedSite(url) {
   if (u.hostname === "play.hbomax.com" || u.hostname === "play.max.com") return true; // 2.2: HBO Max
   // 2.4: Hulu, Disney+, Paramount+, STARZ, Tubi
   if (/^www\.(hulu|disneyplus|paramountplus|starz)\.com$/.test(u.hostname) || /^(www\.)?tubitv\.com$/.test(u.hostname)) return true;
+  // 2.5: live streams on Twitch, Kick and Rumble
+  if (u.hostname === "www.twitch.tv" || /^(www\.)?kick\.com$/.test(u.hostname) || u.hostname === "rumble.com") return true;
   return PRIME_TLDS.some((t) => u.hostname === "www.amazon." + t) && /^\/(gp\/video|Amazon-Video)\//.test(u.pathname);
 }
 // "Sync any video" (2.0): any other http(s) page can be synced after a click. A few pages never allow
@@ -136,7 +138,11 @@ async function refresh() {
     $("startHint").textContent = st.onWatchPage
       ? `Starts a party for what's playing on ${st.site}.`
       : st.site === "YouTube"
-        ? `Open a video on YouTube, or use the "Start a NetParty" button under it.`
+        ? `Open a video or live stream on YouTube, or use the "Start a NetParty" button under it.`
+        : ["Twitch", "Kick"].includes(st.site)
+          ? `Open a live channel on ${st.site}, then start the party here or with "Start a NetParty" on the player.`
+          : st.site === "Rumble"
+            ? `Open a video or live stream on Rumble, then start the party here or with "Start a NetParty" on the player.`
         : st.site === "Prime Video"
           ? `Open a title's page on Prime Video and press play, or use the "Start a NetParty" button next to Play.`
           : ["Netflix", "JioHotstar"].includes(st.site)

@@ -543,6 +543,42 @@ ok("host-only control lock");
     await m.req("end", {});
     m.close();
   }
+  // 2.5: live streams (and Rumble videos)
+  const live = [
+    ["yl:jfKfPfyJRdk", "YouTube", "https://www.youtube.com/watch?v=jfKfPfyJRdk&amp;npParty="],
+    ["tw:caseoh_", "Twitch", "https://www.twitch.tv/caseoh_?npParty="],
+    ["kk:westcol", "Kick", "https://kick.com/westcol?npParty="],
+    ["kk:some-channel", "Kick", "https://kick.com/some-channel?npParty="],
+    ["rl:v6abc12-a-live-show", "Rumble", "https://rumble.com/v6abc12-a-live-show.html?npParty="],
+    ["rb:v4xyz9-old-video-2024", "Rumble", "https://rumble.com/v4xyz9-old-video-2024.html?npParty="],
+  ];
+  for (const [videoId, site, link] of live) {
+    const m = await member("p25", { key: genKey(), create: { videoId, playing: true, position: 4000, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, videoId);
+    const html = await (await fetch(`${HTTP}/j/${m.room}`)).text();
+    assert.ok(html.includes(`Join on ${site}`), site);
+    assert.ok(html.includes(link + m.room), "link for " + videoId);
+    assert.match(html, /NetParty extension \(2\.5 or newer\)/);
+    assert.ok(!html.includes(`own ${site} account`), "no account needed on " + site);
+    // Go live is a playback reason the others hear about
+    const g = await member("p25g", { room: m.room });
+    const heard = g.next("state");
+    await m.req("state", { playing: true, position: 0, at: Date.now(), videoId, reason: "golive" });
+    assert.equal((await heard).data.reason, "golive");
+    g.close();
+    await m.req("end", {});
+    m.close();
+  }
+  const badLive = ["yl:short", "tw:UPPER", "tw:a", "tw:../x", "tw:way_too_long_for_a_twitch_login", "kk:with space", "kk:x/y", "rl:v6abc12", "rl:x6abc12-show", "rb:v6abc12-Show",
+    "rb:v6abc12-show.html", "rl:v6abc12-show/../x", "rb://evil.com/v6abc12-x", "tw:settings", "tw:directory", "kk:dashboard", "kk:browse"];
+  for (const videoId of badLive) {
+    const m = await member("p25bad", { key: genKey(), create: { videoId, playing: false, position: 0, at: Date.now() } });
+    assert.equal(m.snap.state.videoId, null, videoId);
+    await m.req("end", {});
+    m.close();
+  }
+  ok(`2.5 live streams: YouTube live / Twitch / Kick / Rumble invite links (no account needed, 2.5), Go live; ${badLive.length} malformed ids dropped`);
+
   // the update reminder's version info
   const v = await fetch(`${HTTP}/api/version`);
   assert.equal(v.status, 200);
