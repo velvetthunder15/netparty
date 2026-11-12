@@ -12,6 +12,8 @@ function supportedSite(url) {
   if (u.protocol !== "https:") return false;
   if (/^www\.(netflix|hotstar|jiohotstar|youtube|primevideo|crunchyroll|sonyliv)\.com$/.test(u.hostname)) return true;
   if (u.hostname === "play.hbomax.com" || u.hostname === "play.max.com") return true; // 2.2: HBO Max
+  // 2.4: Hulu, Disney+, Paramount+, STARZ, Tubi
+  if (/^www\.(hulu|disneyplus|paramountplus|starz)\.com$/.test(u.hostname) || /^(www\.)?tubitv\.com$/.test(u.hostname)) return true;
   return PRIME_TLDS.some((t) => u.hostname === "www.amazon." + t) && /^\/(gp\/video|Amazon-Video)\//.test(u.pathname);
 }
 // "Sync any video" (2.0): any other http(s) page can be synced after a click. A few pages never allow
@@ -137,9 +139,11 @@ async function refresh() {
         ? `Open a video on YouTube, or use the "Start a NetParty" button under it.`
         : st.site === "Prime Video"
           ? `Open a title's page on Prime Video and press play, or use the "Start a NetParty" button next to Play.`
-          : ["HBO Max", "Crunchyroll", "SonyLIV"].includes(st.site)
-            ? `Open an episode or movie on ${st.site} and press play, then start the party here.`
-          : `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`;
+          : ["Netflix", "JioHotstar"].includes(st.site)
+            ? `Open a title on ${st.site} and press play, or use the "Start a NetParty" button next to Play.`
+            : `Open an episode or movie on ${st.site} and press play, then start the party here or with "Start a NetParty" on the player.`;
+    // 2.4: connect to the server now, so Start a party doesn't wait for it
+    if (st.onWatchPage) toTab({ cmd: "warm" });
   }
 }
 
@@ -552,4 +556,40 @@ $("slotReset").onclick = async () => {
   showSlots();
   showPrefs(await chrome.storage.sync.get(PREFS));
   refresh();
+  showNews();
 })();
+
+// ---- 2.4: a newer version is out (until this browser runs it), or what's new in the one just installed (once)
+async function showNews() {
+  const info = await chrome.runtime.sendMessage({ cmd: "updateInfo" }).catch(() => null);
+  if (!info) return;
+  if (info.update) {
+    $("vUpdate").classList.remove("hidden");
+    $("updTitle").textContent = `NetParty ${info.update.version} is out`;
+    $("updNotes").textContent = info.update.notes?.length ? "New: " + info.update.notes.join(" · ") : "Update to get the latest fixes.";
+    $("updGo").textContent = info.update.ready ? "Restart to update" : "Update now";
+    // the zip build: the new files go over the old ones, then a reload picks them up
+    $("updReload").classList.toggle("hidden", info.kind !== "zip");
+    $("updHint").textContent = info.kind === "zip" ? `You have ${info.version}. Unzip the download over your NetParty folder, then press Reload NetParty.` : `You have ${info.version}.`;
+    return;
+  }
+  if (info.whatsNew?.items?.length) {
+    $("vNews").classList.remove("hidden");
+    $("newsTitle").textContent = `What's new in ${info.version}`;
+    $("newsList").replaceChildren(...info.whatsNew.items.map((t) => Object.assign(document.createElement("li"), { textContent: t })));
+    chrome.runtime.sendMessage({ cmd: "whatsNewSeen", where: "popup" }).catch(() => {});
+  }
+}
+$("updGo").onclick = async () => {
+  $("updGo").disabled = true;
+  $("updGo").textContent = "Updating…";
+  const r = await chrome.runtime.sendMessage({ cmd: "updateNow" }).catch(() => null);
+  $("updGo").disabled = false;
+  if (r?.reloading) return;
+  if (r?.zip) $("updGo").textContent = "Download again";
+  else if (r?.pending) ($("updGo").textContent = "Downloading…"), ($("updHint").textContent = "The update finishes by itself in a moment.");
+  else if (r?.opened === "store") ($("updGo").textContent = "Update now"), ($("updHint").textContent = "Update NetParty on the store page that just opened.");
+  else $("updGo").textContent = "Try again";
+};
+$("updReload").onclick = () => chrome.runtime.reload();
+$("newsOk").onclick = () => $("vNews").classList.add("hidden");

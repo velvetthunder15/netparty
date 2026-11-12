@@ -317,6 +317,74 @@ window.__hotkeys = 0;
 window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; } }, true);
 </script></body></html>`;
 
+// ---- 2.4 fixtures: Hulu, Disney+, Paramount+, STARZ, Tubi. Built from the services' public URL shapes (we can't
+// sign in to them). Disney+ keeps its <video> in a player element's open shadow root; Paramount+ shows its ad
+// as a plain "Ad 1 of 3 · 0:15" label; Tubi's title page is also its player (Play, or ?start=true). Each has a
+// home page, a player with the title, a "next" button (single-page navigation) and __ad(on) for an ad break.
+const S24 = {
+  "www.hulu.com": {
+    name: "Hulu", watch: "^\\/watch\\/([0-9a-f-]{36})\\/?$", ids: { "5f1e6a2c-3b4d-4e5f-8a9b-0c1d2e3f4a5b": "Fake Hulu Episode 1", "7a2b3c4d-5e6f-4a1b-9c8d-7e6f5a4b3c2d": "Fake Hulu Episode 2" },
+    path: (id) => "/watch/" + id, title: (t) => "Watch " + t + " Online | Hulu", ad: '<div class="AdBadge">Ad · 0:15</div>',
+  },
+  "www.disneyplus.com": {
+    name: "Disney+", watch: "^(?:\\/[a-z]{2}(?:-[a-z]{2,4})?)?\\/play\\/([0-9a-f-]{36})\\/?$", ids: { "e9fe54b5-9eb8-4298-8d72-f125d5b1aad1": "Fake Disney Movie", "0b7c6d5e-4f3a-4b2c-8d1e-9f8a7b6c5d4e": "Fake Disney Episode 2" },
+    path: (id) => "/play/" + id, title: (t) => "Watch " + t + " | Disney+", shadow: true, ad: '<div class="ad-badge">Ad 1 of 2</div>',
+  },
+  "www.paramountplus.com": {
+    name: "Paramount+", watch: "^\\/(?:shows|movies)\\/video\\/([A-Za-z0-9_-]{8,64})\\/?$", ids: { ALVE01M5AWA8K9EZZB3A56AC0VQQK1: "Fake Paramount Episode 1", ALVE01M6P7EPS2E41SBYNNGPQJC6A7: "Fake Paramount Episode 2" },
+    path: (id) => "/shows/video/" + id + "/", title: (t) => "Watch " + t + " - Paramount+", ad: "<span>Ad 1 of 3 · 0:15</span>",
+  },
+  "www.starz.com": {
+    name: "STARZ", watch: "^\\/us\\/en\\/play\\/(\\d+)\\/?$", ids: { 62917: "Fake Starz Episode 1", 62918: "Fake Starz Episode 2" },
+    path: (id) => "/us/en/play/" + id, title: (t) => t + " | STARZ",
+  },
+  "tubitv.com": {
+    name: "Tubi", watch: "^\\/(?:movies|tv-shows)\\/(\\d+)(?:\\/[a-z0-9-]+)?\\/?$", ids: { 605225: "Jack and Jill", 605226: "Fake Tubi Movie 2" },
+    path: (id) => "/movies/" + id + "/" + (id === "605225" ? "jack-and-jill" : "fake-tubi-movie-2"), title: (t) => "Watch " + t + " (2011) - Free Movies | Tubi", detail: true,
+    ad: '<div data-test-id="ad-countdown">Ad 0:10</div>',
+  },
+};
+const site24 = (host) => {
+  const S = S24[host];
+  return `<!doctype html><html><head><title>${S.name}</title><style>body{margin:0;background:#0b0c0f;color:#fff;font-family:sans-serif}
+.player{position:fixed;inset:0;background:#000}.player video{width:100%;height:100%}.ttl{position:absolute;top:16px;left:20px;margin:0;font-size:18px}
+.adl{position:absolute;top:60px;left:20px;background:#ff0;color:#000;padding:2px 8px}</style></head><body><div id="app"></div><script>
+const S = ${JSON.stringify({ ...S, path: undefined, title: undefined })}, W = new RegExp(S.watch);
+const PATH = ${S.path.toString()}, TITLE = ${S.title.toString()};
+const vid = () => S.shadow ? document.querySelector("fake-web-player")?.shadowRoot.querySelector("video") : document.querySelector(".player video");
+function render() {
+  const m = location.pathname.match(W), app = document.getElementById("app"), t = m && S.ids[m[1]];
+  if (!t) { document.title = S.name; app.innerHTML = '<div style="padding:40px"><h1>' + S.name + ' home</h1></div>'; return; }
+  document.title = TITLE(t);
+  if (S.detail && !window.__started && new URLSearchParams(location.search).get("start") !== "true") {
+    app.innerHTML = '<div style="padding:40px"><h1>' + t + '</h1><button id="tbplay" style="height:44px;padding:0 24px">Play</button></div>';
+    document.getElementById("tbplay").onclick = () => { window.__started = true; render(); };
+    return;
+  }
+  const next = Object.keys(S.ids).find((k) => k !== m[1]);
+  const inner = '<video src="/test.webm" muted autoplay></video><h1 class="ttl">' + t + '</h1>';
+  if (S.shadow) {
+    app.innerHTML = '<div class="player"><fake-web-player style="display:block;width:100%;height:100%"></fake-web-player><button id="next24" style="position:absolute;bottom:20px;right:20px">Next</button></div>';
+    const root = app.querySelector("fake-web-player").attachShadow({ mode: "open" });
+    root.innerHTML = '<style>video{width:100%;height:100%;display:block}.ad-badge{position:absolute;top:60px;left:20px;background:#ff0;color:#000;padding:2px 8px}</style>' + inner;
+  } else app.innerHTML = '<div class="player">' + inner + '<button id="next24" style="position:absolute;bottom:20px;right:20px">Next</button></div>';
+  document.getElementById("next24").onclick = () => { window.__started = true; window.__go(PATH(next)); };
+}
+window.__go = (p) => { history.pushState(null, "", p); render(); };
+window.__ad = (on) => {
+  const box = S.shadow ? document.querySelector("fake-web-player").shadowRoot : document.querySelector(".player");
+  let n = box.querySelector("#ad24");
+  if (on && !n && S.ad) { const d = document.createElement("div"); d.id = "ad24"; d.innerHTML = S.ad; d.firstChild.classList.add("adl"); box.append(d); vid().currentTime = 100; }
+  if (!on && n) n.remove();
+};
+addEventListener("popstate", render);
+render();
+setTimeout(() => history.replaceState(null, "", location.pathname), 50); // the router drops unknown parameters
+window.__hotkeys = 0;
+window.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "f") { e.preventDefault(); e.stopPropagation(); window.__hotkeys++; } }, true);
+</script></body></html>`;
+};
+
 // ---- a video whose loading the test controls (buffer-aware sync): /gate.webm?g=<name>. While gate <name> is
 // closed, a response sends at most the first GATE_HEAD bytes and holds the rest (a seek further in waits too);
 // http://localhost:8444/__gate?g=<name>&open=0|1 closes / opens it.
@@ -371,6 +439,10 @@ https.createServer({ key: fs.readFileSync(path.join(MEDIA_DIR, "key.pem")), cert
   if (host === "play.hbomax.com" || host === "www.crunchyroll.com" || host === "www.sonyliv.com" || (host === "static.crunchyroll.com" && req.url.startsWith("/vilos-v2/web/vilos/player.html"))) {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end(host === "play.hbomax.com" ? hbo : host === "www.crunchyroll.com" ? cr : host === "www.sonyliv.com" ? sl : vilos);
+  }
+  if (S24[host]) {
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end(site24(host));
   }
   if (host === "www.primevideo.com" || host === "www.amazon.co.uk") {
     res.writeHead(200, { "content-type": "text/html" });

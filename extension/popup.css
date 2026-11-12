@@ -43,8 +43,21 @@ details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 10px
 summary { cursor: pointer; color: var(--dim); font-size: 12px; }
 details input { margin-bottom: 8px; }
 .emo { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; line-height: 1; }
-.three { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .three .ghost { margin: 0; padding: 9px 4px; font-size: 13px; }
-.three .ghost:last-child:nth-child(odd) { grid-column: span 2; }
+/* 2.4: the services to open, with their icons (the same chips as on netparty.tech) */
+.sites { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.site { margin: 0; padding: 6px 8px 6px 6px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; text-align: left; }
+.site-ic { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #0d0c12; border: 1px solid #353147; display: grid; place-items: center; }
+.site-ic img { width: 18px; height: 18px; object-fit: contain; display: block; }
+.site-ic img.wide { width: 24px; }
+/* 2.4: update available / what's new */
+.news { margin-bottom: 12px; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--accent); }
+.news b { display: block; font-size: 14px; }
+.news p { margin: 4px 0 0; color: var(--dim); font-size: 12px; }
+.news ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.news li { margin: 2px 0; }
+.news .primary { margin-top: 10px; padding: 9px; font-size: 14px; }
+.news .small { margin-top: 8px; }
+#vUpdate { border-color: #e8590c; }
 .pref-toggle { margin: 8px 0 0; }
 #vMe { margin-bottom: 12px; }
 .me { display: flex; gap: 8px; align-items: center; }

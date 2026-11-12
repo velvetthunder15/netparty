@@ -2,7 +2,7 @@
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import fs from "node:fs";
-import { createHub, iceProvider, joinPage, joinPageHeaders } from "./core.js";
+import { createHub, iceProvider, joinPage, joinPageHeaders, versionInfo } from "./core.js";
 import { parseGifRequest, gifSearch, corsHeaders, makeLimiter, GIF_CACHE_SECONDS } from "./gifs.js";
 
 const PORT = Number(process.env.PORT || 8787);
@@ -42,7 +42,23 @@ async function gifs(req, res) {
   send(out.status, out.body, { "cache-control": out.status === 200 ? `public, max-age=${GIF_CACHE_SECONDS}` : "no-store" });
 }
 
+// 2.4: GET /api/version: the extension version next to this server (../extension), read once at start
+const readJson = (p) => {
+  try {
+    return JSON.parse(fs.readFileSync(new URL(p, import.meta.url), "utf8"));
+  } catch {
+    return null;
+  }
+};
+const EXT_MANIFEST = readJson("../extension/manifest.json");
+const EXT_WHATS_NEW = readJson("../extension/whats-new.json");
+
 const server = http.createServer(async (req, res) => {
+  if ((req.url || "").split("?")[0] === "/api/version") {
+    const [status, headers, body] = versionInfo(EXT_MANIFEST, EXT_WHATS_NEW, req.method);
+    res.writeHead(status, headers);
+    return res.end(body ?? undefined);
+  }
   if ((req.url || "").startsWith("/api/gifs/")) return gifs(req, res).catch(() => {
     if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
     res.end('{"error":"server_error"}');

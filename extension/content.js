@@ -36,6 +36,15 @@
   const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
   const HM_RE = new RegExp(`^hm:${UUID}(\\/${UUID})?$`);
   const SL_RE = /^sl:\/(shows|sports|movies|clip|trailer|music-videos)(\/[a-z0-9-]{1,120}-\d{4,})?\/[a-z0-9-]{0,120}-?\d{5,}$/;
+  // 2.4: Hulu "hu:<uuid>" (www.hulu.com/watch/<uuid>), Disney+ "dp:<uuid>" (www.disneyplus.com/play/<uuid>),
+  // Paramount+ "pp:shows/<id>" or "pp:movies/<id>" (www.paramountplus.com/<shows|movies>/video/<id>/),
+  // STARZ "sz:<country>/<language>/<id>" (www.starz.com/us/en/play/<id>), Tubi "tb:movies/<id>" or
+  // "tb:tv-shows/<id>", with the address slug when there is one (tubitv.com/movies/<id>/<slug>)
+  const HU_RE = new RegExp(`^hu:${UUID}$`);
+  const DP_RE = new RegExp(`^dp:${UUID}$`);
+  const PP_RE = /^pp:(shows|movies)\/[A-Za-z0-9_-]{8,64}$/;
+  const SZ_RE = /^sz:[a-z]{2}\/[a-z]{2}(-[a-z]{2})?\/\d{3,12}$/;
+  const TB_RE = /^tb:(movies|tv-shows)\/\d{3,12}(\/[a-z0-9-]{1,120})?$/;
   function validVideoId(v) {
     if (typeof v !== "string" || !v || v.length > 512) return false;
     if (/^\d{1,12}$/.test(v)) return true;
@@ -45,6 +54,11 @@
     if (v.startsWith("hm:")) return HM_RE.test(v);
     if (v.startsWith("cr:")) return /^cr:[A-Z0-9]{6,16}$/.test(v);
     if (v.startsWith("sl:")) return SL_RE.test(v);
+    if (v.startsWith("hu:")) return HU_RE.test(v);
+    if (v.startsWith("dp:")) return DP_RE.test(v);
+    if (v.startsWith("pp:")) return PP_RE.test(v);
+    if (v.startsWith("sz:")) return SZ_RE.test(v);
+    if (v.startsWith("tb:")) return TB_RE.test(v);
     const pv = PV_RE.exec(v);
     if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
     return false;
@@ -59,12 +73,39 @@
   const IS_HBO = !IS_ANY && (location.hostname === "play.hbomax.com" || location.hostname === "play.max.com");
   const IS_CR = !IS_ANY && location.hostname === "www.crunchyroll.com";
   const IS_SL = !IS_ANY && location.hostname === "www.sonyliv.com";
-  const SITE_NAME = IS_ANY ? "this page" : IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : IS_HBO ? "HBO Max" : IS_CR ? "Crunchyroll" : IS_SL ? "SonyLIV" : "Netflix";
-  // sites whose <video> NetParty drives straight from here (no page script): YouTube, Prime Video, HBO Max, SonyLIV
-  const DIRECT = IS_YT || IS_PRIME || IS_HBO || IS_SL;
+  // 2.4: Hulu, Disney+, Paramount+, STARZ, Tubi
+  const IS_HULU = !IS_ANY && location.hostname === "www.hulu.com";
+  const IS_DP = !IS_ANY && location.hostname === "www.disneyplus.com";
+  const IS_PP = !IS_ANY && location.hostname === "www.paramountplus.com";
+  const IS_SZ = !IS_ANY && location.hostname === "www.starz.com";
+  const IS_TB = !IS_ANY && (location.hostname === "tubitv.com" || location.hostname === "www.tubitv.com");
+  const IS_NEW = IS_HULU || IS_DP || IS_PP || IS_SZ || IS_TB;
+  const IS_NETFLIX = !IS_ANY && !IS_HOTSTAR && !IS_YT && !IS_PRIME && !IS_HBO && !IS_CR && !IS_SL && !IS_NEW;
+  const SITE_NAME = IS_ANY
+    ? "this page"
+    : IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : IS_HBO ? "HBO Max" : IS_CR ? "Crunchyroll" : IS_SL ? "SonyLIV"
+      : IS_HULU ? "Hulu" : IS_DP ? "Disney+" : IS_PP ? "Paramount+" : IS_SZ ? "STARZ" : IS_TB ? "Tubi" : "Netflix";
+  // sites whose <video> NetParty drives straight from here (no page script): YouTube, Prime Video, HBO Max, SonyLIV,
+  // and the 2.4 services
+  const DIRECT = IS_YT || IS_PRIME || IS_HBO || IS_SL || IS_NEW;
+  // every <video>; on the 2.4 services also the ones inside a player's open shadow root (Disney+'s web player
+  // is a custom element), looked for only when the page itself has none
+  const allVideos = () => {
+    const vids = [...document.querySelectorAll("video")];
+    if (vids.length || !IS_NEW) return vids;
+    const walk = (root, depth) => {
+      for (const n of root.querySelectorAll("*")) {
+        if (!n.shadowRoot) continue;
+        vids.push(...n.shadowRoot.querySelectorAll("video"));
+        if (depth < 3) walk(n.shadowRoot, depth + 1);
+      }
+    };
+    walk(document, 0);
+    return vids;
+  };
   // the biggest <video> showing on the page (players keep spare or preview <video>s around)
   const shownVideos = () =>
-    [...document.querySelectorAll("video")].filter((v) => {
+    allVideos().filter((v) => {
       const r = v.getBoundingClientRect();
       return r.width > 0 && r.height > 0;
     });
@@ -109,8 +150,8 @@
   }
   // SonyLIV: title pages and the player share one address (the player adds ?watch=true); a page counts as the
   // player while it says so in the address or a big <video> is showing
-  const slPlayerOpen = () =>
-    new URLSearchParams(location.search).get("watch") === "true" || shownVideos().some((v) => v.getBoundingClientRect().width >= innerWidth * 0.6);
+  const bigVideo = () => shownVideos().some((v) => v.getBoundingClientRect().width >= innerWidth * 0.6);
+  const slPlayerOpen = () => new URLSearchParams(location.search).get("watch") === "true" || bigVideo();
   // Crunchyroll: the episode's player is an iframe from static.crunchyroll.com (its "vilos" player); a newer
   // player may put the <video> in the page itself. Both work.
   const crFrameEl = () => document.querySelector('iframe[src*="//static.crunchyroll.com/"]');
@@ -137,6 +178,34 @@
       const v = "sl:" + location.pathname.replace(/\/+$/, "");
       return validVideoId(v) && slPlayerOpen() ? v : null;
     }
+    if (IS_HULU) {
+      const m = location.pathname.match(/^\/watch\/([0-9a-f-]{36})\/?$/i);
+      const v = m && "hu:" + m[1].toLowerCase();
+      return v && validVideoId(v) ? v : null;
+    }
+    if (IS_DP) {
+      // /play/<uuid> (also /video/<uuid>, and under a language prefix such as /en-gb/)
+      const m = location.pathname.match(/^(?:\/[a-z]{2}(?:-[a-z]{2,4})?)?\/(?:play|video)\/([0-9a-f-]{36})\/?$/i);
+      const v = m && "dp:" + m[1].toLowerCase();
+      return v && validVideoId(v) ? v : null;
+    }
+    if (IS_PP) {
+      // /shows/video/<id>/ and /movies/video/<id>/ (trailers are /movies/trailer/video/…: not a party)
+      const m = location.pathname.match(/^(?:\/[a-z]{2})?\/(shows|movies)\/video\/([A-Za-z0-9_-]{8,64})\/?$/);
+      const v = m && "pp:" + m[1] + "/" + m[2];
+      return v && validVideoId(v) ? v : null;
+    }
+    if (IS_SZ) {
+      const m = location.pathname.match(/^\/([a-z]{2})\/([a-z]{2}(?:-[a-z]{2})?)\/play\/(\d{3,12})\/?$/i);
+      const v = m && `sz:${m[1].toLowerCase()}/${m[2].toLowerCase()}/${m[3]}`;
+      return v && validVideoId(v) ? v : null;
+    }
+    if (IS_TB) {
+      // a title's page is also its player (?start=true, or once the big <video> shows)
+      const m = location.pathname.match(/^\/(movies|tv-shows)\/(\d{3,12})(?:\/([a-z0-9-]{1,120}))?\/?$/);
+      const v = m && "tb:" + m[1] + "/" + m[2] + (m[3] ? "/" + m[3] : "");
+      return v && validVideoId(v) && bigVideo() ? v : null;
+    }
     if (IS_YT) {
       if (location.pathname !== "/watch") return null; // Shorts, live chat pop-outs etc. aren't supported
       const v = new URLSearchParams(location.search).get("v");
@@ -156,7 +225,9 @@
           ? v.slice(0, 39) // the first id names the episode
           : v && v.startsWith("sl:")
             ? "sl:" + (v.match(/(\d+)$/) || [])[1]
-            : v;
+            : v && v.startsWith("tb:")
+              ? v.split("/").slice(0, 2).join("/") // the slug doesn't matter
+              : v;
   const sameVideo = (a, b) => (IS_ANY ? isAv(b) : videoKey(a) === videoKey(b));
   // null for anything that isn't a known title shape (a party member can't send us elsewhere)
   const watchUrl = (videoId, roomId) => {
@@ -168,9 +239,21 @@
     if (videoId.startsWith("hm:")) return `https://play.hbomax.com/video/watch/${videoId.slice(3)}?npParty=${roomId}`;
     if (videoId.startsWith("cr:")) return `https://www.crunchyroll.com/watch/${videoId.slice(3)}?npParty=${roomId}`;
     if (videoId.startsWith("sl:")) return `https://www.sonyliv.com${videoId.slice(3)}?watch=true&npParty=${roomId}`;
+    if (videoId.startsWith("hu:")) return `https://www.hulu.com/watch/${videoId.slice(3)}?npParty=${roomId}`;
+    if (videoId.startsWith("dp:")) return `https://www.disneyplus.com/play/${videoId.slice(3)}?npParty=${roomId}`;
+    if (videoId.startsWith("pp:")) {
+      const [kind, id] = videoId.slice(3).split("/");
+      return `https://www.paramountplus.com/${kind}/video/${id}/?npParty=${roomId}`;
+    }
+    if (videoId.startsWith("sz:")) {
+      const [cc, lang, id] = videoId.slice(3).split("/");
+      return `https://www.starz.com/${cc}/${lang}/play/${id}?npParty=${roomId}`;
+    }
+    if (videoId.startsWith("tb:")) return `https://tubitv.com/${videoId.slice(3)}?start=true&npParty=${roomId}`;
     return (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) + `?npParty=${roomId}`;
   };
-  const HAS_ADS = IS_YT || IS_PRIME || IS_HBO || IS_CR || IS_SL;
+  // (STARZ has no ad plans)
+  const HAS_ADS = IS_YT || IS_PRIME || IS_HBO || IS_CR || IS_SL || IS_HULU || IS_DP || IS_PP || IS_TB;
   // an ad marker that is on screen and says something (players keep empty ad containers around)
   const shownAd = (sel, root = document) =>
     [...root.querySelectorAll(sel)].some((n) => {
@@ -185,11 +268,36 @@
   const HBO_AD = '[data-testid*="ad-badge" i], [data-testid*="ad_badge" i], [data-testid*="ad-countdown" i], [class*="AdBadge"], [class*="AdCountdown"]';
   const SL_AD = ".ima-ad-container, .videoAdUi, [class*=\"ad-break-overlay\" i], [data-testid*=\"ad-break\" i]";
   const CR_AD = '[data-testid*="ad-indicator" i], [class*="ad-indicator" i], [title="Advertisement"]';
+  // 2.4: Hulu, Disney+ and Paramount+ (ad plans) and Tubi (always): the players' ad badges / countdowns, by their
+  // usual names, and the short "Ad" / "Ad 1 of 3 · 0:15" label a player shows over the video. Built from public
+  // page structure and checked against test pages only, like the 2.2 markers above.
+  const NEW_AD =
+    '[class*="AdBadge"], [class*="AdCountdown"], [class*="AdUnitView"], [class*="AdTimer"], [class~="ad-badge" i], [class~="ad-countdown" i], ' +
+    '[class~="ad-timer" i], [class~="ad-indicator" i], [data-testid*="ad-badge" i], [data-testid*="ad-countdown" i], [data-test-id*="ad-countdown" i]';
+  const AD_TEXT = /^ad(\s*\d+\s*(of|\/)\s*\d+)?(\s*[^\w\s]{0,2}\s*\d{1,2}:\d{2})?$/i;
+  function newSiteAd() {
+    const v = mainVideo();
+    const root = v?.getRootNode?.();
+    if (shownAd(NEW_AD) || (root instanceof ShadowRoot && shownAd(NEW_AD, root))) return true;
+    let box = v?.parentElement;
+    for (let i = 0; i < 4 && box?.parentElement && box.parentElement !== document.body; i++) box = box.parentElement;
+    if (!box) return false;
+    for (const n of box.querySelectorAll("span, div, p")) {
+      if (n.childElementCount > 2) continue;
+      const t = n.textContent.replace(/\s+/g, " ").trim();
+      if (t.length > 24 || !AD_TEXT.test(t)) continue;
+      const r = n.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && getComputedStyle(n).visibility !== "hidden") return true;
+    }
+    return false;
+  }
   // YouTube and Prime Video play ads in the main player: no sync while one is on screen
   const adPlaying = () => {
     if (IS_HBO) return shownAd(HBO_AD);
     if (IS_SL) return shownAd(SL_AD);
     if (IS_CR) return crFrame.ad || shownAd(CR_AD);
+    if (IS_SZ) return false;
+    if (IS_NEW) return newSiteAd();
     if (IS_PRIME) {
       // Prime's player shows an ad countdown ("Ad 0:15") during ad breaks
       const box = primePlayer()?.box;
@@ -225,6 +333,15 @@
     } else if (IS_SL) {
       t = document.querySelector('[class*="playerTitle"], [class*="player-title"], [class*="contentTitle"]')?.textContent || "";
       if (!t.trim()) t = (document.querySelector('meta[property="og:title"]')?.content || document.title || "").replace(/^watch\s+(latest\s+)?/i, "").replace(/\s*(full\s+hd\s+)?(movie|episode|tv series|tv show)?\s*online.*$/i, "").replace(/\s*[|–-]\s*sony\s*liv.*$/i, "");
+    } else if (IS_NEW) {
+      // 2.4 services: the player's title line if there is one, else the page title without the service's name
+      t = document.querySelector('[data-testid*="title" i][class*="player" i], [class*="PlayerTitle"], [class*="player-title" i], [data-automationid="player-title"]')?.textContent || "";
+      if (!t.trim())
+        t = (document.querySelector('meta[property="og:title"]')?.content || document.title || "")
+          .replace(/^watch\s+/i, "")
+          .replace(/\s*[|–-]\s*(hulu|disney\+|disney plus|paramount\+|paramount plus|starz|tubi|free (movies|tv shows)).*$/i, "")
+          .replace(/\s+(full\s+)?(movie|episode|series)?\s*online\b.*$/i, "");
+      if (/^(hulu|disney\+|paramount\+|starz|tubi)$/i.test(t.trim())) t = "";
     } else if (IS_HOTSTAR) {
       t = document.querySelector('meta[property="og:title"]')?.content || document.title || "";
       t = t.split(/\s[|–-]\s/)[0].replace(/^watch\s+/i, "").replace(/\s+(full\s+)?(movie|episode|season\s*\d*)?\s*online.*$/i, "");
@@ -1004,13 +1121,20 @@
     const pending = new Map();
     const listeners = new Set();
     let open = false;
-    let wantOpen = false;
+    let wantOpen = false; // in a party (or joining one): keep the socket up, reconnect when it drops
+    let connecting = false; // an "open" is on its way and hasn't been answered yet
     let retries = 0;
+    let retryTimer = null;
+    let warmTimer = null;
     let url = null;
+    // 2.4: every "open" gets a number, and the background tags the socket's events with it. Events from a
+    // socket that was replaced (a late "close" from the one before) are ignored, so they can no longer
+    // knock out the socket that replaced it.
+    let gen = 0;
 
     // port traffic keeps Chrome from idling out the background worker that holds the socket
     setInterval(() => {
-      if (!port || !wantOpen) return;
+      if (!port || (!wantOpen && !open)) return;
       try {
         port.postMessage({ cmd: "ping" });
       } catch {
@@ -1020,25 +1144,36 @@
     }, 20000);
     // come back straight away when the network or the tab returns
     const kick = () => {
-      if (wantOpen && !open) {
+      if (wantOpen && !open && !connecting) {
         retries = 0;
-        try {
-          port ? port.postMessage({ cmd: "open", url }) : connect();
-        } catch {
-          connect();
-        }
+        clearTimeout(retryTimer);
+        sendOpen();
       }
     };
     addEventListener("online", kick);
     document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && kick());
 
     function connect() {
-      port = chrome.runtime.connect({ name: "netparty-socket" });
+      try {
+        port = chrome.runtime.connect({ name: "netparty-socket" });
+      } catch (e) {
+        // the extension was updated or reloaded: this page's NetParty can't reach it any more
+        port = null;
+        connecting = false;
+        emit({ type: "_dead", error: String(e?.message || e) });
+        return false;
+      }
+      const me = port;
       port.onMessage.addListener((m) => {
+        if (port !== me) return;
+        if (Number.isInteger(m.gen) && m.gen !== gen) return; // a socket we already replaced
         if (m.evt === "open") {
+          const was = open;
           open = true;
+          connecting = false;
           retries = 0;
-          emit({ type: "_open" });
+          clearTimeout(retryTimer);
+          if (!was) emit({ type: "_open" });
         } else if (m.evt === "message") {
           let msg;
           try {
@@ -1053,20 +1188,32 @@
               msg.error ? p.reject(new Error(msg.error)) : p.resolve(msg.data);
             }
           } else emit(msg);
-        } else if (m.evt === "close" || m.evt === "error") {
-          if (m.evt === "close") onLost();
-        }
+        } else if (m.evt === "close") onLost();
       });
       port.onDisconnect.addListener(() => {
+        if (port !== me) return;
         port = null;
         onLost();
       });
-      port.postMessage({ cmd: "open", url });
+      return true;
+    }
+    function sendOpen() {
+      if (!port && !connect()) return;
+      gen++;
+      connecting = true;
+      try {
+        port.postMessage({ cmd: "open", url, gen });
+      } catch {
+        port = null;
+        connecting = false;
+        onLost();
+      }
     }
 
     function onLost() {
       const was = open;
       open = false;
+      connecting = false;
       for (const p of pending.values()) p.reject(new Error("Connection lost"));
       pending.clear();
       if (was) emit({ type: "_closed" });
@@ -1074,14 +1221,10 @@
       retries++;
       // keep trying for as long as we're in a party; just tell the user once if it drags on
       if (retries === 6) emit({ type: "_failed" });
-      const delay = Math.min(10000, 500 * 2 ** Math.min(retries, 5));
-      setTimeout(() => {
-        if (!wantOpen) return;
-        try {
-          port ? port.postMessage({ cmd: "open", url }) : connect();
-        } catch {
-          connect();
-        }
+      const delay = retries === 1 ? 300 : Math.min(10000, 500 * 2 ** Math.min(retries - 1, 5));
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => {
+        if (wantOpen && !open && !connecting) sendOpen();
       }, delay);
     }
 
@@ -1100,16 +1243,38 @@
         return open;
       },
       start(serverUrl) {
+        clearTimeout(warmTimer);
+        if (url && serverUrl !== url && (open || connecting)) {
+          // the server address changed (Advanced settings): drop the old socket
+          try {
+            port?.postMessage({ cmd: "close" });
+          } catch {}
+          open = connecting = false;
+        }
         url = serverUrl;
         wantOpen = true;
         retries = 0;
-        if (open) return;
-        if (port) port.postMessage({ cmd: "open", url });
-        else connect();
+        if (open || connecting) return; // already there, or on its way: wait for it
+        clearTimeout(retryTimer);
+        sendOpen();
+      },
+      // 2.4: open the socket ahead of time (the popup opened on a title, a pointer on "Start a NetParty"), so
+      // starting a party doesn't wait for it. Closed again after a minute if no party uses it.
+      warm(serverUrl) {
+        if (wantOpen || (url && serverUrl !== url && (open || connecting))) return;
+        url = serverUrl;
+        clearTimeout(warmTimer);
+        warmTimer = setTimeout(() => !wantOpen && this.stop(), 60000);
+        if (!open && !connecting) sendOpen();
       },
       stop() {
         wantOpen = false;
         open = false;
+        connecting = false;
+        clearTimeout(retryTimer);
+        clearTimeout(warmTimer);
+        for (const p of pending.values()) p.reject(new Error("Connection closed"));
+        pending.clear();
         try {
           port?.postMessage({ cmd: "close" });
           port?.disconnect();
@@ -1121,50 +1286,64 @@
           if (!open || !port) return reject(new Error("Not connected"));
           const reqId = ++reqSeq;
           pending.set(reqId, { resolve, reject });
-          port.postMessage({ cmd: "send", data: JSON.stringify({ type, reqId, data }) });
+          try {
+            port.postMessage({ cmd: "send", data: JSON.stringify({ type, reqId, data }) });
+          } catch {
+            pending.delete(reqId);
+            return reject(new Error("Not connected"));
+          }
           setTimeout(() => pending.has(reqId) && (pending.delete(reqId), reject(new Error("Timed out"))), timeout);
         });
       },
       on(fn) {
         listeners.add(fn);
       },
-      waitOpen(ms = 8000) {
+      waitOpen(ms = 15000) {
         return new Promise((resolve, reject) => {
           if (open) return resolve();
-          const t = setTimeout(() => (listeners.delete(fn), reject(new Error("Could not reach the party server"))), ms);
+          const done = (fn2, v) => {
+            clearTimeout(t);
+            listeners.delete(fn);
+            fn2(v);
+          };
+          const t = setTimeout(() => done(reject, new Error("Could not reach the party server. Check your internet connection and try again.")), ms);
           const fn = (m) => {
-            if (m.type === "_open") {
-              clearTimeout(t);
-              listeners.delete(fn);
-              resolve();
-            }
+            if (m.type === "_open") done(resolve);
+            else if (m.type === "_dead") done(reject, new Error(RELOAD_PAGE));
           };
           listeners.add(fn);
         });
       },
     };
   })();
+  // the extension was updated or reloaded while this page was open
+  const RELOAD_PAGE = "NetParty was just updated. Reload this page and try again.";
 
   // ------------------------------------------------------------ clock sync
   // serverNow ≈ Date.now() + clock.offset
   const clock = {
     offset: 0,
     rtt: 0,
+    at: 0, // when the last sync finished
+    // 2.4: the samples go out together, so a sync takes one round trip instead of five. The answer that came
+    // back fastest is the most exact one (the least time for the delay to be lopsided).
     async sync(samples = 5) {
-      const offs = [], rtts = [];
-      for (let i = 0; i < samples; i++) {
+      const one = async () => {
         const t0 = Date.now();
         try {
           const { serverTime } = await net.request("time", {}, 3000);
           const t1 = Date.now();
-          rtts.push(t1 - t0);
-          offs.push(serverTime + (t1 - t0) / 2 - t1);
-        } catch {}
-        await sleep(60);
-      }
-      if (offs.length) {
-        this.offset = Math.round(median(offs));
-        this.rtt = Math.round(median(rtts));
+          return Number.isFinite(serverTime) ? { rtt: t1 - t0, off: serverTime + (t1 - t0) / 2 - t1 } : null;
+        } catch {
+          return null;
+        }
+      };
+      const got = (await Promise.all(Array.from({ length: samples }, one))).filter(Boolean);
+      if (got.length) {
+        got.sort((a, b) => a.rtt - b.rtt);
+        this.offset = Math.round(got[0].off);
+        this.rtt = Math.round(got[0].rtt);
+        this.at = Date.now();
       }
       log("clock offset", this.offset, "rtt", this.rtt);
     },
@@ -1200,6 +1379,9 @@
   const expectedPosition = (st) =>
     st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) * (Number.isFinite(st.rate) && st.rate > 0 ? st.rate : 1) : 0);
 
+  let prefsLoaded = false;
+  let prefsDone;
+  const prefsReady = new Promise((r) => (prefsDone = r));
   async function loadPrefs() {
     const p = await chrome.storage.sync.get(["serverUrl", "name", "avatar", "chatFont", "reactions", "theme", ...PREF_KEYS]);
     for (const k of PREF_KEYS) prefs[k] = p[k] !== false;
@@ -1242,8 +1424,27 @@
 
   async function ensureConnected() {
     net.start(party.serverUrl);
-    await net.waitOpen();
-    await clock.sync();
+    try {
+      await net.waitOpen();
+    } catch (e) {
+      if (!party.roomId) net.stop(); // don't keep retrying in the background for a party that never started
+      throw e;
+    }
+    // a sync from the last half minute (the warm-up below) is still good
+    if (Date.now() - clock.at > 30000) await clock.sync();
+  }
+  // 2.4: connect (and sync the clock) before the click lands, so Start doesn't wait for the server
+  let warming = null;
+  function warmUp() {
+    if (party.roomId || IS_ANY || warming) return;
+    warming = (async () => {
+      try {
+        if (!prefsLoaded) await prefsReady;
+        net.warm(party.serverUrl);
+        await net.waitOpen(10000);
+        if (Date.now() - clock.at > 30000) await clock.sync();
+      } catch {}
+    })().finally(() => setTimeout(() => (warming = null), 20000));
   }
 
   // Private reconnect secret for this browser tab (128 random bits): survives reloads and
@@ -1484,6 +1685,76 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     notice.t = setTimeout(() => box.classList.remove("s"), 5000);
   }
 
+  // ---- 2.4: "a new version is out" and "What's new" on the page (see background.js). The reminder comes back
+  // once a day until this browser runs the new version; during a party it's one line in the chat instead.
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  let newsHost = null;
+  function updateCard(info) {
+    newsHost?.remove();
+    newsHost = el("div", { id: "netparty-update" });
+    const sh = newsHost.attachShadow({ mode: "open" });
+    sh.append(
+      el("style", {}, `:host{all:initial}
+.c{position:fixed;right:24px;bottom:96px;z-index:2147483647;max-width:320px;padding:14px 16px;border-radius:14px;background:#1b1b22;color:#f3f3f6;
+border:1px solid #7c5cff;box-shadow:0 10px 34px #0009;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+b{display:block;font-size:15px;margin-bottom:4px} p{margin:0 0 10px;color:#c9c6d6;font-size:13px}
+.r{display:flex;gap:8px} button{all:unset;cursor:pointer;padding:8px 14px;border-radius:10px;font-weight:700;font-size:13px}
+.u{background:#6c4cf5;color:#fff}.u:hover{background:#7c5cff}.l{color:#c9c6d6}.l:hover{color:#fff}
+button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
+.c[data-theme=light]{background:#fff;color:#17151f;box-shadow:0 10px 34px #0003}.c[data-theme=light] p,.c[data-theme=light] .l{color:#5f5b6e}
+@media (prefers-color-scheme: light){.c:not([data-theme=dark]){background:#fff;color:#17151f;box-shadow:0 10px 34px #0003}.c:not([data-theme=dark]) p,.c:not([data-theme=dark]) .l{color:#5f5b6e}}`),
+    );
+    const box = el("div", { class: "c", role: "dialog", "aria-label": "NetParty update" });
+    if (ui.theme) box.dataset.theme = ui.theme;
+    const text = el("p", {}, info.update.notes?.length ? "New: " + info.update.notes.join(" · ") : "Update to get the latest fixes.");
+    const up = el("button", { class: "u", type: "button" }, info.update.ready ? "Restart to update" : "Update now");
+    const later = el("button", { class: "l", type: "button" }, "Later");
+    box.append(el("b", {}, `NetParty ${info.update.version} is out`), text, el("div", { class: "r" }, up, later));
+    sh.append(box);
+    for (const t of ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "keydown"]) newsHost.addEventListener(t, (e) => e.stopPropagation());
+    later.onclick = () => {
+      chrome.runtime.sendMessage({ cmd: "updateLater" }).catch(() => {});
+      newsHost.remove();
+    };
+    up.onclick = async () => {
+      up.textContent = "Updating…";
+      const r = await chrome.runtime.sendMessage({ cmd: "updateNow" }).catch(() => null);
+      if (r?.zip) {
+        text.textContent = "Unzip the download over your NetParty folder, then open the NetParty popup and press Reload NetParty.";
+        up.remove();
+        later.textContent = "OK";
+      } else if (r?.opened === "store") {
+        text.textContent = "Update NetParty on the store page that just opened.";
+        up.remove();
+        later.textContent = "OK";
+      } else if (r?.pending) {
+        text.textContent = "Downloading the update. It finishes by itself in a moment.";
+        up.remove();
+        later.textContent = "OK";
+      } else if (!r || r.error) up.textContent = "Try again";
+    };
+    (document.fullscreenElement && document.fullscreenElement.localName !== "video" ? document.fullscreenElement : document.body).append(newsHost);
+  }
+  let newsSaid = false;
+  async function pageNews() {
+    const info = await chrome.runtime.sendMessage({ cmd: "updateInfo" }).catch(() => null);
+    if (!info) return;
+    if (info.update) {
+      if (party.roomId) {
+        if (!newsSaid && !sessionStorage.getItem("netpartyUpdateSaid")) {
+          newsSaid = true;
+          sessionStorage.setItem("netpartyUpdateSaid", "1");
+          ui.system(`NetParty ${info.update.version} is out. Open the NetParty popup to update.`);
+        }
+      } else if (Date.now() - (info.nagAt || 0) > DAY_MS) updateCard(info);
+      return;
+    }
+    if (info.whatsNew && !info.whatsNew.pageShown && info.whatsNew.items?.length) {
+      chrome.runtime.sendMessage({ cmd: "whatsNewSeen", where: "page" }).catch(() => {});
+      notice(`updated to ${info.version}: ${info.whatsNew.items.join(" · ")}`);
+    }
+  }
+
   // decrypt the encrypted profiles we don't have yet ([pid, ct] pairs)
   let decryptWarned = false;
   let replaying = false; // true while onJoined decrypts the history (the warning waits for it)
@@ -1624,9 +1895,24 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   }
 
   let sendTimer = null;
+  let lateTimer = null;
   function onLocalPlayerEvent(kind) {
     if (HAS_ADS) adWatch(); // an ad that just ended: the resume events below are the site's, not ours
-    if (!party.roomId || Date.now() < suppressUntil || adPlaying()) return;
+    if (!party.roomId || adPlaying()) return;
+    if (Date.now() < suppressUntil) {
+      // 2.4: a play or pause while a party update is being applied may be the viewer's own: look again once
+      // the update is done, and if the player still disagrees with the party, it was (and the party follows it)
+      if (kind === "play" || kind === "pause") {
+        lastLocalAction = Date.now(); // the drift check leaves the player alone meanwhile
+        clearTimeout(lateTimer);
+        lateTimer = setTimeout(async () => {
+          if (!party.roomId || !party.state || Date.now() < suppressUntil || adPlaying()) return;
+          const st = await bridge.status();
+          if (st && (kind === "pause" ? !st.playing && party.state.playing : st.playing && !party.state.playing)) onLocalPlayerEvent(kind);
+        }, suppressUntil - Date.now() + 300);
+      }
+      return;
+    }
     if (IS_ANY && (anyMismatch || (kind === "seeked" && anyLive()))) return;
     lastLocalEvt = Date.now();
     // coalesce bursts (Netflix fires pause+seeked+play when scrubbing)
@@ -1763,6 +2049,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     partyLifecycle(vid);
     if (!party.roomId && (IS_YT ? !!vid : !vid)) startButtons.inject();
     else if ((IS_YT || IS_PRIME) && party.roomId) startButtons.clear();
+    startPill.update(vid);
     if (HAS_ADS) adWatch();
     if (vid) currentTitle();
     ui.mount();
@@ -1775,7 +2062,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   //   the party carries on.
   // * a pending invite or "Start a NetParty" request is acted on once a player opens.
   // ride out the site's own route changes (Prime's overlay player swaps its <video> between episodes)
-  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : IS_SL || IS_CR ? 4000 : 2500;
+  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : IS_SL || IS_CR || IS_TB || IS_DP || IS_HULU || IS_PP || IS_SZ ? 4000 : 2500;
   let offWatchSince = 0;
   let busy = false;
   let booted = false; // the boot sequence below decides first (reload / rejoin)
@@ -1797,10 +2084,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
   };
   async function waitForPlayer(ms = 20000) {
     if (IS_ANY) return true; // joining doesn't wait for the video; anyV attaches it when it shows up
-    for (let t = 0; t < ms; t += 500) {
+    for (let t = 0; t < ms; t += 250) {
       if (!videoIdFromUrl()) return false;
       if (await bridge.status()) return true;
-      await sleep(500);
+      await sleep(250);
     }
     return !!(await bridge.status());
   }
@@ -1847,7 +2134,11 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     busy = true;
     (async () => {
       try {
+        // 2.4: connect to the server while the player loads, not after
+        const conn = ensureConnected();
+        conn.catch(() => {});
         await waitForPlayer();
+        await conn;
         if (invite) {
           sessionStorage.removeItem("netpartyInvite");
           await joinParty(String(invite.code || invite));
@@ -1858,6 +2149,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         }
       } catch (e) {
         sessionStorage.removeItem("netpartyRoom");
+        if (!party.roomId) net.stop();
         notice((invite ? "Couldn't join: " : "Couldn't start the party: ") + e.message);
       } finally {
         busy = false;
@@ -1893,12 +2185,35 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         e.stopPropagation();
         e.stopImmediatePropagation();
         sessionStorage.setItem("netpartyStart", String(Date.now()));
+        warmUp();
         onclick();
       };
       b.addEventListener("click", go, true);
       for (const t of ["mousedown", "pointerdown", "mouseup", "pointerup"]) b.addEventListener(t, (e) => e.stopPropagation());
+      // 2.4: a pointer on the button is a good sign a party is coming: connect ahead of the click
+      b.addEventListener("pointerenter", warmUp);
+      b.addEventListener("focus", warmUp);
       return b;
     }
+    // 2.4: a button we placed earlier that the site has since hidden or moved away from (single-page sites
+    // keep old pages around, hidden) doesn't count, and goes
+    function liveButton() {
+      let live = null;
+      for (const n of document.querySelectorAll(`[${MARK}]`)) {
+        if (n.hasAttribute("data-netparty-pill")) continue;
+        // rendered at all (a hidden old page renders nothing); scrolled out of view still counts
+        const shown = n.getClientRects().length > 0 && getComputedStyle(n).visibility !== "hidden";
+        if (!live && shown) live = n;
+        else n.remove();
+      }
+      return live;
+    }
+    // the biggest candidate on screen first, then the biggest one further down
+    const byPlace = (x, y) => {
+      const a = face(x).getBoundingClientRect(), b = face(y).getBoundingClientRect();
+      const ia = a.top < innerHeight ? 0 : 1, ib = b.top < innerHeight ? 0 : 1;
+      return ia - ib || b.width * b.height - a.width * a.height;
+    };
     const visible = (n) => {
       const r = n.getBoundingClientRect();
       if (r.width < 40 || r.height < 20 || r.bottom < 0 || r.top > innerHeight * 1.5) return false;
@@ -1962,17 +2277,14 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         const f = face(n);
         if (!visible(f)) return false;
         const r = f.getBoundingClientRect();
-        if (r.width < 110 || r.height < 32 || r.top > innerHeight) return false;
+        if (r.width < 110 || r.height < 32) return false;
         const href = n.closest("a")?.getAttribute("href") || "";
         return re.test(label(f)) || /\/\d{5,}\/watch/.test(href) && f.matches("button");
       });
       // biggest one wins; one per page
-      cands.sort((x, y) => {
-        const a = face(x).getBoundingClientRect(), b = face(y).getBoundingClientRect();
-        return b.width * b.height - a.width * a.height;
-      });
+      cands.sort(byPlace);
       const c = cands[0];
-      if (!c || document.querySelector(`[${MARK}]`)) return;
+      if (!c || liveButton()) return;
       const f = face(c);
       const btn = makeButton(f, () => {
         const a = c.closest("a");
@@ -1987,7 +2299,7 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     function prime() {
       // the title page's big Play / Resume / Watch now button (opens the overlay player). Only on a
       // title's own page: that's where the party gets its title id.
-      if (!primeTitlePath() || document.querySelector(`[${MARK}]`)) return;
+      if (!primeTitlePath() || liveButton()) return;
       const re = /^(play|resume|continue|watch|start watching)\b/i;
       const cands = [
         ...new Set([
@@ -1999,13 +2311,10 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         const f = face(n);
         if (!visible(f)) return false;
         const r = f.getBoundingClientRect();
-        if (r.width < 80 || r.height < 28 || r.top > innerHeight) return false;
+        if (r.width < 80 || r.height < 28) return false;
         return re.test(label(f)) || /play/i.test((n.getAttribute("data-automation-id") || "") + (n.getAttribute("data-testid") || ""));
       });
-      cands.sort((x, y) => {
-        const a = face(x).getBoundingClientRect(), b = face(y).getBoundingClientRect();
-        return b.width * b.height - a.width * a.height;
-      });
+      cands.sort(byPlace);
       const c = cands[0];
       if (!c) return;
       const f = face(c);
@@ -2014,10 +2323,20 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     function youtube() {
       // already on the watch page: the button sits in the actions row under the video
       // (before Like/Share) and starts the party right away
-      if (!videoIdFromUrl() || document.querySelector(`[${MARK}]`)) return;
-      const row = [...document.querySelectorAll("ytd-watch-metadata #top-level-buttons-computed, #above-the-fold #top-level-buttons-computed, #top-level-buttons-computed")].find(
-        (n) => n.getBoundingClientRect().width > 0,
-      );
+      if (!videoIdFromUrl() || liveButton()) return;
+      // 2.4: YouTube's newer layouts keep the Like / Share row elsewhere; any of these, as long as it's showing
+      // (in this order: the first that matches wins)
+      const shownRow = (n) => n.getBoundingClientRect().width > 0 && !n.closest("[hidden]");
+      let row = null;
+      for (const sel of [
+        "ytd-watch-metadata #top-level-buttons-computed",
+        "#above-the-fold #top-level-buttons-computed",
+        "#top-level-buttons-computed",
+        "ytd-watch-metadata #actions-inner #menu > ytd-menu-renderer",
+        "ytd-watch-metadata #actions-inner",
+        "ytd-watch-metadata #actions",
+      ])
+        if ((row = [...document.querySelectorAll(sel)].find(shownRow))) break;
       if (!row) return;
       const like = [...row.querySelectorAll("button")].find((b) => visible(b)) || row;
       const btn = makeButton(like, () => setTimeout(watchPlayer, 0));
@@ -2028,8 +2347,9 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
     }
     return {
       inject() {
-        // 2.2 services (HBO Max, Crunchyroll, SonyLIV): no buttons on their pages yet; the popup starts parties there
-        if (IS_HBO || IS_CR || IS_SL) return;
+        // 2.2 and 2.4 services: no buttons on their title pages; the player's own "Start a NetParty" (startPill)
+        // and the popup start parties there
+        if (!IS_NETFLIX && !IS_YT && !IS_PRIME && !IS_HOTSTAR) return;
         try {
           IS_YT ? youtube() : IS_PRIME ? prime() : IS_HOTSTAR ? hotstar() : netflix();
         } catch (e) {
@@ -2040,6 +2360,100 @@ font:600 14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:
         for (const n of document.querySelectorAll(`[${MARK}]`)) n.remove();
       },
     };
+  })();
+
+  // ---- 2.4: "Start a NetParty" on the player itself. Every service's watch page gets it (the buttons above
+  // depend on each site's title-page layout, which changes): a small button at the top right that shows
+  // while you move the mouse, like the player's own controls. × hides it for this title.
+  const startPill = (() => {
+    let host = null;
+    let box = null;
+    let btn = null;
+    let hideT = 0;
+    let shownFor = null; // the title it last appeared for
+    let dismissed = null;
+    let wanted = false;
+    const SHOW_MS = 3500;
+    function build() {
+      host = el("div", { id: "netparty-start-pill", "data-netparty-start": "1", "data-netparty-pill": "1" });
+      const sh = host.attachShadow({ mode: "open" });
+      sh.append(
+        el("style", {}, `:host{all:initial}
+.p{position:fixed;top:76px;right:24px;z-index:2147483646;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;
+background:#15131ccc;box-shadow:0 6px 24px #0007;backdrop-filter:blur(6px);opacity:0;transform:translateY(-6px);transition:opacity .2s,transform .2s;pointer-events:none;
+font:600 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.p.s{opacity:1;transform:none;pointer-events:auto}
+button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;border-radius:999px;color:#fff}
+.go{padding:10px 16px;background:linear-gradient(135deg,#7c5cff,#b05cff)}.go:hover{filter:brightness(1.1)}.go[disabled]{opacity:.7;cursor:default}
+.x{width:28px;height:28px;justify-content:center;color:#cfcbe0;font-size:16px}.x:hover{color:#fff;background:#ffffff1a}
+button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
+svg{width:18px;height:18px;flex:none}
+@media (prefers-reduced-motion: reduce){.p{transition:none}}`),
+      );
+      box = el("div", { class: "p", role: "group", "aria-label": "NetParty" });
+      btn = el("button", { class: "go", type: "button", title: "Start a watch party for what's playing" });
+      const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("aria-hidden", "true");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("fill", "currentColor");
+      path.setAttribute("d", "M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1a4.2 4.2 0 0 1 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z");
+      icon.append(path);
+      btn.append(icon, el("span", {}, "Start a NetParty"));
+      const x = el("button", { class: "x", type: "button", title: "Hide", "aria-label": "Hide the Start a NetParty button for this title" }, "×");
+      box.append(btn, x);
+      sh.append(box);
+      btn.addEventListener("pointerenter", warmUp);
+      btn.addEventListener("focus", warmUp);
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (busy || party.roomId) return;
+        sessionStorage.setItem("netpartyStart", String(Date.now()));
+        warmUp();
+        btn.disabled = true;
+        btn.lastChild.textContent = "Starting…";
+        setTimeout(watchPlayer, 0);
+      });
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dismissed = videoIdFromUrl();
+        update(null);
+      });
+      // clicks and keys on it are ours, never the player's (no pause, no fullscreen)
+      for (const t of ["pointerdown", "pointerup", "mousedown", "mouseup", "dblclick", "keydown"]) host.addEventListener(t, (e) => e.stopPropagation());
+    }
+    function flash(ms = SHOW_MS) {
+      if (!wanted || !box) return;
+      box.classList.add("s");
+      clearTimeout(hideT);
+      hideT = setTimeout(() => !box.matches(":hover") && !box.contains(host.shadowRoot.activeElement) && box.classList.remove("s"), ms);
+    }
+    addEventListener("pointermove", () => wanted && flash(), { passive: true, capture: true });
+    function update(vid) {
+      const playerUp = !!(mainVideo() || (IS_CR && crFrameEl()));
+      wanted = !!vid && !party.roomId && !IS_ANY && vid !== dismissed && playerUp && !(IS_YT && document.querySelector("[data-netparty-start]:not([data-netparty-pill])"));
+      if (!wanted) {
+        if (host) {
+          box.classList.remove("s");
+          if ((party.roomId || !busy) && host.isConnected) host.remove();
+        }
+        if (!vid) shownFor = null;
+        return;
+      }
+      if (!host) build();
+      const fs = document.fullscreenElement;
+      const parent = (fs && fs.localName !== "video" && fs.localName !== "iframe" ? fs : null) || document.body;
+      if (parent && host.parentElement !== parent) parent.append(host);
+      if (!busy && btn.disabled) {
+        btn.disabled = false;
+        btn.lastChild.textContent = "Start a NetParty";
+      }
+      if (shownFor !== vid) {
+        shownFor = vid;
+        flash(8000); // a new title: show it for a moment, then only on mouse moves
+      }
+    }
+    return { update };
   })();
 
   let watchQueued = false;
@@ -5741,7 +6155,7 @@ html.np-docked [data-np-shrink] {
       prime: [],
     };
     function playerBox() {
-      for (const sel of (IS_HOTSTAR || IS_PRIME || IS_HBO || IS_CR || IS_SL ? [] : PLAYER_BOX.netflix)) {
+      for (const sel of (IS_NETFLIX ? PLAYER_BOX.netflix : [])) {
         const n = document.querySelector(sel);
         if (n && n.getBoundingClientRect().width > 0) return n;
       }
@@ -5750,7 +6164,9 @@ html.np-docked [data-np-shrink] {
       // Crunchyroll: the player is an iframe (its <video> is in another document)
       const v = mainVideo() || (IS_CR ? crFrameEl() : null);
       let box = null;
-      for (let n = v?.parentElement; n && n !== top && n !== document.documentElement; n = n.parentElement) {
+      // (out through a shadow root to its host: Disney+'s player keeps its <video> in one)
+      const up = (n) => n.parentElement || (n.parentNode instanceof ShadowRoot ? n.parentNode.host : null);
+      for (let n = v && up(v); n && n !== top && n !== document.documentElement; n = up(n)) {
         if (n === host) break;
         const r = n.getBoundingClientRect();
         const wide = n.hasAttribute("data-np-shrink") || (r.width >= innerWidth - 2 && r.left <= 1);
@@ -6696,8 +7112,20 @@ html.np-docked [data-np-shrink] {
               if (r.none) throw new Error(NO_VIDEO);
               return { ...r, invite: inviteLink() };
             }
-            await createParty();
+            // 2.4: one party per tab. A start already under way (the page's own button, a reload) finishes first.
+            for (let t = 0; busy && t < 30000; t += 200) await sleep(200);
+            if (party.roomId) return { ok: true, invite: inviteLink() };
+            busy = true;
+            try {
+              await createParty();
+            } finally {
+              busy = false;
+            }
             return { ok: true, invite: inviteLink() };
+          case "warm":
+            // 2.4: the popup opened on a title: connect now, so "Start a party" is quick
+            warmUp();
+            return { ok: true };
           case "findVideo": {
             // the popup allowed a cross-origin player: look again (the agent says hello once it's in)
             if (!IS_ANY) return { ok: true };
@@ -6739,6 +7167,7 @@ html.np-docked [data-np-shrink] {
             return { ok: true };
         }
       } catch (e) {
+        if ((msg.cmd === "create" || msg.cmd === "join") && !party.roomId && !busy) net.stop();
         return { error: e.message };
       }
     })().then(sendResponse);
@@ -6747,7 +7176,15 @@ html.np-docked [data-np-shrink] {
 
   // ------------------------------------------------------------- boot
   (async () => {
-    await loadPrefs();
+    try {
+      await loadPrefs();
+    } finally {
+      prefsLoaded = true;
+      prefsDone();
+    }
+    // 2.4: a party is about to start or be joined on this page (an invite, or "Start a NetParty" just before a
+    // full page load): connect now, while the player loads
+    if (sessionStorage.getItem("netpartyStart") || sessionStorage.getItem("netpartyInvite")) warmUp();
     const params = new URLSearchParams(location.search);
     if (params.has("npParty") || params.has("npStart")) {
       params.delete("npParty");
@@ -6794,5 +7231,5 @@ html.np-docked [data-np-shrink] {
       busy = false;
       booted = true;
     }
-  })();
+  })().finally(() => setTimeout(() => pageNews().catch(() => {}), 3000));
 })();
