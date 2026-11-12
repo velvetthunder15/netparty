@@ -366,6 +366,8 @@
       .x-plat__ic img[src="primevideo.svg"] { width: 27px; }
       .x-plat__ic img[src="sonyliv.webp"] { border-radius: 5px; }
       .x-plat--txt { padding: 0 16px; }
+      .x-works--live { margin-top: 12px; }
+      .x-livedot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 0 3px rgba(255, 77, 94, .22); vertical-align: 1px; }
       @media (max-width: 600px) { .x-works__lab { flex-basis: 100%; text-align: center; margin: 0 0 2px; } }
       @media (max-width: 420px) {
         .x-works { gap: 6px; }
@@ -718,6 +720,13 @@
             <li class="x-chip x-plat"><span class="x-plat__ic"><img src="tubi.svg" width="22" height="22" alt="" /></span>Tubi</li>
             <li class="x-chip x-chip--dash"><a class="x-chip__lnk" href="#faq-other-sites">+ Other video sites</a></li>
           </ul>
+          <ul class="x-works x-works--live x-rv" aria-label="Live streams">
+            <li class="x-works__lab" aria-hidden="true"><span class="x-livedot" aria-hidden="true"></span>Live streams</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="youtube.svg" width="22" height="22" alt="" /></span>YouTube Live</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="twitch.svg" width="22" height="22" alt="" /></span>Twitch</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="kick.svg" width="22" height="22" alt="" /></span>Kick</li>
+            <li class="x-chip x-plat"><span class="x-plat__ic"><img src="rumble.svg" width="22" height="22" alt="" /></span>Rumble</li>
+          </ul>
           <div class="x-cta x-rv">
             <a class="x-btn x-btn--primary" href="#install" data-install>Add to browser, free</a>
             <a class="x-btn x-btn--ghost" href="#how">See how it works</a>
@@ -1018,7 +1027,8 @@
           <div class="x-faq">
             <details class="x-rv" open><summary>Is NetParty free?</summary><p>Yes. NetParty is free with no account or sign-up. Everyone just needs their own subscription to the service you're watching.</p></details>
             <details class="x-rv"><summary>Does it stream the video to my friends?</summary><p>No. Each person plays the title from their own streaming account. NetParty only syncs play, pause, seek and the episode, plus your chat.</p></details>
-            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ and Tubi, plus videos on other sites you choose, on a computer. It works in Google Chrome, Brave and other Chromium browsers, or in Firefox and Microsoft Edge from their official add-on stores. Opera is coming soon. Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>Which sites and browsers work?</summary><p>Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ and Tubi, live streams on YouTube, Twitch, Kick and Rumble, plus videos on other sites you choose, on a computer. It works in Google Chrome, Brave and other Chromium browsers, or in Firefox and Microsoft Edge from their official add-on stores. Opera is coming soon. Phones and TVs aren't supported.</p></details>
+            <details class="x-rv"><summary>How do live streams stay in sync?</summary><p>A live stream has no shared timeline, so NetParty keeps everyone the same distance behind live: friends who are ahead wait a moment for the one furthest behind, and on YouTube, where you can rewind a stream, a jump back moves everyone. Play and pause work as usual, and Go live takes the whole party to now. It works on YouTube, Twitch, Kick and Rumble.</p></details>
             <details class="x-rv" id="faq-other-sites"><summary>Does it work on other video sites?</summary><p>Yes, on most sites that play video in the browser. Open the video, click the NetParty icon and press Sync this tab. Your friends open the invite link, press Open the video, then click the NetParty icon on that page and press Join party on this tab. NetParty only runs on a site after you click, or on sites you set to Always allow. The page address is shared with your party end-to-end encrypted. Videos drawn without a video player, such as some games, can't be synced.</p></details>
             <details class="x-rv"><summary>How do voice and video chat work?</summary><p>Click Join voice chat in the panel and allow your microphone, then press the camera button if you want video. Audio and video travel directly between the people in the party, and the connection setup is encrypted too.</p></details>
             <details class="x-rv"><summary>Does voice chat work on any network?</summary><p>Yes. Voice and video connect directly between friends when your networks allow it. On mobile data, college or office Wi-Fi and other strict networks, they go through an encrypted relay instead, so calls still connect.</p></details>
@@ -1046,7 +1056,7 @@
               <div class="x-pane" role="tabpanel" id="x-pane-chrome" aria-labelledby="x-tab-chrome" tabindex="0">
                 <p class="x-pane__name">Chrome</p>
                 <a class="x-btn x-btn--primary" href="/download/netparty-extension.zip" download><svg class="x-br" aria-hidden="true"><use href="#br-chrome" /></svg><span>Download for Chrome<span class="x-free"> (free)</span></span></a>
-                <p><span class="x-ver">Version 2.4.0</span></p>
+                <p><span class="x-ver">Version 2.5.0</span></p>
                 <p class="x-note">Chrome Web Store listing coming soon. For now, install the beta in 30 seconds:</p>
                 <ol class="x-beta">
                   <li><b>1</b>Unzip</li>
@@ -1093,7 +1103,7 @@
         <div class="x-foot__top">
           <div>
             <a class="x-logo" href="#top"><svg aria-hidden="true"><use href="#np-mark" /></svg>NetParty</a>
-            <p class="x-foot__tag">Free watch parties for Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi and most other video sites.</p>
+            <p class="x-foot__tag">Free watch parties for Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi, live streams on Twitch, Kick and Rumble, and most other video sites.</p>
             <a class="x-bmc" href="https://buymeacoffee.com/chiragrasal" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M17 9h1.5a2.5 2.5 0 0 1 0 5H17" /><path d="M8 2.5c-.6.8-.6 1.7 0 2.5M12 2.5c-.6.8-.6 1.7 0 2.5" /><path d="M5 21h11" /></svg>Buy me a coffee</a>
           </div>
           <nav class="x-foot__links" aria-label="Footer">
@@ -1105,7 +1115,7 @@
             <a class="x-gh" href="https://github.com/velvetthunder15/netparty" target="_blank" rel="noopener" aria-label="NetParty on GitHub"><svg aria-hidden="true"><use href="#gh-mark" /></svg></a>
           </nav>
         </div>
-        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, Amazon, YouTube, Disney, Hulu, HBO Max, Paramount, Crunchyroll, SonyLIV, JioHotstar, STARZ or Tubi. Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ and Tubi are trademarks of their respective owners. Avatars from Microsoft Fluent Emoji (MIT License).</p>
+        <p class="x-foot__legal">© 2026 NetParty. Not affiliated with Netflix, Amazon, YouTube, Disney, Hulu, HBO Max, Paramount, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi, Twitch, Kick or Rumble. Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi, Twitch, Kick and Rumble are trademarks of their respective owners. Avatars from Microsoft Fluent Emoji (MIT License).</p>
       </footer>
     </div>
     <script src="hark.js"></script>

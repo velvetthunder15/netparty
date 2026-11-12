@@ -1,0 +1,5 @@
+NetParty 2.5.0
+
+- Watch live streams together on YouTube, Twitch, Kick and Rumble.
+- Everyone stays the same few seconds behind live; friends ahead wait a moment for the rest.
+- Go live takes the whole party to now. Pause and play are shared, and so are rewinds on YouTube.

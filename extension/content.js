@@ -45,6 +45,14 @@
   const PP_RE = /^pp:(shows|movies)\/[A-Za-z0-9_-]{8,64}$/;
   const SZ_RE = /^sz:[a-z]{2}\/[a-z]{2}(-[a-z]{2})?\/\d{3,12}$/;
   const TB_RE = /^tb:(movies|tv-shows)\/\d{3,12}(\/[a-z0-9-]{1,120})?$/;
+  // 2.5: live streams. "yl:" + a YouTube video id while it's live (the same id as "yt:", so a stream that ends
+  // stays the same party), "tw:" + a Twitch channel (www.twitch.tv/<channel>), "kk:" + a Kick channel
+  // (kick.com/<channel>), "rl:" + a Rumble video while it's live and "rb:" + a Rumble video
+  // (rumble.com/<id>-<slug>.html). In a live party the position is how far behind the live edge the party
+  // watches (ms), not a time in the video: every viewer's stream starts at a different point.
+  const TW_RE = /^tw:[a-z0-9_]{2,25}$/;
+  const KK_RE = /^kk:[a-z0-9_-]{2,25}$/;
+  const RB_RE = /^r[bl]:v[a-z0-9]{4,10}-[a-z0-9-]{1,200}$/;
   function validVideoId(v) {
     if (typeof v !== "string" || !v || v.length > 512) return false;
     if (/^\d{1,12}$/.test(v)) return true;
@@ -59,6 +67,10 @@
     if (v.startsWith("pp:")) return PP_RE.test(v);
     if (v.startsWith("sz:")) return SZ_RE.test(v);
     if (v.startsWith("tb:")) return TB_RE.test(v);
+    if (v.startsWith("yl:")) return /^yl:[A-Za-z0-9_-]{11}$/.test(v);
+    if (v.startsWith("tw:")) return TW_RE.test(v) && !TW_PAGES.has(v.slice(3));
+    if (v.startsWith("kk:")) return KK_RE.test(v) && !KK_PAGES.has(v.slice(3));
+    if (v.startsWith("rb:") || v.startsWith("rl:")) return RB_RE.test(v);
     const pv = PV_RE.exec(v);
     if (pv) return pv[1] === "www.primevideo.com" ? !pv[2].startsWith("/gp/") : PRIME_HOSTS.includes(pv[1]) && pv[2].startsWith("/gp/video/detail/");
     return false;
@@ -80,14 +92,22 @@
   const IS_SZ = !IS_ANY && location.hostname === "www.starz.com";
   const IS_TB = !IS_ANY && (location.hostname === "tubitv.com" || location.hostname === "www.tubitv.com");
   const IS_NEW = IS_HULU || IS_DP || IS_PP || IS_SZ || IS_TB;
-  const IS_NETFLIX = !IS_ANY && !IS_HOTSTAR && !IS_YT && !IS_PRIME && !IS_HBO && !IS_CR && !IS_SL && !IS_NEW;
+  // 2.5: Twitch, Kick, Rumble
+  const IS_TW = !IS_ANY && location.hostname === "www.twitch.tv";
+  const IS_KK = !IS_ANY && (location.hostname === "kick.com" || location.hostname === "www.kick.com");
+  const IS_RB = !IS_ANY && location.hostname === "rumble.com";
+  const IS_STREAM = IS_TW || IS_KK || IS_RB;
+  const IS_NETFLIX = !IS_ANY && !IS_HOTSTAR && !IS_YT && !IS_PRIME && !IS_HBO && !IS_CR && !IS_SL && !IS_NEW && !IS_STREAM;
   const SITE_NAME = IS_ANY
     ? "this page"
     : IS_HOTSTAR ? "JioHotstar" : IS_YT ? "YouTube" : IS_PRIME ? "Prime Video" : IS_HBO ? "HBO Max" : IS_CR ? "Crunchyroll" : IS_SL ? "SonyLIV"
-      : IS_HULU ? "Hulu" : IS_DP ? "Disney+" : IS_PP ? "Paramount+" : IS_SZ ? "STARZ" : IS_TB ? "Tubi" : "Netflix";
+      : IS_HULU ? "Hulu" : IS_DP ? "Disney+" : IS_PP ? "Paramount+" : IS_SZ ? "STARZ" : IS_TB ? "Tubi"
+        : IS_TW ? "Twitch" : IS_KK ? "Kick" : IS_RB ? "Rumble" : "Netflix";
   // sites whose <video> NetParty drives straight from here (no page script): YouTube, Prime Video, HBO Max, SonyLIV,
-  // and the 2.4 services
-  const DIRECT = IS_YT || IS_PRIME || IS_HBO || IS_SL || IS_NEW;
+  // and the 2.4 and 2.5 services
+  const DIRECT = IS_YT || IS_PRIME || IS_HBO || IS_SL || IS_NEW || IS_STREAM;
+  // 2.5: a live party (by its video id), and is this tab's party one
+  const isLiveId = (v) => typeof v === "string" && /^(yl|tw|kk|rl):/.test(v) && validVideoId(v);
   // every <video>; on the 2.4 services also the ones inside a player's open shadow root (Disney+'s web player
   // is a custom element), looked for only when the page itself has none
   const allVideos = () => {
@@ -151,6 +171,67 @@
   // SonyLIV: title pages and the player share one address (the player adds ?watch=true); a page counts as the
   // player while it says so in the address or a big <video> is showing
   const bigVideo = () => shownVideos().some((v) => v.getBoundingClientRect().width >= innerWidth * 0.6);
+  // 2.5: Twitch's and Kick's own pages (not channels), and the stream's <video>: the player's (Twitch also plays
+  // small previews in its side bar and a mini player on other pages), at least 320 x 180 on screen
+  const TW_PAGES = new Set(("directory videos settings search downloads jobs turbo prime p subscriptions inventory wallet friends drops login signup " +
+    "moderator popout embed broadcast u legal store messages notifications privacy team teams event events collections clips following " +
+    "bits payments partner creatorcamp security safety user products help").split(" "));
+  const KK_PAGES = new Set(("browse categories category following search dashboard settings terms-of-service privacy-policy community-guidelines " +
+    "dmca-policy about careers help video videos clips signup login subscriptions popout embed verify cookies-policy").split(" "));
+  function streamVideo() {
+    const pool = IS_TW ? [...document.querySelectorAll('[data-a-target="video-player"] video')] : shownVideos();
+    const v = largest(pool.filter((x) => {
+      const r = x.getBoundingClientRect();
+      return r.width >= 320 && r.height >= 180;
+    }));
+    return v || null;
+  }
+  // 2.5: is the YouTube or Rumble video on this page live? Sticky once seen: the player says so (YouTube's LIVE badge),
+  // the <video> has no end (duration Infinity), or its end keeps moving out about as fast as time passes (a live
+  // playlist sliding along). A video whose end stays put for 8 s isn't live.
+  const ytMaybeLive = () => {
+    const f = document.querySelector("ytd-watch-flexy");
+    if (f && [...f.attributes].some((a) => a.name.startsWith("live-chat-present"))) return true;
+    if (document.querySelector('meta[itemprop="isLiveBroadcast"]')?.content === "True") return true;
+    const v = document.querySelector("#movie_player video");
+    return !!v && (v.duration === Infinity || !(v.duration > 0));
+  };
+  const liveSense = (() => {
+    const verdict = new Map(); // video id -> true (live) / false (not live, for now)
+    let id = null;
+    let rec = null; // { el, src, d, t }
+    const ytHint = () => {
+      const b = document.querySelector("#movie_player .ytp-live-badge");
+      const shown = !!b && b.getBoundingClientRect().width > 0 && getComputedStyle(b).display !== "none";
+      return shown || !!document.querySelector("#movie_player .ytp-time-display.ytp-live");
+    };
+    function sample() {
+      if (!id || verdict.get(id) === true || adPlaying()) return;
+      const x = IS_YT ? document.querySelector("#movie_player video.html5-main-video") || document.querySelector("#movie_player video") : streamVideo();
+      if ((IS_YT && ytHint()) || x?.duration === Infinity) return void verdict.set(id, true);
+      if (!x || !(x.duration > 0) || !Number.isFinite(x.duration)) return;
+      const now = Date.now();
+      if (!rec || rec.el !== x || rec.src !== x.currentSrc || rec.id !== id) return void (rec = { el: x, src: x.currentSrc, d: x.duration, t: now, id });
+      const grew = x.duration - rec.d, dt = (now - rec.t) / 1000;
+      if (grew < 0 || grew > dt * 2 + 1) return void (rec = { el: x, src: x.currentSrc, d: x.duration, t: now, id }); // another video
+      if (dt < 8) return;
+      if (grew >= 2 && grew >= dt * 0.4) verdict.set(id, true);
+      else if (!verdict.has(id)) verdict.set(id, false);
+      rec = { el: x, src: x.currentSrc, d: x.duration, t: now, id };
+    }
+    if (IS_YT || IS_RB) setInterval(sample, 1000);
+    return {
+      live(v) {
+        if (v !== id) {
+          id = v;
+          rec = null;
+        }
+        return verdict.get(v) === true;
+      },
+      // not decided yet (only while a page is still being looked at)
+      pending: (v) => !verdict.has(v),
+    };
+  })();
   const slPlayerOpen = () => new URLSearchParams(location.search).get("watch") === "true" || bigVideo();
   // Crunchyroll: the episode's player is an iframe from static.crunchyroll.com (its "vilos" player); a newer
   // player may put the <video> in the page itself. Both work.
@@ -207,9 +288,36 @@
       return v && validVideoId(v) && bigVideo() ? v : null;
     }
     if (IS_YT) {
-      if (location.pathname !== "/watch") return null; // Shorts, live chat pop-outs etc. aren't supported
-      const v = new URLSearchParams(location.search).get("v");
-      return v && /^[\w-]{11}$/.test(v) ? "yt:" + v : null;
+      // /watch?v=<id>; 2.5: also live streams' own addresses, /live/<id> and a channel's /@name/live (that one names
+      // no video: the watch page that's showing says which). Shorts, live chat pop-outs etc. aren't supported.
+      const p = location.pathname;
+      let v = null;
+      if (p === "/watch") v = new URLSearchParams(location.search).get("v");
+      else if (/^\/live\/[\w-]{11}\/?$/.test(p)) v = p.split("/")[2];
+      else if (/^\/(@[\w.-]{1,100}|channel\/[\w-]{10,40}|c\/[\w.-]{1,100}|user\/[\w.-]{1,100})\/live\/?$/.test(p)) {
+        const f = document.querySelector("ytd-watch-flexy");
+        if (f && !f.hasAttribute("hidden") && f.getBoundingClientRect().width > 0) v = f.getAttribute("video-id");
+      }
+      if (!v || !/^[\w-]{11}$/.test(v)) return null;
+      return (liveSense.live(v) ? "yl:" : "yt:") + v;
+    }
+    if (IS_TW) {
+      // a channel's own page while its stream plays (the channel's other pages and Twitch's own pages aren't)
+      const m = location.pathname.match(/^\/([A-Za-z0-9_]{2,25})\/?$/);
+      const ch = m && m[1].toLowerCase();
+      if (!ch || TW_PAGES.has(ch) || !streamVideo()) return null;
+      return "tw:" + ch;
+    }
+    if (IS_KK) {
+      const m = location.pathname.match(/^\/([A-Za-z0-9_-]{2,25})\/?$/);
+      const ch = m && m[1].toLowerCase();
+      if (!ch || KK_PAGES.has(ch) || !streamVideo()) return null;
+      return "kk:" + ch;
+    }
+    if (IS_RB) {
+      const m = location.pathname.match(/^\/(v[a-z0-9]{4,10}-[a-z0-9-]{1,200})\.html$/);
+      if (!m || !streamVideo()) return null;
+      return (liveSense.live(m[1]) ? "rl:" : "rb:") + m[1];
     }
     if (!IS_HOTSTAR) return (location.pathname.match(/^\/watch\/(\d+)/) || [])[1] || null;
     const path = location.pathname.replace(/\/+$/, "");
@@ -227,7 +335,9 @@
             ? "sl:" + (v.match(/(\d+)$/) || [])[1]
             : v && v.startsWith("tb:")
               ? v.split("/").slice(0, 2).join("/") // the slug doesn't matter
-              : v;
+              : v && /^(yl|rl):/.test(v)
+                ? (v[0] === "y" ? "yt:" : "rb:") + v.slice(3) // 2.5: live or not, the same video
+                : v;
   const sameVideo = (a, b) => (IS_ANY ? isAv(b) : videoKey(a) === videoKey(b));
   // null for anything that isn't a known title shape (a party member can't send us elsewhere)
   const watchUrl = (videoId, roomId) => {
@@ -250,10 +360,14 @@
       return `https://www.starz.com/${cc}/${lang}/play/${id}?npParty=${roomId}`;
     }
     if (videoId.startsWith("tb:")) return `https://tubitv.com/${videoId.slice(3)}?start=true&npParty=${roomId}`;
+    if (videoId.startsWith("yl:")) return `https://www.youtube.com/watch?v=${videoId.slice(3)}&npParty=${roomId}`;
+    if (videoId.startsWith("tw:")) return `https://www.twitch.tv/${videoId.slice(3)}?npParty=${roomId}`;
+    if (videoId.startsWith("kk:")) return `https://kick.com/${videoId.slice(3)}?npParty=${roomId}`;
+    if (videoId.startsWith("rb:") || videoId.startsWith("rl:")) return `https://rumble.com/${videoId.slice(3)}.html?npParty=${roomId}`;
     return (videoId.startsWith("hs:") ? "https://www.hotstar.com" + videoId.slice(3) : `https://www.netflix.com/watch/${videoId}`) + `?npParty=${roomId}`;
   };
   // (STARZ has no ad plans)
-  const HAS_ADS = IS_YT || IS_PRIME || IS_HBO || IS_CR || IS_SL || IS_HULU || IS_DP || IS_PP || IS_TB;
+  const HAS_ADS = IS_YT || IS_PRIME || IS_HBO || IS_CR || IS_SL || IS_HULU || IS_DP || IS_PP || IS_TB || IS_STREAM;
   // an ad marker that is on screen and says something (players keep empty ad containers around)
   const shownAd = (sel, root = document) =>
     [...root.querySelectorAll(sel)].some((n) => {
@@ -274,6 +388,7 @@
   const NEW_AD =
     '[class*="AdBadge"], [class*="AdCountdown"], [class*="AdUnitView"], [class*="AdTimer"], [class~="ad-badge" i], [class~="ad-countdown" i], ' +
     '[class~="ad-timer" i], [class~="ad-indicator" i], [data-testid*="ad-badge" i], [data-testid*="ad-countdown" i], [data-test-id*="ad-countdown" i]';
+  const TW_AD = '[data-a-target="video-ad-label"], [data-a-target="video-ad-countdown"], [data-a-target="ax-overlay"]';
   const AD_TEXT = /^ad(\s*\d+\s*(of|\/)\s*\d+)?(\s*[^\w\s]{0,2}\s*\d{1,2}:\d{2})?$/i;
   function newSiteAd() {
     const v = mainVideo();
@@ -298,6 +413,9 @@
     if (IS_CR) return crFrame.ad || shownAd(CR_AD);
     if (IS_SZ) return false;
     if (IS_NEW) return newSiteAd();
+    // 2.5: Twitch's ad label and countdown; Kick and Rumble the same way as the 2.4 services
+    if (IS_TW) return shownAd(TW_AD) || newSiteAd();
+    if (IS_STREAM) return newSiteAd();
     if (IS_PRIME) {
       // Prime's player shows an ad countdown ("Ad 0:15") during ad breaks
       const box = primePlayer()?.box;
@@ -342,6 +460,14 @@
           .replace(/\s*[|–-]\s*(hulu|disney\+|disney plus|paramount\+|paramount plus|starz|tubi|free (movies|tv shows)).*$/i, "")
           .replace(/\s+(full\s+)?(movie|episode|series)?\s*online\b.*$/i, "");
       if (/^(hulu|disney\+|paramount\+|starz|tubi)$/i.test(t.trim())) t = "";
+    } else if (IS_STREAM) {
+      // 2.5: the stream's title, else the page title without the site's name (Twitch: the channel's name)
+      t = document.querySelector('[data-a-target="stream-title"], [data-testid="livestream-title"], [data-testid="stream-title"], h1.h1, .video-header-container h1, h1')?.textContent || "";
+      if (!t.trim())
+        t = (document.querySelector('meta[property="og:title"]')?.content || document.title || "")
+          .replace(/\s*[|–-]\s*(twitch|kick|rumble)\s*$/i, "")
+          .replace(/\s+live stream\s*-\s*watch live on kick.*$/i, "");
+      if (/^(twitch|kick|rumble)$/i.test(t.trim())) t = "";
     } else if (IS_HOTSTAR) {
       t = document.querySelector('meta[property="og:title"]')?.content || document.title || "";
       t = t.split(/\s[|–-]\s/)[0].replace(/^watch\s+/i, "").replace(/\s+(full\s+)?(movie|episode|season\s*\d*)?\s*online.*$/i, "");
@@ -362,7 +488,8 @@
   };
   // the main player <video>: skip tiny previews/ads by preferring the largest one on screen
   const mainVideo = () =>
-    IS_ANY ? anyV.video : IS_PRIME ? primePlayer()?.video || null : IS_CR ? crFrame.topVideo() : DIRECT && !IS_YT ? largest(shownVideos()) : largest([...document.querySelectorAll("video")]);
+    IS_ANY ? anyV.video : IS_PRIME ? primePlayer()?.video || null : IS_CR ? crFrame.topVideo() : IS_STREAM ? streamVideo() : DIRECT && !IS_YT ? largest(shownVideos()) : largest([...document.querySelectorAll("video")]);
+  const fmtBehind = (ms) => fmt(ms) + " behind live";
   const fmt = (ms) => {
     const t = Math.max(0, Math.floor(ms / 1000));
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
@@ -1059,7 +1186,8 @@
         const x = v();
         if (!x) return IS_CR ? crFrame.status() : null;
         return {
-          position: Math.round((x.currentTime || 0) * 1000),
+          // 2.5: in a live party, how far behind the live edge (see live)
+          position: liveParty() ? live.delay(x) ?? 0 : Math.round((x.currentTime || 0) * 1000),
           playing: !x.paused,
           buffering: x.readyState < 3 && !x.paused,
           ready: x.readyState >= 3,
@@ -1376,8 +1504,11 @@
   let videoEl = null;
 
   // rate: the party's playback speed (any-video parties; everyone else plays at 1x)
+  // 2.5: in a live party the position is the delay behind live: it holds while playing and grows while paused
   const expectedPosition = (st) =>
-    st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) * (Number.isFinite(st.rate) && st.rate > 0 ? st.rate : 1) : 0);
+    !IS_ANY && isLiveId(st?.videoId)
+      ? st.position + (st.playing ? 0 : Math.max(0, Date.now() - clock.toLocal(st.at)))
+      : st.position + (st.playing ? Math.max(0, Date.now() - clock.toLocal(st.at)) * (Number.isFinite(st.rate) && st.rate > 0 ? st.rate : 1) : 0);
 
   let prefsLoaded = false;
   let prefsDone;
@@ -1494,20 +1625,28 @@
 
   async function createParty() {
     // any page: a new random id for the party's video (the page's address goes out encrypted, below)
-    const vid = IS_ANY ? "av:" + e2e.genKey().slice(0, 16) : videoIdFromUrl();
+    let vid = IS_ANY ? "av:" + e2e.genKey().slice(0, 16) : videoIdFromUrl();
     if (IS_ANY && !anyV.ready) throw new Error("No video found on this page.");
     if (!vid)
       throw new Error(
         IS_YT
-          ? "Open a YouTube video first, then start the party."
-          : IS_PRIME && !primeTitlePath()
-            ? "Open the title's own page on Prime Video and press play there, then start the party."
-            : `Open a ${SITE_NAME} title and press play first, then start the party.`,
+          ? "Open a YouTube video or live stream first, then start the party."
+          : IS_TW || IS_KK
+            ? `Open a live channel on ${SITE_NAME} and let the stream start, then start the party.`
+            : IS_PRIME && !primeTitlePath()
+              ? "Open the title's own page on Prime Video and press play there, then start the party."
+              : `Open a ${SITE_NAME} title and press play first, then start the party.`,
       );
     if (adPlaying()) {
       // start from the video itself, not from wherever the ad is
       notice("The party starts as soon as the ad is over.");
       for (let t = 0; t < 180000 && adPlaying(); t += 500) await sleep(500);
+    }
+    // 2.5: a YouTube or Rumble video that may be live: give the page a few seconds to tell (a live party syncs
+    // differently), then take the id as it is now
+    if ((IS_RB || (IS_YT && ytMaybeLive())) && !IS_ANY) {
+      for (let t = 0; t < 9000 && videoIdFromUrl() && liveSense.pending(videoIdFromUrl().slice(3)); t += 300) await sleep(300);
+      vid = videoIdFromUrl() || vid;
     }
     await ensureConnected();
     const st = (await bridge.status()) || { position: 0, playing: false };
@@ -1649,6 +1788,7 @@
     party.profiles.clear();
     party.profileCt.clear();
     hold.reset();
+    live.reset();
     typing.reset();
     e2e.clear();
     net.stop();
@@ -1857,6 +1997,280 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
 
   const canControl = () => !party.hostOnly || party.me === party.hostId;
 
+  // ------------------------------------------------------ 2.5 live streams
+  // A live stream has no shared timeline (everyone's player starts it at a different point), so a live party
+  // syncs how far behind the live edge everyone watches ("delay", ms). Play and pause follow the party as usual.
+  //  * Delay: the newest media the player has (YouTube: its progress bar's live edge, which covers the
+  //    stream's rewind window) minus where it plays.
+  //  * Every member says their delay every 3 s (an encrypted signal). Whoever is further ahead than the member
+  //    furthest behind waits for them: a jump back where the player still has that part of the stream (buffered, or
+  //    a rewind window like YouTube's), else a pause (up to a minute). Nobody is ever pulled forward by this, so the
+  //    party settles instead of chasing itself.
+  //  * A seek on a player that can rewind, and Go live, set the party's delay; everyone moves there.
+  //  * A player that jumps back to the live edge by itself (some do after a pause) is left alone after two tries.
+  //  What this can't see: differences in how fast the service delivers the stream to each viewer (usually small).
+  const liveParty = () => !IS_ANY && (party.roomId ? isLiveId(party.state?.videoId) : isLiveId(videoIdFromUrl()));
+  // the party's video id for a state update: ours, unless it's the party's video by another name (a YouTube page that
+  // hasn't seen its LIVE badge yet keeps the party's "yl:")
+  const stateVid = () => {
+    const v = videoIdFromUrl();
+    return v && isLiveId(party.state?.videoId) && sameVideo(v, party.state.videoId) ? party.state.videoId : v || party.state?.videoId;
+  };
+  const live = (() => {
+    const heard = new Map(); // pid -> { d, at } their delay as they last said it (ms; local time)
+    let lastSent = 0;
+    let cool = 0;
+    let holding = false;
+    let quietUntil = 0; // the player events of our own wait end a moment after it
+    let check = null; // the last correction: { at, target }
+    let fails = [];
+    let noHoldUntil = 0;
+    // YouTube's progress bar: its live edge and position (whole seconds, as aria values)
+    function ytBar() {
+      if (!IS_YT) return null;
+      const b = document.querySelector("#movie_player .ytp-progress-bar");
+      const max = parseFloat(b?.getAttribute("aria-valuemax"));
+      const now = parseFloat(b?.getAttribute("aria-valuenow"));
+      const min = parseFloat(b?.getAttribute("aria-valuemin"));
+      return Number.isFinite(max) && Number.isFinite(now) && max > 0 && now >= 0 && now <= max + 1 ? { max, now, min: Number.isFinite(min) ? min : 0 } : null;
+    }
+    // The newest media the player has. It arrives a segment at a time (2 to 6 s), so the raw value is a saw-tooth
+    // and, while a player isn't fetching (paused), stands still. The live edge itself moves on at the speed of
+    // time, so it's estimated as the highest (newest - now) seen in the last minute, plus now: smooth, and still
+    // moving on during a pause. A raw edge far below the estimate means a new timeline (the player started over).
+    const env = { el: null, s: [] };
+    function edgeAt(v, raw) {
+      const w = performance.now() / 1000;
+      if (env.el !== v) Object.assign(env, { el: v, s: [] });
+      if (raw != null && Number.isFinite(raw)) {
+        const est = env.s.length ? Math.max(...env.s.map((x) => x[1])) + w : null;
+        if (est != null && raw < est - 30) env.s = [];
+        env.s.push([w, raw - w]);
+      }
+      env.s = env.s.filter((x) => w - x[0] < 60).slice(-240);
+      return env.s.length ? Math.max(...env.s.map((x) => x[1])) + w : null;
+    }
+    const rawEdge = (v) => {
+      let e = -Infinity;
+      for (const r of [v.seekable, v.buffered]) if (r?.length) e = Math.max(e, r.end(r.length - 1));
+      return Number.isFinite(e) ? e : null;
+    };
+    const bufStart = (v) => (v.buffered?.length ? v.buffered.start(0) : v.currentTime);
+    // YouTube: where the bar says we are, kept in step with the <video> between the bar's (whole-second) updates
+    const yt = { el: null, off: [] };
+    function ytPos(v, bar) {
+      if (yt.el !== v) Object.assign(yt, { el: v, off: [] });
+      yt.off = [...yt.off, bar.now + 0.5 - v.currentTime].slice(-20);
+      const o = [...yt.off].sort((x, y) => x - y)[yt.off.length >> 1];
+      return v.currentTime + o;
+    }
+    // seconds this player can go back from where it plays (YouTube: its rewind window; others: what's buffered)
+    function backroom(v) {
+      const bar = ytBar();
+      if (bar) return Math.max(0, ytPos(v, bar) - bar.min);
+      return Math.max(0, v.currentTime - bufStart(v));
+    }
+    // can this player rewind (a minute or more behind where it plays)?
+    const dvr = (v = mainVideo()) => !!v && backroom(v) > 60;
+    // ms behind the live edge
+    function delay(v = mainVideo()) {
+      if (!v) return null;
+      const bar = ytBar();
+      const edge = edgeAt(v, bar ? bar.max + 0.5 : rawEdge(v));
+      if (edge == null) return null;
+      const pos = bar ? ytPos(v, bar) : v.currentTime;
+      return Math.max(0, Math.round((edge - pos) * 1000));
+    }
+    // our own jumps: their "seeked" can come late (a rewind has to load), and it isn't the viewer's
+    let ownSeekUntil = 0;
+    function seekTo(v, t) {
+      suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
+      ownSeekUntil = Date.now() + 5000;
+      v.currentTime = t;
+    }
+    // a wait: pause, then play on. It ends early when a party update comes in (that decides instead) or the viewer
+    // presses play (they decide).
+    let wake = null;
+    let waitWhy = null; // why the last wait ended early: "update" | "viewer" | null
+    async function holdFor(ms) {
+      const v = mainVideo();
+      if (!v || holding || v.paused) return;
+      holding = true;
+      waitWhy = null;
+      suppressUntil = Math.max(suppressUntil, Date.now() + ms + 1500);
+      log("live: waiting", ms, "ms for the party");
+      const onPlay = () => {
+        if (holding && !ourPlay) end("viewer");
+      };
+      let ourPlay = false;
+      const end = (why) => {
+        waitWhy = why;
+        wake?.();
+      };
+      v.addEventListener("play", onPlay);
+      ui.render();
+      try {
+        v.pause();
+        await new Promise((r) => {
+          wake = r;
+          setTimeout(r, ms);
+        });
+        // play on: the party still plays (or there's no party any more: back to what the viewer was doing)
+        if (waitWhy !== "update" && v.paused && (!party.roomId || (party.state?.playing && liveParty()))) {
+          ourPlay = true;
+          await v.play()?.catch(() => {});
+        }
+      } finally {
+        v.removeEventListener("play", onPlay);
+        wake = null;
+        holding = false;
+        quietUntil = Date.now() + 1500;
+        suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
+        ui.render();
+      }
+    }
+    // go to `want` ms behind live: back by a jump (what's buffered, or the rewind window) or a wait (up to a
+    // minute), forward by a jump (never past the newest media). Says what it did: "seek", "wait" or null.
+    // { wait: false } starts a wait without waiting for it to end.
+    async function toDelay(want, { wait = true } = {}) {
+      const v = mainVideo();
+      const have = delay(v);
+      if (!v || have == null) return null;
+      const diff = want - have; // > 0: further back
+      if (Math.abs(diff) < 1000) return null;
+      const t = v.currentTime - diff / 1000;
+      if (diff < 0) {
+        // forward, but not past what the player has (a jump into nothing would stall it)
+        const e = rawEdge(v);
+        const to = e == null ? t : Math.min(t, e - 0.3);
+        if (to <= v.currentTime + 0.2) return null;
+        seekTo(v, to);
+        return "seek";
+      }
+      if (backroom(v) >= diff / 1000 + 0.5) {
+        seekTo(v, t);
+        return "seek";
+      }
+      if (diff > 60000 || Date.now() < noHoldUntil || v.paused) return null;
+      const p = holdFor(diff);
+      if (wait) await p;
+      return "wait";
+    }
+    // a party update (play, pause, a seek, Go live, joining). A wait under way ends: the update decides.
+    async function apply(st, cur, { delay: move = true } = {}) {
+      if (holding) {
+        wake && ((waitWhy = "update"), wake());
+        for (let t = 0; holding && t < 2000; t += 50) await sleep(50);
+        cur = (await bridge.status()) || cur;
+      }
+      check = null; // a new party delay: what happened before says nothing about snapping back
+      if (!st.playing) {
+        if (cur.playing) await bridge.pause();
+        return;
+      }
+      // (a play that waits for data to arrive mustn't hold up the update)
+      if (!cur.playing) await Promise.race([bridge.play(), sleep(1500)]);
+      if (move) await toDelay(expectedPosition(st), { wait: false });
+    }
+    // every second in a live party: say our delay, and wait for whoever is furthest behind
+    async function tick() {
+      if (!party.roomId || !party.state || holding || !liveParty()) return;
+      const v = mainVideo();
+      const now = Date.now();
+      if (!v || v.paused || !party.state.playing || adPlaying()) return;
+      const mine = delay(v);
+      if (mine == null) return;
+      if (now - lastSent >= 3000) {
+        lastSent = now;
+        // (with the video it's for: a member on another stream says nothing about this one)
+        sendEv({ t: "lat", d: mine, v: party.state.videoId });
+      }
+      if (check && now - check.at > 4000) {
+        // the player went back to the live edge by itself after a wait: twice in 90 s and we stop waiting
+        if (now - check.at < 15000 && mine < check.target - 1500) {
+          fails = [...fails.filter((t) => now - t < 90000), now];
+          check = null;
+          if (fails.length >= 2) {
+            noHoldUntil = now + 5 * 60 * 1000;
+            fails = [];
+            log("live: this player keeps to the live edge; not waiting for 5 minutes");
+            ui.render();
+          }
+        } else if (now - check.at >= 15000) check = null;
+      }
+      if (now < cool || now < suppressUntil || now - lastLocalAction < 3000) return;
+      // the others' delays, as said since the last party update; never more than 30 s past the party's own delay
+      // (a member can't hold everyone back further than that, and a party doesn't creep away from live)
+      const since = clock.toLocal(party.state.at);
+      const partyDelay = expectedPosition(party.state);
+      const others = [...heard]
+        .filter(([pid, h]) => pid !== party.me && memberHere(pid) && now - h.at < 9000 && h.at > since + 1500)
+        .map(([, h]) => Math.min(h.d, partyDelay + 30000));
+      let target = others.length ? Math.max(...others) : null;
+      if (dvr(v)) target = Math.max(target ?? 0, partyDelay);
+      if (target == null || target - mine <= 1500) return;
+      // (a player that snaps back to live: nothing to try until the pause is over, unless it can rewind)
+      if (now < noHoldUntil && backroom(v) < (target - mine) / 1000 + 0.5) return;
+      const did = await toDelay(target);
+      cool = Date.now() + 6000;
+      // a wait that ran its course is looked at again from when it's over (did the player snap back?)
+      if (did === "wait" && !waitWhy) check = { at: Date.now(), target };
+    }
+    setInterval(() => tick().catch((e) => log("live", e?.message)), 1000);
+    return {
+      delay,
+      dvr,
+      apply,
+      get holding() {
+        return holding;
+      },
+      // our own wait (pause, then play) is under way or just ended: its player events aren't the viewer's
+      get quiet() {
+        return holding || Date.now() < quietUntil;
+      },
+      // the player stays at the live edge by itself, so we stopped waiting for the others
+      get stuckAhead() {
+        return Date.now() < noHoldUntil;
+      },
+      onEv(from, d, v) {
+        if (!party.state || (v !== undefined && !(typeof v === "string" && sameVideo(v, party.state.videoId)))) return;
+        if (Number.isFinite(d) && d >= 0 && d <= 6 * 3600 * 1000) heard.set(from, { d: Math.round(d), at: Date.now() });
+      },
+      // a "seeked" right after one of our own jumps is ours (used once)
+      ownSeek() {
+        if (Date.now() > ownSeekUntil) return false;
+        ownSeekUntil = 0;
+        return true;
+      },
+      // the stream changed (Twitch and YouTube keep their <video>): measure afresh
+      fresh() {
+        Object.assign(env, { el: null, s: [] });
+        Object.assign(yt, { el: null, off: [] });
+        heard.clear();
+        check = null;
+      },
+      // Go live: everyone to the live edge
+      async goLive() {
+        if (!party.roomId || !canControl()) return;
+        const state = { playing: true, position: 0, at: clock.serverNow(), videoId: stateVid(), reason: "golive" };
+        await net.request("state", state);
+        party.state = { ...state, by: party.me };
+        noHoldUntil = 0;
+        check = null;
+        hold.userAction();
+        await applyRemote(party.state, "golive");
+        ui.render();
+      },
+      reset() {
+        heard.clear();
+        check = null;
+        fails = [];
+        noHoldUntil = 0;
+        cool = 0;
+      },
+    };
+  })();
+
   // -------------------------------------------------------- playback sync
   async function applyRemote(st, reason) {
     if (!st) return;
@@ -1883,6 +2297,13 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
     const stale = () => !!party.state && st !== party.state;
     if (stale()) return;
     suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
+    if (liveParty()) {
+      // 2.5: play / pause, and the party's delay behind live (see live)
+      await live.apply(st, cur);
+      suppressUntil = Math.max(suppressUntil, Date.now() + SUPPRESS_MS);
+      log("applied remote (live)", reason, st);
+      return;
+    }
     const target = expectedPosition(st);
     if (IS_ANY) await anyV.setBase(st.rate);
     // live streams: there's no shared timeline, so only play / pause follow the party
@@ -1898,7 +2319,7 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
   let lateTimer = null;
   function onLocalPlayerEvent(kind) {
     if (HAS_ADS) adWatch(); // an ad that just ended: the resume events below are the site's, not ours
-    if (!party.roomId || adPlaying()) return;
+    if (!party.roomId || adPlaying() || live.quiet) return;
     if (Date.now() < suppressUntil) {
       // 2.4: a play or pause while a party update is being applied may be the viewer's own: look again once
       // the update is done, and if the player still disagrees with the party, it was (and the party follows it)
@@ -1914,6 +2335,10 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
       return;
     }
     if (IS_ANY && (anyMismatch || (kind === "seeked" && anyLive()))) return;
+    // 2.5: on a live stream a seek only counts where the player can rewind (the others' players jump about by
+    // themselves)
+    if (kind === "seeked" && liveParty() && (live.ownSeek() || !live.dvr())) return;
+    if (movePending) return; // (see watchPlayer: the party moves to this video once it's known whether it's live)
     lastLocalEvt = Date.now();
     // coalesce bursts (Netflix fires pause+seeked+play when scrubbing)
     clearTimeout(sendTimer);
@@ -1934,7 +2359,7 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
         playing: st.playing,
         position: st.position,
         at: clock.serverNow(),
-        videoId: videoIdFromUrl(),
+        videoId: stateVid(),
         reason: kind,
         ...(IS_ANY && anyV.base !== 1 ? { rate: anyV.base } : {}),
       };
@@ -1952,7 +2377,7 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
 
   // periodic drift correction
   setInterval(async () => {
-    if (IS_ANY) return; // see anyDrift
+    if (IS_ANY || liveParty()) return; // see anyDrift, and live
     if (!party.roomId || !party.state || !party.state.playing) return;
     if (Date.now() < suppressUntil || Date.now() - lastLocalAction < 4000 || adPlaying()) return;
     const cur = await bridge.status();
@@ -2009,6 +2434,9 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
 
   // attach to the <video> element and follow the sites' SPA navigation
   let lastVideoId = videoIdFromUrl();
+  let pendingVid = null; // 2.5: see watchPlayer
+  let pendingSince = 0;
+  let movePending = false;
   function watchPlayer() {
     if (IS_ANY) {
       // any page: anyV follows the video; the host re-shares the page when its address changes
@@ -2023,7 +2451,26 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
     }
     // episode change first, so a newly attached player syncs to the NEW episode
     const vid = videoIdFromUrl();
-    if (vid !== lastVideoId) {
+    // 2.5: a YouTube or Rumble video whose live-or-not isn't known yet: the party moves once it is (up to 9 s), so
+    // it moves to the right kind of party
+    let undecided = false;
+    if (vid && vid !== lastVideoId && (IS_RB || (IS_YT && ytMaybeLive())) && liveSense.pending(vid.slice(3))) {
+      if (pendingVid !== vid) [pendingVid, pendingSince] = [vid, Date.now()];
+      undecided = Date.now() - pendingSince < 9000;
+      // meanwhile the party's own (old) video must not pull us back to it (applyRemote waits as after a change)
+      if (undecided && party.roomId && party.state && !sameVideo(party.state.videoId, vid)) lastEpisodeChange = Date.now();
+    }
+    movePending = undecided && !!party.roomId && !!party.state && !sameVideo(party.state.videoId, vid);
+    // 2.5: the party's video turned out to be live (the host started it before the page showed it): the host moves
+    // the party to the video's live id, so everyone syncs it as a live stream
+    if (vid && isLiveId(vid) && party.roomId && party.state && !isLiveId(party.state.videoId) && sameVideo(vid, party.state.videoId) && party.me === party.hostId) {
+      const state = { playing: party.state.playing, position: live.delay() ?? 0, at: clock.serverNow(), videoId: vid };
+      const prev = party.state;
+      party.state = state;
+      net.request("state", state).catch(() => (party.state = prev));
+    }
+    if (vid !== lastVideoId && !undecided) {
+      if (vid && lastVideoId && !sameVideo(vid, lastVideoId)) live.fresh();
       lastVideoId = vid;
       // we moved to another episode ourselves: take the party with us
       if (vid && party.roomId && party.state && !sameVideo(party.state.videoId, vid) && canControl()) {
@@ -2035,7 +2482,7 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
           party.state = prev; // retry on the next check
           lastVideoId = null;
         });
-        ui.system(IS_YT ? "Moved the party to a new video." : IS_PRIME ? "Moved the party to a new title." : "Moved the party to a new episode.");
+        ui.system(isLiveId(vid) ? "Moved the party to another stream." : IS_YT ? "Moved the party to a new video." : IS_PRIME ? "Moved the party to a new title." : "Moved the party to a new episode.");
       }
     }
     const v = mainVideo();
@@ -2062,7 +2509,7 @@ button:focus-visible{outline:2px solid #a48bff;outline-offset:2px}
   //   the party carries on.
   // * a pending invite or "Start a NetParty" request is acted on once a player opens.
   // ride out the site's own route changes (Prime's overlay player swaps its <video> between episodes)
-  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : IS_SL || IS_CR || IS_TB || IS_DP || IS_HULU || IS_PP || IS_SZ ? 4000 : 2500;
+  const LEAVE_GRACE_MS = IS_PRIME ? 6000 : IS_SL || IS_CR || IS_TB || IS_DP || IS_HULU || IS_PP || IS_SZ || IS_STREAM ? 4000 : 2500;
   let offWatchSince = 0;
   let busy = false;
   let booted = false; // the boot sequence below decides first (reload / rejoin)
@@ -2478,9 +2925,13 @@ svg{width:18px;height:18px;flex:none}
   async function onServer(msg) {
     switch (msg.type) {
       case "state":
+        // 2.5: an update for a live party's video under its ordinary id (from NetParty 2.4 or older, which don't know
+        // live parties): only its play / pause counts; the party stays a live party at the delay it had
+        if (party.state && isLiveId(party.state.videoId) && !isLiveId(msg.data?.videoId) && sameVideo(msg.data?.videoId, party.state.videoId))
+          msg.data = { ...msg.data, videoId: party.state.videoId, position: expectedPosition(party.state), ...(msg.data.reason === "seeked" ? { reason: null } : {}) };
         party.state = msg.data;
         if (msg.data.reason && msg.data.by) {
-          const what = { play: "played", pause: "paused", seeked: "jumped to " + fmt(msg.data.position), episode: IS_YT ? "changed the video" : IS_PRIME ? "changed the title" : "changed the episode", rate: "set the speed to " + (Number.isFinite(msg.data.rate) ? msg.data.rate : 1) + "x" }[msg.data.reason];
+          const what = { play: "played", pause: "paused", seeked: isLiveId(msg.data.videoId) ? (msg.data.position < 3000 ? "jumped to live" : "jumped to " + fmtBehind(msg.data.position)) : "jumped to " + fmt(msg.data.position), episode: isLiveId(msg.data.videoId) ? "changed the stream" : IS_YT ? "changed the video" : IS_PRIME ? "changed the title" : "changed the episode", golive: "jumped to live", rate: "set the speed to " + (Number.isFinite(msg.data.rate) ? msg.data.rate : 1) + "x" }[msg.data.reason];
           if (what) ui.system(`${nameOf(msg.data.by)} ${what}`);
         }
         applyRemote(msg.data, "remote");
@@ -2542,6 +2993,7 @@ svg{width:18px;height:18px;flex:none}
         const p = await e2e.open("ev", msg.data.from, msg.data.ct);
         if (!p || typeof p.t !== "string") break;
         if (p.t === "ty") typing.got(msg.data.from);
+        else if (p.t === "lat") live.onEv(msg.data.from, p.d, p.v);
         else if (p.t === "buf" || p.t === "wait") hold.onEv(msg.data.from, { t: p.t, on: p.on === 1 || p.on === true, ids: p.ids, why: typeof p.why === "string" ? p.why : "" });
         break;
       }
@@ -3167,8 +3619,11 @@ svg{width:18px;height:18px;flex:none}
     };
     const amAuthority = () => !!party.me && authority() === party.me && (!party.hostOnly || party.me === party.hostId);
     const rate = () => (IS_ANY && anyV.base !== 1 ? { rate: anyV.base } : {});
+    // 2.5: a live party plays on from the delay it has grown to while paused (everyone paused at the same moment);
+    // an ordinary one from where it paused
+    const resumeAt = (position) => (liveParty() && party.state ? expectedPosition(party.state) : position);
     async function setState(playing, position, reason) {
-      const state = { playing, position: Math.max(0, Math.round(position)), at: clock.serverNow(), videoId: videoIdFromUrl() || party.state?.videoId, reason, ...rate() };
+      const state = { playing, position: Math.max(0, Math.round(position)), at: clock.serverNow(), videoId: stateVid(), reason, ...rate() };
       await net.request("state", state);
       party.state = { ...state, by: party.me };
       await applyRemote(party.state, reason);
@@ -3212,7 +3667,7 @@ svg{width:18px;height:18px;flex:none}
       log("wait over", why);
       lastResume = Date.now();
       if (why === "t") for (const id of w.ids) cooldown.set(id, Date.now() + 60000);
-      if (why !== "c") await setState(true, w.position, "resume").catch(() => {});
+      if (why !== "c") await setState(true, resumeAt(w.position), "resume").catch(() => {});
       sendEv({ t: "wait", on: 0, why, ids: [...w.ids] });
       onWait(party.me, { on: 0, why, ids: [...w.ids] });
     }
@@ -3281,7 +3736,7 @@ svg{width:18px;height:18px;flex:none}
           if (seen && seen.by !== party.me && now - seen.since > WAIT_MAX_MS + 5000 && !party.state.playing) {
             // took over from an authority that went away mid-wait
             seen = null;
-            await setState(true, party.state.position, "resume").catch(() => {});
+            await setState(true, resumeAt(party.state.position), "resume").catch(() => {});
             show();
           } else if (prefs.syncWait && ids.size && party.state.playing && now - lastResume > 3000 && !drop) await startWait(ids);
         } else if (!prefs.syncWait || !ids.size) await endWait("r");
@@ -3330,7 +3785,7 @@ svg{width:18px;height:18px;flex:none}
         const d = drop;
         if (resp === party.me && party.state && !party.state.playing) {
           drop = null;
-          setState(true, party.state.position, "resume").catch(() => (drop = d));
+          setState(true, resumeAt(party.state.position), "resume").catch(() => (drop = d));
         } else if (resp !== party.me && party.state?.playing) drop = null;
       }
       show();
@@ -3387,7 +3842,7 @@ svg{width:18px;height:18px;flex:none}
         seen = null;
         show();
         try {
-          await setState(true, party.state.position, "play");
+          await setState(true, resumeAt(party.state.position), "play");
         } catch (e) {
           ui.system(e.message);
         }
@@ -4126,6 +4581,7 @@ svg{width:18px;height:18px;flex:none}
     let host, shadow, root, panel, peopleEl, chatEl, input, sendBtn, codeEl, metaEl, voiceBox, toggleBtn, badge, toastEl;
     let composer, floatLayer, emojiBtn, gifBtn, reactBtn, fontBtn, camLayer, headEl, leaveIcon;
     let setBtn, typingEl, holdBar, holdTxt, holdBtn; // 2.2
+    let liveBar, liveTxt, liveBtn; // 2.5
     let anyRow, anyNote, theaterBtn, fsBtn, theaterIcon; // any-video mode: Theater, Full screen, notes
     let open = false;
     let unread = 0;
@@ -6102,6 +6558,16 @@ svg{width:18px;height:18px;flex:none}
           (holdTxt = el("span", { class: "np-hold-txt" })),
           (holdBtn = el("button", { type: "button", class: "np-pill np-hold-btn", onclick: () => hold.resume() }, "Resume")),
         )),
+        (liveBar = el(
+          "div",
+          { class: "np-hold np-live", role: "status" },
+          (liveTxt = el("span", { class: "np-hold-txt" })),
+          (liveBtn = el(
+            "button",
+            { type: "button", class: "np-pill np-live-btn np-golive", title: "Everyone jumps to the live edge", onclick: () => live.goLive().catch((e) => system(e.message)) },
+            "Go live",
+          )),
+        )),
         el("div", { class: "np-section-label" }, "Watching"),
         peopleEl,
         voiceBox,
@@ -6110,6 +6576,7 @@ svg{width:18px;height:18px;flex:none}
         composer,
       );
       holdBar.hidden = true;
+      liveBar.hidden = true;
       // keep clicks and scrolls inside the panel from reaching the player
       for (const evt of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "wheel", "contextmenu"])
         panel.addEventListener(evt, (e) => e.stopPropagation());
@@ -6283,8 +6750,33 @@ html.np-docked [data-np-shrink] {
       const st = party.state;
       if (!st) return "";
       if (adPlaying()) return "Waiting for ad to finish…";
-      return `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${party.hostOnly ? " · host controls playback" : ""}${party.locked ? " · locked" : ""}`;
+      const extra = `${party.hostOnly ? " · host controls playback" : ""}${party.locked ? " · locked" : ""}`;
+      if (liveParty()) {
+        // 2.5: live: how far behind live this viewer is (from their own player)
+        const d = live.delay();
+        return `${st.playing ? "● Live" : "❚❚ Paused (live)"}${d != null && d >= 3000 ? " · " + fmtBehind(d) : ""}${extra}`;
+      }
+      return `${st.playing ? "▶ Playing" : "❚❚ Paused"} at ${fmt(expectedPosition(st))}${extra}`;
     };
+    // 2.5: in a live party, Go live (when you're well behind it) and a note when this player won't wait
+    function drawLive() {
+      if (!liveBar) return;
+      const on = !!party.roomId && liveParty() && !!party.state?.playing && !adPlaying();
+      const d = on ? live.delay() : null;
+      const far = d != null && d >= 8000;
+      const t = !on
+        ? ""
+        : live.holding
+          ? "Waiting a moment for friends who are further behind…"
+          : live.stuckAhead
+            ? "Your player keeps itself at the live edge, so you may be a few seconds ahead of friends."
+            : far
+              ? `You're ${fmtBehind(d)}.`
+              : "";
+      if (liveTxt.textContent !== t) liveTxt.textContent = t;
+      liveBar.hidden = !t;
+      liveBtn.hidden = !t || !far || live.holding || !canControl();
+    }
 
     // 2.2: "Waiting for Rahul to load…" / "Rahul disconnected, paused" (+ Resume once they've left)
     function drawHold() {
@@ -6636,6 +7128,7 @@ html.np-docked [data-np-shrink] {
         leaveIcon.setAttribute("aria-label", leaveLabel);
       }
       metaEl.textContent = metaText();
+      drawLive();
       metaEl.classList.toggle("np-ad", adPlaying());
       if (IS_ANY) renderAny();
 
@@ -6985,6 +7478,7 @@ html.np-docked [data-np-shrink] {
     setInterval(() => {
       if (!party.roomId || !open || !metaEl) return;
       metaEl.textContent = metaText();
+      drawLive();
       metaEl.classList.toggle("np-ad", adPlaying());
     }, 1000);
     let reactionPref = null;
@@ -7079,6 +7573,10 @@ html.np-docked [data-np-shrink] {
             return {
               site: SITE_NAME,
               onWatchPage: !!videoIdFromUrl(),
+              // 2.5: what's playing (its site's id; never sent anywhere from here), and in a live party this viewer's
+              // delay behind live (the popup and tests)
+              videoId: videoIdFromUrl(),
+              live: party.roomId && liveParty() ? { delay: live.delay(), dvr: live.dvr(), stuckAhead: live.stuckAhead } : undefined,
               title: videoIdFromUrl() ? currentTitle() : "", // what's playing (the popup and tests; never sent anywhere)
               roomId: party.roomId,
               members: party.members.map((m) => nameOf(m.id)),

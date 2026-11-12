@@ -514,7 +514,7 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 }
 
 /* ---- 2.2: mentions, spoilers, edit / delete, pinned message, typing, waiting, settings */
-.np-act[hidden], .np-pin-x[hidden], .np-hold-btn[hidden] { display: none; }
+.np-act[hidden], .np-pin-x[hidden], .np-hold-btn[hidden], .np-live-btn[hidden] { display: none; }
 .np-act.np-on { color: var(--accent2); }
 .np-act-del.np-act-confirm { background: var(--bad-fill); color: #fff; }
 /* the bar grows toward the middle of the chat, so it never pokes out of it */
@@ -573,6 +573,9 @@ button.np-cam-me:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 .np-hold[hidden] { display: none; }
 .np-hold-txt { flex: 1; min-width: 0; }
 .np-hold-btn { flex: none; margin: 0; }
+/* 2.5: live parties (how far behind live, Go live) */
+.np-live { border-color: #e5484d; background: rgba(229, 72, 77, 0.12); }
+.np-live-btn { flex: none; margin: 0; }
 
 /* "Rahul is typing…" over the top edge of the composer (no layout jump) */
 .np-typing {

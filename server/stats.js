@@ -16,7 +16,7 @@ export const RETENTION_DAYS = 120;
 export const SEEN_CAP = 50_000; // most distinct people a day can dedupe (bounds that day's temporary storage)
 const IST_MS = 5.5 * 3600 * 1000;
 const DAY_MS = 24 * 3600 * 1000;
-export const SERVICES = ["netflix", "prime", "hotstar", "youtube", "max", "crunchyroll", "sonyliv", "hulu", "disneyplus", "paramountplus", "starz", "tubi", "any-video"];
+export const SERVICES = ["netflix", "prime", "hotstar", "youtube", "max", "crunchyroll", "sonyliv", "hulu", "disneyplus", "paramountplus", "starz", "tubi", "twitch", "kick", "rumble", "any-video"];
 
 const K = {
   day: (d) => "stats:day:" + d, // { people, parties, joins, peakOnline, peakParty, platforms, capped? } totals only
@@ -34,7 +34,7 @@ export function serviceOf(videoId) {
   const v = typeof videoId === "string" ? videoId : "";
   if (!v) return "unknown";
   if (/^\d{1,12}$/.test(v)) return "netflix";
-  const p = { "pv:": "prime", "hs:": "hotstar", "yt:": "youtube", "hm:": "max", "cr:": "crunchyroll", "sl:": "sonyliv", "hu:": "hulu", "dp:": "disneyplus", "pp:": "paramountplus", "sz:": "starz", "tb:": "tubi", "av:": "any-video" }[v.slice(0, 3)];
+  const p = { "pv:": "prime", "hs:": "hotstar", "yt:": "youtube", "hm:": "max", "cr:": "crunchyroll", "sl:": "sonyliv", "hu:": "hulu", "dp:": "disneyplus", "pp:": "paramountplus", "sz:": "starz", "tb:": "tubi", "yl:": "youtube", "tw:": "twitch", "kk:": "kick", "rb:": "rumble", "rl:": "rumble", "av:": "any-video" }[v.slice(0, 3)];
   return p || "unknown";
 }
 

@@ -1,4 +1,4 @@
-# NetParty: watch Netflix, Prime Video, YouTube, JioHotstar, Disney+, Hulu, HBO Max, Paramount+ and other video sites together
+# NetParty: watch Netflix, Prime Video, YouTube, JioHotstar, Disney+, Hulu, HBO Max, Twitch, Kick and other video sites together
 
 NetParty is a free, open-source browser extension and a small sync server for watch parties. Start a party on a video,
 send one link, and everyone's play, pause and seek stay in sync, with end-to-end encrypted chat, voice and video chat
@@ -20,7 +20,7 @@ The Firefox package is built from the same source by `node scripts/build-firefox
 
 - **Netflix** (`netflix.com/watch/...`)
 - **JioHotstar** (`hotstar.com/in/.../watch`, movies, shows and episodes)
-- **YouTube** (`youtube.com/watch?v=...` videos; Shorts, live streams and m.youtube.com aren't supported)
+- **YouTube** (`youtube.com/watch?v=...` videos and, since 2.5, live streams, also at `/live/<id>` and `/@channel/live`; Shorts and m.youtube.com aren't supported)
 - **Prime Video**: a title's page on `primevideo.com`
   (`/detail/<id>`, also under `/region/…` and `/-/<lang>/`) or on an Amazon store's Prime Video pages,
   `amazon.<tld>/gp/video/detail/<ASIN>` (`.com`, `.co.uk`, `.de`, `.co.jp`, `.in`, `.ca`, `.com.au`, `.fr`, `.it`,
@@ -37,6 +37,8 @@ The Firefox package is built from the same source by `node scripts/build-firefox
 - **Paramount+** (2.4): `paramountplus.com/shows/video/<id>/` and `/movies/video/<id>/` (trailers aren't parties)
 - **STARZ** (2.4): `starz.com/<country>/<language>/play/<id>`
 - **Tubi** (2.4): a title's page, `tubitv.com/movies/<id>/<slug>` or `/tv-shows/<id>/<slug>`, once its player is up
+- **Live streams** (2.5): YouTube live, **Twitch** (`twitch.tv/<channel>`), **Kick** (`kick.com/<channel>`) and **Rumble**
+  (`rumble.com/<id>-<slug>.html`, live or not). See [Live streams](#live-streams)
 - **Videos on sites you choose** (2.0): on any other http(s) page, the popup's **Sync this tab** starts a
   party for the page's video. NetParty runs there only after that click (`activeTab` + `scripting`), or on sites
   you set to **Always allow on this site** (an optional host permission for that one site). See
@@ -140,6 +142,9 @@ Tips
   (the host closing it ends it). While Prime shows you an ad, sync pauses for you and you catch up afterwards.
   Episodes that play inside the same player without changing the address aren't followed automatically:
   everyone picks the next episode.
+- Live streams (2.5): start the party with **Start a NetParty** on the player or the NetParty icon while the stream
+  plays. The panel shows how far behind live you are, and **Go live** takes everyone to now. Ads play separately for
+  each person, as on the other services.
 - HBO Max, Crunchyroll, SonyLIV (2.2), Hulu, Disney+, Paramount+, STARZ and Tubi (2.4): start the party with
   **Start a NetParty** on the player or the NetParty icon on a playing episode. Ads play separately for each person;
   sync pauses for you while yours shows.
@@ -312,6 +317,35 @@ the streaming site's page, so that site's own scripts could in principle read wh
 (with its key) can end up in your browser history, like any link you open. The server is still trusted to relay
 messages honestly (it can't read or forge them, but it could drop or delay them).
 
+## Live streams
+
+A live stream has no shared timeline: every viewer's player starts it at a different point, so positions can't be
+compared. A live party (2.5) syncs how far behind the live edge everyone watches instead (its "delay"):
+
+- **Delay.** The newest media the player has (on YouTube, its progress bar's live edge, which covers the stream's
+  rewind window) minus where it plays. Media arrives a segment at a time, so the live edge is estimated as the highest
+  "newest minus now" of the last minute, plus now: smooth, and still moving on while the player is paused.
+- **Lining up.** Every member says their delay every 3 seconds (an end-to-end encrypted signal, tagged with the stream
+  it's for). Anyone more than 1.5 s ahead of the member furthest behind waits for them: a jump back if their player
+  still has that part of the stream (buffered, or a rewind window), else a pause of up to a minute, shown in the panel
+  ("Waiting a moment for friends who are further behind…"; pressing play ends it). Nobody is pulled forward by this,
+  so the party settles instead of chasing itself, and nobody is held more than 30 s past the party's own delay (so one
+  member can't hold everyone back, and the party doesn't creep away from live). Joining and every play go to the
+  party's delay.
+- **Play, pause, rewind, Go live.** Play and pause follow the party; after a pause the party plays on from the delay
+  it has grown to. On a player with over a minute to rewind (YouTube's rewind window; any player that keeps that much
+  of the stream), a jump back or forward sets the party's delay and everyone moves there; elsewhere the players' own
+  jumps aren't sent. **Go live** in the panel (when you're 8 s or more behind; only the host when only the host
+  controls playback) takes everyone to the live edge.
+- **Players that snap back to live.** Some players jump to the live edge whenever they resume. After two waits that
+  didn't stick, NetParty stops waiting for 5 minutes on that player and says it may be a few seconds ahead.
+- **What it can't see:** differences in how fast the service delivers the stream to each viewer (usually small).
+- Video ids: `yl:<id>` (a YouTube video while it's live; the same video as `yt:<id>`), `tw:<channel>`, `kk:<channel>`,
+  `rl:<id>-<slug>` (a Rumble video while it's live) and `rb:<id>-<slug>` (any Rumble video). The party's position is
+  the delay in ms. A YouTube or Rumble page that turns out to be live after the party started moves the party to the
+  live id. Invite pages for live parties ask for 2.5. NetParty 2.4 and older don't know live parties: one that joins a
+  YouTube live party only shares play and pause (its positions are ignored), and it can't follow the party.
+
 ## Sync any video
 
 2.0 adds parties for videos on sites that aren't one of the supported services.
@@ -403,6 +437,7 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 | `chat2.mjs` | 2.1 replies, message reactions, emoji search, with a 2.0.2 build from git (also `CSP=strict`) |
 | `chat3.mjs` | 2.2 typing, mentions, spoilers, edit / delete, pins, buffer-aware sync, pause on drop, auto-duck, with 2.1.0 and 2.0.2 builds (also `CSP=strict`) |
 | `platforms.mjs` | 2.2 HBO Max, Crunchyroll and SonyLIV, 2.4 Hulu, Disney+ (shadow-root player), Paramount+, STARZ and Tubi on test pages (`ONLY=Hulu` runs one) |
+| `live.mjs` | 2.5 live streams on test pages (YouTube live, Twitch, Kick, Rumble) fed by one fake broadcast through Media Source Extensions: true sync checked by the stream's own time, lining up a viewer, pause / play, rewind, Go live, another stream, a player that snaps back to live (`ONLY=Twitch` runs one) |
 | `avatars.mjs` | 2.2 HD pictures, photo upload / remove, the 2.1.0 emoji fallback, `blob:` / `data:` / `<canvas>` fallbacks, hostile profiles, leak audit (also `CSP=strict`) |
 | `v23.mjs` | 2.3 lock, remove, make host, the host's leave menu, per-person volume, the share block (no app sees the link), QR codes (in NetParty's own window, none in the page, the key nowhere in the page), recaps (download, copy), leak audit |
 | `qr.test.mjs` | `npm --prefix e2e run test:qr`: QR codes from `extension/qr.js` decode back (jsQR) for every version and length |
@@ -426,6 +461,9 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 - HBO Max, Crunchyroll and SonyLIV support (2.2) is built from their public URL formats and page structure and tested
   on test pages that copy it, not on the real services (we can't sign in to them). Their ad markers and title
   selectors are the least certain parts; SonyLIV's title page counts as the player once a large video shows.
+- Live streams (2.5) on YouTube, Twitch, Kick and Rumble are tested on test pages with a fake broadcast, not on the
+  real services (this test browser can't play their streams). How each real player reports its newest media, how it
+  behaves after a pause, and Twitch's ad label are the least certain parts.
 - Hulu, Disney+, Paramount+, STARZ and Tubi (2.4) are built and tested the same way. Their ad markers (badges,
   countdowns and the short "Ad 1 of 3 · 0:15" label) are the least certain part; Tubi's title page counts as the player
   once a large video shows.
@@ -453,7 +491,8 @@ recording proxy that checks no WebSocket frame carries names, messages, keys or 
 
 ## Version history
 
-Every release is in [CHANGELOG.md](CHANGELOG.md). 2.4.0 added Hulu, Disney+, Paramount+, STARZ and Tubi, **Start a
+Every release is in [CHANGELOG.md](CHANGELOG.md). 2.5.0 added live streams on YouTube, Twitch, Kick and Rumble (everyone the same
+distance behind live, Go live). 2.4.0 added Hulu, Disney+, Paramount+, STARZ and Tubi, **Start a
 NetParty** on every service's player, update reminders with What's new, and faster, more reliable party starts. 2.3.0 added host controls (make host, remove, lock, hand over
 when leaving), per-person voice volume, party recap images and the share block with a QR code. 2.2.0 added HBO Max, Crunchyroll and SonyLIV, buffer-aware sync,
 pause on drop-outs, typing, @mentions, spoilers, edit / delete, pinned messages, lowering the video while friends talk,
@@ -461,4 +500,4 @@ HD profile pictures and your own photo, and fresher relay credentials for voice 
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube, Prime Video, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, STARZ and Tubi are trademarks of their owners; NetParty is not affiliated with them.
+MIT, see [LICENSE](LICENSE). Netflix, JioHotstar, YouTube, Prime Video, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, STARZ and Tubi, Twitch, Kick and Rumble are trademarks of their owners; NetParty is not affiliated with them.

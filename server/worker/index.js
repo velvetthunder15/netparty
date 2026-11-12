@@ -27,6 +27,9 @@ import svgHulu from "./site/hulu.svg";
 import svgParamountplus from "./site/paramountplus.svg";
 import svgStarz from "./site/starz.svg";
 import svgTubi from "./site/tubi.svg";
+import svgTwitch from "./site/twitch.svg";
+import svgKick from "./site/kick.svg";
+import svgRumble from "./site/rumble.svg";
 import avFox from "./site/av-fox.webp";
 import avPanda from "./site/av-panda.webp";
 import avRobot from "./site/av-robot.webp";
@@ -47,7 +50,7 @@ const HTML = "text/html; charset=utf-8";
 // link-preview (Open Graph / Twitter) image tags, injected so a recopy of the Hark build keeps them
 const OG_TAGS = `<meta property="og:image" content="https://netparty.tech/og.jpg" />
 <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar and other video sites" />
+<meta property="og:image:alt" content="NetParty: watch together, in sync on Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, Twitch, Kick and other video sites" />
 <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://netparty.tech/og.jpg" />
 `;
 const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/i, OG_TAGS + "</head>"));
@@ -55,7 +58,7 @@ const withOg = (html) => (/og:image/.test(html) ? html : html.replace(/<\/head>/
 // SEO layer, applied at load so a recopy of the Hark build keeps it: keyword title and
 // description, canonical, robots, icons, alt text, and JSON-LD built from the visible FAQ.
 const SEO_TITLE = "NetParty: Free Watch Party for Netflix, Prime Video, YouTube, Disney+, Hulu & HBO Max";
-const SEO_DESC = "Watch Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi and videos on most other sites together in sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
+const SEO_DESC = "Watch Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ, Tubi, live streams on Twitch, Kick and Rumble, and videos on most other sites together in sync. Free watch party extension with encrypted chat, voice and video chat. No sign-up.";
 const stripTags = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 function withSeo(html) {
   const faq = [...html.matchAll(/<details[^>]*>\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>\s*<\/details>/gi)]
@@ -70,7 +73,7 @@ function withSeo(html) {
       applicationCategory: "BrowserApplication", operatingSystem: "Windows, macOS, Linux, ChromeOS",
       image: ["https://netparty.tech/og.jpg", "https://netparty.tech/og-square.jpg"], publisher: { "@id": "https://netparty.tech/#org" },
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      featureList: "Synced play, pause and seek on Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ and Tubi; sync videos on most other sites; waits when someone buffers; end-to-end encrypted chat; replies, reactions and mentions; voice and video chat with relay; HD avatars or your own photo; GIFs; host controls",
+      featureList: "Synced play, pause and seek on Netflix, Prime Video, YouTube, Disney+, Hulu, HBO Max, Paramount+, Crunchyroll, SonyLIV, JioHotstar, STARZ and Tubi; synced live streams on YouTube, Twitch, Kick and Rumble; sync videos on most other sites; waits when someone buffers; end-to-end encrypted chat; replies, reactions and mentions; voice and video chat with relay; HD avatars or your own photo; GIFs; host controls",
       license: "https://opensource.org/licenses/MIT" },
   ];
   if (faq.length) graph.push({ "@type": "FAQPage", mainEntity: faq });
@@ -104,6 +107,10 @@ function withSeo(html) {
     .replace('<img src="paramountplus.svg" width="22" height="22" alt=""', '<img src="paramountplus.svg" width="22" height="22" alt="Paramount+"')
     .replace('<img src="starz.svg" width="22" height="22" alt=""', '<img src="starz.svg" width="22" height="22" alt="STARZ"')
     .replace('<img src="tubi.svg" width="22" height="22" alt=""', '<img src="tubi.svg" width="22" height="22" alt="Tubi"')
+    .replace('<img src="youtube.svg" width="22" height="22" alt=""', '<img src="youtube.svg" width="22" height="22" alt="YouTube Live"')
+    .replace('<img src="twitch.svg" width="22" height="22" alt=""', '<img src="twitch.svg" width="22" height="22" alt="Twitch"')
+    .replace('<img src="kick.svg" width="22" height="22" alt=""', '<img src="kick.svg" width="22" height="22" alt="Kick"')
+    .replace('<img src="rumble.svg" width="22" height="22" alt=""', '<img src="rumble.svg" width="22" height="22" alt="Rumble"')
     .replace('<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt=""', '<img src="still-neon.webp" width="800" height="447" loading="lazy" decoding="async" alt="Friends chatting beside a synced video in NetParty"')
     .replace(/<\/head>/i, head + "</head>");
 }
@@ -154,6 +161,9 @@ const SITE = {
   "/paramountplus.svg": [svgParamountplus, "image/svg+xml"],
   "/starz.svg": [svgStarz, "image/svg+xml"],
   "/tubi.svg": [svgTubi, "image/svg+xml"],
+  "/twitch.svg": [svgTwitch, "image/svg+xml"],
+  "/kick.svg": [svgKick, "image/svg+xml"],
+  "/rumble.svg": [svgRumble, "image/svg+xml"],
   "/av-fox.webp": [avFox, "image/webp"],
   "/av-panda.webp": [avPanda, "image/webp"],
   "/av-robot.webp": [avRobot, "image/webp"],
